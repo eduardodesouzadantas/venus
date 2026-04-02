@@ -128,31 +128,35 @@ export async function generateEngineResult(userData: OnboardingData): Promise<Re
 export async function processAndPersistLead(userData: OnboardingData): Promise<string> {
   const result = await generateEngineResult(userData);
   
-  const supabase = await createClient();
-  
-  // Clone userData stripping massive base64 camera blobs to prevent Vercel limits and Supabase JSON overflow
-  const safeUserData = { ...userData };
-  safeUserData.scanner = {
-    ...userData.scanner,
-    facePhoto: userData.scanner.facePhoto ? "[BASE64_IMAGE_STRIPPED_FOR_STORAGE]" : "",
-    bodyPhoto: userData.scanner.bodyPhoto ? "[BASE64_IMAGE_STRIPPED_FOR_STORAGE]" : "",
-  };
+  try {
+    const supabase = await createClient();
+    
+    // Clone userData stripping massive base64 camera blobs to prevent Vercel limits and Supabase JSON overflow
+    const safeUserData = { ...userData };
+    safeUserData.scanner = {
+      ...userData.scanner,
+      facePhoto: userData.scanner.facePhoto ? "[BASE64_IMAGE_STRIPPED_FOR_STORAGE]" : "",
+      bodyPhoto: userData.scanner.bodyPhoto ? "[BASE64_IMAGE_STRIPPED_FOR_STORAGE]" : "",
+    };
 
-  // Insere um registro cego (anônimo) no Supabase contendo o resultado da inteligência
-  const { data, error } = await supabase.from("saved_results").insert([
-    {
-      payload: {
-        onboardingContext: safeUserData,
-        finalResult: result
+    // Insere um registro cego (anônimo) no Supabase contendo o resultado da inteligência
+    const { data, error } = await supabase.from("saved_results").insert([
+      {
+        payload: {
+          onboardingContext: safeUserData,
+          finalResult: result
+        }
       }
+    ]).select("id").single();
+
+    if (error || !data) {
+      console.error("Erro ao salvar Dossiê Anônimo", error);
+      return "MOCK_DB_FAIL"; 
     }
-  ]).select("id").single();
 
-  if (error || !data) {
-    console.error("Erro ao salvar Dossiê Anônimo", error);
-    // Em caso de falha de DB (DEV), retornamos uma string fake pro cliente usar fallback de estado
-    return "MOCK_DB_FAIL"; 
+    return data.id;
+  } catch (err) {
+    console.error("Critical Exception in DB or Client creation (ENVS might be missing):", err);
+    return "MOCK_DB_FAIL";
   }
-
-  return data.id;
 }

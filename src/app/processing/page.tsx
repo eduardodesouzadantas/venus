@@ -38,12 +38,21 @@ export default function ProcessingPage() {
     // Começa a geração real do Dossiê na Server Action Pela Primeira Vez 
     isGenerating.current = true;
     
-    processAndPersistLead(data).then((dbReferenceId) => {
+    // Alivia absurdamente o Payload para o Edge Server não crachar (removemos o base64 brutal)
+    const strippedData = { ...data };
+    strippedData.scanner = {
+      ...data.scanner,
+      facePhoto: data.scanner.facePhoto ? "Foto Enviada (String stripped frontend)" : "",
+      bodyPhoto: data.scanner.bodyPhoto ? "Foto Enviada (String stripped frontend)" : ""
+    };
+    
+    processAndPersistLead(strippedData).then((dbReferenceId) => {
       // Quando a Server Action de IA acabar e for salva (em 5~15s), chuta direto para a URL com id
       router.push(`/result?id=${dbReferenceId}`);
     }).catch((e) => {
        console.error("Critical Failure:", e);
-       router.push("/result"); // Fallback sem ID
+       // Passamos um parametro de erro forçado caso o servidor exploda por env missing ou network
+       router.push("/result?id=MOCK_DB_FAIL");
     });
     
   }, [data, router]);
