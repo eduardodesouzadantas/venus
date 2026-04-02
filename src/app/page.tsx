@@ -99,25 +99,26 @@ export default function SplashPage() {
         {/* Image Container (blends into black) */}
         <div className={`relative w-full aspect-[4/5] max-w-[320px] transition-all duration-1000 delay-300 ${revealed ? "opacity-100 scale-100" : "opacity-0 scale-95"}`}>
           <img
-            src="/hero-aspirational.png"
+            src="/hero-final.jpg"
             alt="Silhouette"
-            className="w-full h-full object-cover object-center animate-breathe"
+            className="w-full h-full object-cover animate-breathe"
             style={{ 
-              maskImage: "linear-gradient(to bottom, black 65%, transparent 100%)",
-              WebkitMaskImage: "linear-gradient(to bottom, black 65%, transparent 100%)",
-              filter: "brightness(0.9) contrast(1.1) saturate(1.0)"
+              objectPosition: "center 20%", /* Keeps face/body visible, hides bottom text */
+              maskImage: "linear-gradient(to bottom, black 50%, transparent 95%)",
+              WebkitMaskImage: "linear-gradient(to bottom, black 50%, transparent 95%)",
+              filter: "brightness(0.9) contrast(1.1) saturate(1.1)"
             }}
           />
           {/* Subtle gold border framing ONLY top and sides, fading out at bottom */}
           <div className="absolute inset-0 rounded-t-3xl pointer-events-none" style={{
             border: "1px solid rgba(212,175,55,0)",
-            background: "linear-gradient(180deg, rgba(212,175,55,0.15) 0%, rgba(212,175,55,0.05) 40%, transparent 100%)",
+            background: "linear-gradient(180deg, rgba(212,175,55,0.2) 0%, rgba(212,175,55,0.05) 30%, transparent 60%)",
             WebkitMaskImage: "linear-gradient(180deg, black 0%, black 1px, transparent 1px, transparent 100%), linear-gradient(90deg, black 0%, black 1px, transparent 1px, transparent 100%), linear-gradient(270deg, black 0%, black 1px, transparent 1px, transparent 100%)"
           }} />
 
           {/* AI Badge on corner */}
           <div className="absolute top-6 right-6">
-            <div className="px-3 py-1.5 rounded-full border border-[#D4AF37]/30 bg-black/40 backdrop-blur-md shadow-[0_0_15px_rgba(212,175,55,0.2)]">
+            <div className="px-3 py-1.5 rounded-full border border-[#D4AF37]/30 bg-black/60 backdrop-blur-md shadow-[0_0_15px_rgba(212,175,55,0.2)]">
               <div className="flex items-center gap-1.5">
                 <div className="w-1.5 h-1.5 rounded-full bg-[#D4AF37] animate-pulse" />
                 <span className="text-[8px] tracking-[0.25em] text-[#D4AF37] font-bold uppercase">I.A. Ativa</span>
