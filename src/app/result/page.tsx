@@ -13,9 +13,10 @@ import { AccordionList } from "@/components/ui/AccordionList";
 
 import { CheckCircle2, UserCircle2, Watch } from "lucide-react";
 
-export default async function ResultDashboardPage({ searchParams }: { searchParams: { id?: string, saved?: string } }) {
-  const isSaved = searchParams.saved === "true";
-  const id = searchParams.id;
+export default async function ResultDashboardPage({ searchParams }: { searchParams: Promise<{ id?: string, saved?: string }> }) {
+  const resolvedParams = await searchParams;
+  const isSaved = resolvedParams.saved === "true";
+  const id = resolvedParams.id;
 
   if (!id) {
      return (
