@@ -65,68 +65,106 @@ export default function SplashPage() {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    // Fade in all elements gently
-    timerRef.current = setTimeout(() => setRevealed(true), 150);
+    timerRef.current = setTimeout(() => setRevealed(true), 120);
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
   }, []);
 
   return (
-    <div className="relative flex flex-col h-[100dvh] bg-[#050505] overflow-hidden justify-between items-center" id="venus-splash">
+    <div className="relative flex flex-col h-[100dvh] bg-[#050505] overflow-hidden" id="venus-splash">
 
-      {/* ── BACKGROUND LAYER ── */}
+      {/* ── FUNDO: gradiente editorial em camadas ── */}
       <div className="absolute inset-0 z-0 pointer-events-none">
-        {/* Subtle grid */}
-        <div className="absolute inset-0 opacity-[0.015]" style={{
-          backgroundImage: "linear-gradient(rgba(212,175,55,1) 1px, transparent 1px), linear-gradient(90deg, rgba(212,175,55,1) 1px, transparent 1px)",
-          backgroundSize: "40px 40px",
+        {/* Canvas escuro base */}
+        <div className="absolute inset-0 bg-[#050505]" />
+
+        {/* Luz dourada lateral sutil */}
+        <div
+          className="absolute -top-1/4 -right-1/4 w-[80vw] h-[80vw] rounded-full opacity-[0.07]"
+          style={{ background: "radial-gradient(circle, #D4AF37 0%, transparent 70%)" }}
+        />
+
+        {/* Luz violeta quente no canto inferior */}
+        <div
+          className="absolute -bottom-1/3 -left-1/3 w-[90vw] h-[90vw] rounded-full opacity-[0.06]"
+          style={{ background: "radial-gradient(circle, #7C3AED 0%, transparent 65%)" }}
+        />
+
+        {/* Vinheta bordas */}
+        <div className="absolute inset-0" style={{
+          background: "radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.85) 100%)"
         }} />
-        
-        {/* Deep ambient glow at center */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120vw] h-[120vw] rounded-full opacity-10"
-             style={{ background: "radial-gradient(circle, #D4AF37 0%, transparent 60%)" }} />
+
+        {/* Grade tecnológica sutil */}
+        <div className="absolute inset-0 opacity-[0.025]" style={{
+          backgroundImage: "linear-gradient(rgba(212,175,55,1) 1px, transparent 1px), linear-gradient(90deg, rgba(212,175,55,1) 1px, transparent 1px)",
+          backgroundSize: "60px 60px",
+        }} />
       </div>
 
       <GoldParticles />
       <AIScanLine />
 
-      {/* ── TOP: LOGO ── */}
-      <div className={`relative z-10 w-full pt-16 pb-4 flex justify-center transition-all duration-1000 ${revealed ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4"}`}>
-        <div className="relative">
-          <div className="absolute inset-0 animate-pulse-gold rounded-full" 
-               style={{ background: "radial-gradient(circle, rgba(212,175,55,0.2) 0%, transparent 60%)" }} />
-          <span className="relative z-10 text-[2rem] font-bold"
-                style={{ fontFamily: "var(--font-playfair), serif", color: "#D4AF37", textShadow: "0 0 15px rgba(212,175,55,0.6)" }}>
-            V
+      {/* ── HEADER: Logo marca ── */}
+      <div className={`relative z-10 flex items-center justify-center pt-14 pb-0 transition-all duration-700 ${revealed ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4"}`}>
+        <div className="flex flex-col items-center gap-2">
+          {/* Monograma V */}
+          <div className="relative w-14 h-14 flex items-center justify-center">
+            <div
+              className="absolute inset-0 rounded-full animate-pulse-gold"
+              style={{ background: "radial-gradient(circle, rgba(212,175,55,0.15) 0%, transparent 70%)" }}
+            />
+            <span
+              className="text-3xl font-bold tracking-[0.05em]"
+              style={{
+                fontFamily: "var(--font-playfair), serif",
+                color: "#D4AF37",
+                textShadow: "0 0 20px rgba(212,175,55,0.7)",
+              }}
+            >
+              V
+            </span>
+          </div>
+          <span className="text-[9px] tracking-[0.35em] font-light text-white/30 uppercase">
+            Venus Engine
           </span>
         </div>
       </div>
 
-      {/* ── MIDDLE: IMAGE & COPY ── */}
-      <div className="relative z-10 flex-1 w-full max-w-sm flex flex-col items-center justify-center -mt-6">
-        
-        {/* Image Container (blends into black) */}
-        <div className={`relative w-full aspect-[4/5] max-w-[320px] transition-all duration-1000 delay-300 ${revealed ? "opacity-100 scale-100" : "opacity-0 scale-95"}`}>
-          <img
-            src="/hero-final.jpg"
-            alt="Silhouette"
-            className="w-full h-full object-cover animate-breathe"
-            style={{ 
-              objectPosition: "center 20%", /* Keeps face/body visible, hides bottom text */
-              maskImage: "linear-gradient(to bottom, black 50%, transparent 95%)",
-              WebkitMaskImage: "linear-gradient(to bottom, black 50%, transparent 95%)",
-              filter: "brightness(0.9) contrast(1.1) saturate(1.1)"
-            }}
-          />
-          {/* Subtle gold border framing ONLY top and sides, fading out at bottom */}
-          <div className="absolute inset-0 rounded-t-3xl pointer-events-none" style={{
-            border: "1px solid rgba(212,175,55,0)",
-            background: "linear-gradient(180deg, rgba(212,175,55,0.2) 0%, rgba(212,175,55,0.05) 30%, transparent 60%)",
-            WebkitMaskImage: "linear-gradient(180deg, black 0%, black 1px, transparent 1px, transparent 100%), linear-gradient(90deg, black 0%, black 1px, transparent 1px, transparent 100%), linear-gradient(270deg, black 0%, black 1px, transparent 1px, transparent 100%)"
+      {/* ── HERO CENTRAL: Imagem editorial + copy ── */}
+      <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-6 -mt-8">
+
+        {/* Imagem hero editorial (Boxed) */}
+        <div className={`relative w-full max-w-[280px] mx-auto mb-8 transition-all duration-1000 delay-200 ${revealed ? "opacity-100 scale-100" : "opacity-0 scale-95"}`}>
+          {/* Frame dourado ext */}
+          <div className="absolute -inset-[1px] rounded-2xl" style={{
+            background: "linear-gradient(135deg, rgba(212,175,55,0.5) 0%, transparent 50%, rgba(212,175,55,0.3) 100%)"
           }} />
 
-          {/* AI Badge on corner */}
-          <div className="absolute top-6 right-6">
-            <div className="px-3 py-1.5 rounded-full border border-[#D4AF37]/30 bg-black/60 backdrop-blur-md shadow-[0_0_15px_rgba(212,175,55,0.2)]">
+          {/* Imagem container */}
+          <div className="relative rounded-2xl overflow-hidden" style={{ aspectRatio: "3/4" }}>
+            <img
+              src="/hero-final.jpg"
+              alt="Venus Engine editorial"
+              className="w-full h-full object-cover animate-breathe"
+              style={{ 
+                objectPosition: "50% 35%", /* Crops strictly the upper torso/face, hiding fake UI elements */
+                filter: "brightness(0.9) contrast(1.15) saturate(1.1)" 
+              }}
+              onError={(e) => {
+                (e.target as HTMLImageElement).src =
+                  "https://images.unsplash.com/photo-1445205170230-053b83016050?auto=format&fit=crop&q=90&w=600&h=800";
+              }}
+            />
+            {/* Overlay dourado escuro interno */}
+            <div className="absolute inset-0" style={{
+              background: "linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.4) 50%, rgba(0,0,0,0.1) 100%)"
+            }} />
+            
+            {/* Linha dourada decorativa interna */}
+            <div className="absolute bottom-5 left-1/2 -translate-x-1/2 animate-line-grow h-px bg-[#D4AF37] delay-1000" style={{ width: 52 }} />
+
+            {/* Badge de IA interno */}
+            <div className="absolute top-4 right-4 px-2 py-1 rounded-full border border-[#D4AF37]/30 bg-black/60 backdrop-blur-md shadow-[0_0_15px_rgba(212,175,55,0.2)]">
               <div className="flex items-center gap-1.5">
                 <div className="w-1.5 h-1.5 rounded-full bg-[#D4AF37] animate-pulse" />
                 <span className="text-[8px] tracking-[0.25em] text-[#D4AF37] font-bold uppercase">I.A. Ativa</span>
@@ -135,33 +173,64 @@ export default function SplashPage() {
           </div>
         </div>
 
-        {/* Copy Area (overlays the faded bottom of the image) */}
-        <div className="relative text-center px-6 -mt-32">
-          <h1 className={`transition-all duration-1000 delay-500 ${revealed ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}
-              style={{ fontFamily: "var(--font-playfair), serif", fontSize: "clamp(2rem, 8vw, 2.5rem)", lineHeight: 1.15, color: "#fff" }}>
-            Sua <span className="shimmer-text">Assinatura.</span><br />
-            <span style={{ opacity: 0.9 }}>Revelada.</span>
+        {/* Copy headline premium isolada abaixo */}
+        <div className="text-center space-y-5 max-w-[320px]">
+          {/* Pill secundario */}
+          <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-[#D4AF37]/25 bg-[#D4AF37]/5 backdrop-blur-sm transition-all duration-700 delay-300 ${revealed ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3"}`}>
+            <div className="w-1.5 h-1.5 rounded-full bg-[#D4AF37] animate-pulse" />
+            <span className="text-[9px] tracking-[0.3em] font-bold text-[#D4AF37] uppercase">
+              Inteligência de Estilo
+            </span>
+          </div>
+
+          {/* Headline */}
+          <h1
+            className={`transition-all duration-1000 delay-400 ${revealed ? "opacity-100 translate-y-0" : "opacity-0 translate-y-5"}`}
+            style={{
+              fontFamily: "var(--font-playfair), serif",
+              fontSize: "clamp(2.2rem, 9vw, 2.8rem)",
+              lineHeight: 1.1,
+              letterSpacing: "-0.02em",
+              color: "#ffffff",
+            }}
+          >
+            Sua <span className="shimmer-text">Assinatura</span>
+            {" "}Visual.{" "}
+            <span style={{ color: "#ffffff", opacity: 0.85 }}>Revelada.</span>
           </h1>
 
-          <div className={`mt-6 mb-5 mx-auto h-[1px] w-12 bg-gradient-to-r from-transparent via-[#D4AF37] to-transparent opacity-60 transition-all duration-1000 delay-700 ${revealed ? "w-16 opacity-60" : "w-0 opacity-0"}`} />
-
-          <p className={`text-xs font-light leading-relaxed mx-auto max-w-[260px] opacity-60 transition-all duration-1000 delay-700 ${revealed ? "opacity-60 translate-y-0" : "opacity-0 translate-y-4"}`}
-             style={{ color: "#ffffff" }}>
-            Descubra a inteligência que redefine sua presença e eleva sua percepção no mundo.
+          <p
+            className={`text-sm leading-relaxed font-light transition-all duration-1000 delay-500 ${revealed ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}
+            style={{ color: "rgba(255,255,255,0.45)", maxWidth: 280, margin: "0 auto" }}
+          >
+            A primeira inteligência de imagem que lê seu biotipo, paleta e presença — e montam looks que fazem você ser{" "}
+            <span style={{ color: "rgba(212,175,55,0.8)" }}>visto.</span>
           </p>
         </div>
       </div>
 
-      {/* ── BOTTOM: CTA ── */}
-      <div className={`relative z-10 w-full px-6 pb-12 transition-all duration-1000 delay-1000 ${revealed ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
-        <Link href="/onboarding/intent" className="block w-full max-w-[280px] mx-auto">
-          <button className="w-full relative overflow-hidden rounded-full py-3.5 text-xs font-semibold tracking-[0.15em] uppercase text-black transition-transform duration-300 active:scale-95 shadow-[0_0_20px_rgba(212,175,55,0.2)] hover:shadow-[0_0_30px_rgba(212,175,55,0.4)] bg-gradient-to-r from-[#C5A02E] via-[#E8CAA4] to-[#C5A02E]"
-                  style={{ backgroundSize: "200% auto", animation: "shimmer 4s linear infinite" }}>
+      {/* ── FOOTER: CTA ── */}
+      <div className={`relative z-10 px-6 pb-12 space-y-5 transition-all duration-1000 delay-700 ${revealed ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
+        <Link href="/onboarding/intent" className="block w-full" id="btn-iniciar-analise">
+          <button
+            className="w-full relative overflow-hidden rounded-2xl py-4 text-sm font-bold tracking-[0.15em] uppercase transition-all duration-300 active:scale-[0.98] drop-shadow-[0_0_15px_rgba(212,175,55,0.25)]"
+            style={{
+              background: "linear-gradient(135deg, #D4AF37 0%, #F0D060 45%, #B8960C 100%)",
+              color: "#000000",
+            }}
+          >
+            {/* Brilho hover dinâmico */}
+            <span
+              className="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-300"
+              style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent)" }}
+            />
             <span className="relative z-10">Iniciar Análise</span>
           </button>
         </Link>
+        <p className="text-center text-[10px] text-white/20 tracking-wide mt-4">
+          Sessão privada · Sem cadastro obrigatório · 100% confidencial
+        </p>
       </div>
-
     </div>
   );
 }
