@@ -2,15 +2,15 @@
 
 import { useRouter } from "next/navigation";
 import { Heading } from "@/components/ui/Heading";
-import { SimulatedCamera } from "@/components/ui/SimulatedCamera";
+import { RealCamera } from "@/components/ui/RealCamera";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
 
 export default function FaceScannerPage() {
   const router = useRouter();
   const { updateData } = useOnboarding();
 
-  const handleFaceCaptured = (fakeImageData: string) => {
-    updateData("scanner", { facePhoto: fakeImageData });
+  const handleFaceCaptured = (imageData: string) => {
+    updateData("scanner", { facePhoto: imageData });
     router.push("/scanner/body");
   };
 
@@ -20,7 +20,7 @@ export default function FaceScannerPage() {
         Scanner de Visagismo
       </Heading>
       
-      <SimulatedCamera 
+      <RealCamera 
         instruction="Enquadre rosto e pescoço no centro da linha ouro."
         overlayType="face"
         onCaptured={handleFaceCaptured}

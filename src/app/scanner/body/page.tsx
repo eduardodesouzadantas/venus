@@ -2,15 +2,15 @@
 
 import { useRouter } from "next/navigation";
 import { Heading } from "@/components/ui/Heading";
-import { SimulatedCamera } from "@/components/ui/SimulatedCamera";
+import { RealCamera } from "@/components/ui/RealCamera";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
 
 export default function BodyScannerPage() {
   const router = useRouter();
   const { updateData } = useOnboarding();
 
-  const handleBodyCaptured = (fakeImageData: string) => {
-    updateData("scanner", { bodyPhoto: fakeImageData });
+  const handleBodyCaptured = (imageData: string) => {
+    updateData("scanner", { bodyPhoto: imageData });
     router.push("/processing");
   };
 
@@ -20,7 +20,7 @@ export default function BodyScannerPage() {
         Guia de Proporção
       </Heading>
       
-      <SimulatedCamera 
+      <RealCamera 
         instruction="Posicione o topo da cabeça e o pé nas guias pontilhadas."
         overlayType="body"
         showTimerOptions={true}
