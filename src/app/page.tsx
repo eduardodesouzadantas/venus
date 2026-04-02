@@ -99,12 +99,13 @@ export default function SplashPage() {
         {/* Image Container (blends into black) */}
         <div className={`relative w-full aspect-[4/5] max-w-[320px] transition-all duration-1000 delay-300 ${revealed ? "opacity-100 scale-100" : "opacity-0 scale-95"}`}>
           <img
-            src="/hero-ultrapremium.png"
+            src="/hero-iconic.png"
             alt="Silhouette"
             className="w-full h-full object-cover object-center animate-breathe"
             style={{ 
               maskImage: "linear-gradient(to bottom, black 65%, transparent 100%)",
-              WebkitMaskImage: "linear-gradient(to bottom, black 65%, transparent 100%)"
+              WebkitMaskImage: "linear-gradient(to bottom, black 65%, transparent 100%)",
+              filter: "brightness(0.9) contrast(1.1) saturate(1.15)"
             }}
           />
           {/* Subtle gold border framing ONLY top and sides, fading out at bottom */}
