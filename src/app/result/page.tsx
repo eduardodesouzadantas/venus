@@ -191,16 +191,16 @@ export default async function ResultDashboardPage({ searchParams }: { searchPara
           <Heading as="h4" className="text-sm mb-4 font-serif text-white uppercase tracking-wider">A Bússola Está Ativa</Heading>
           
           <div className="space-y-3">
-            <Link href="#" className="block w-full">
-              <VenusButton variant="solid" className="w-full text-black bg-white hover:bg-white/90 shadow-[0_0_30px_rgba(255,255,255,0.2)]">
-                Acessar Vitrine Direta
-              </VenusButton>
-            </Link>
-            
-            {!isSaved && (
+            {!isSaved ? (
               <Link href={`/auth/save-profile?id=${id}`} className="block w-full">
-                <VenusButton variant="ghost" className="w-full text-xs text-[#D4AF37] underline-offset-4">
-                  Salvar Assinatura para Sempre →
+                <VenusButton variant="solid" className="w-full text-black bg-white hover:bg-white/90 shadow-[0_0_30px_rgba(255,255,255,0.2)]">
+                  Salvar Assinatura Ouro
+                </VenusButton>
+              </Link>
+            ) : (
+               <Link href="/" className="block w-full">
+                <VenusButton variant="ghost" className="w-full text-xs text-white/50 border border-white/10">
+                  Voltar ao Início
                 </VenusButton>
               </Link>
             )}

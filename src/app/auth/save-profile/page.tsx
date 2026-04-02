@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Heading } from "@/components/ui/Heading";
 import { GlassContainer } from "@/components/ui/GlassContainer";
 import { VenusButton } from "@/components/ui/VenusButton";
@@ -9,11 +10,11 @@ import { Text } from "@/components/ui/Text";
 import { CheckCircle2 } from "lucide-react";
 import { updateB2CResult } from "@/lib/result/actions";
 
-export default function SaveProfilePage({ searchParams }: { searchParams: { id?: string } }) {
+function SaveProfileForm() {
+  const searchParams = useSearchParams();
+  const id = searchParams.get("id");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-  
-  const id = searchParams.id;
 
   if (!id) {
     return <div className="text-white p-6 pt-20">URL Inválida. Faltou a Chave Criptográfica.</div>
@@ -77,5 +78,13 @@ export default function SaveProfilePage({ searchParams }: { searchParams: { id?:
         </form>
       </GlassContainer>
     </div>
+  );
+}
+
+export default function SaveProfilePage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-white text-center">Carregando...</div>}>
+      <SaveProfileForm />
+    </Suspense>
   );
 }

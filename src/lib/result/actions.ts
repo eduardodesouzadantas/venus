@@ -16,6 +16,10 @@ export async function updateB2CResult(formData: FormData, dbResultId: string) {
     return { error: "E-mail ou Token de Dossiê não encontrado." }
   }
 
+  if (dbResultId === "MOCK_DB_FAIL") {
+    return { error: "Impossível salvar. Você está rodando a simulação offline do MVP. Cadastre as chaves na Vercel." }
+  }
+
   const { error } = await supabase.from("saved_results")
       .update({ user_email: email, user_name: name })
       .eq("id", dbResultId);
