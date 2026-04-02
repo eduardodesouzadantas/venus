@@ -3,17 +3,25 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
-// Partículas douradas flutuantes
+// Partículas douradas flutuantes (hidratadas no client)
 function GoldParticles() {
-  const particles = Array.from({ length: 18 }, (_, i) => ({
-    id: i,
-    left: `${5 + Math.random() * 90}%`,
-    top: `${5 + Math.random() * 90}%`,
-    size: Math.random() > 0.5 ? 1 : 2,
-    delay: `${Math.random() * 4}s`,
-    duration: `${4 + Math.random() * 6}s`,
-    opacity: 0.15 + Math.random() * 0.4,
-  }));
+  const [particles, setParticles] = useState<{id: number, left: string, top: string, size: number, delay: string, duration: string, opacity: number}[]>([]);
+
+  useEffect(() => {
+    setParticles(
+      Array.from({ length: 18 }, (_, i) => ({
+        id: i,
+        left: `${5 + Math.random() * 90}%`,
+        top: `${5 + Math.random() * 90}%`,
+        size: Math.random() > 0.5 ? 1 : 2,
+        delay: `${Math.random() * 4}s`,
+        duration: `${4 + Math.random() * 6}s`,
+        opacity: 0.15 + Math.random() * 0.4,
+      }))
+    );
+  }, []);
+
+  if (particles.length === 0) return null;
 
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none z-0" aria-hidden>
