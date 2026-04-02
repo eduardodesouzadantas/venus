@@ -138,10 +138,10 @@ export default function SplashPage() {
           {/* Imagem com overlay */}
           <div className="relative rounded-2xl overflow-hidden" style={{ aspectRatio: "3/4" }}>
             <img
-              src="https://images.unsplash.com/photo-1469334031218-e382a71b716b?auto=format&fit=crop&q=90&w=600&h=800"
+              src="/hero-ultrapremium.png"
               alt="Venus Engine editorial"
-              className="w-full h-full object-cover object-top"
-              style={{ filter: "brightness(0.55) contrast(1.1) saturate(0.7)" }}
+              className="w-full h-full object-cover object-center"
+              style={{ filter: "brightness(0.9) contrast(1.15) saturate(1.1)" }}
               onError={(e) => {
                 (e.target as HTMLImageElement).src =
                   "https://images.unsplash.com/photo-1445205170230-053b83016050?auto=format&fit=crop&q=90&w=600&h=800";
