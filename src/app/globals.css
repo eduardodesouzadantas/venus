@@ -76,12 +76,18 @@
   100% { top: 0%; opacity: 0.6; }
 }
 
+@keyframes breatheGold {
+  0%, 100% { filter: brightness(0.8) contrast(1.05) saturate(0.9); }
+  50%      { filter: brightness(1.1) contrast(1.15) saturate(1.15); }
+}
+
 .animate-fade-in-up  { animation: fadeInUp 1s cubic-bezier(0.16,1,0.3,1) both; }
 .animate-fade-in     { animation: fadeIn 1.4s ease both; }
 .animate-pulse-gold  { animation: pulseGold 2.8s ease-in-out infinite; }
 .animate-float       { animation: floatSlow 5s ease-in-out infinite; }
 .animate-line-grow   { animation: lineGrow 0.9s ease both; }
 .animate-scan        { animation: scanLine 4s linear infinite; }
+.animate-breathe     { animation: breatheGold 7s ease-in-out infinite; }
 
 .delay-100  { animation-delay: 0.1s; }
 .delay-200  { animation-delay: 0.2s; }
