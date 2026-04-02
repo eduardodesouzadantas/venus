@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
-// Partículas douradas flutuantes (hidratadas no client)
+// Gold floating particles (hydrated on client)
 function GoldParticles() {
   const [particles, setParticles] = useState<{id: number, left: string, top: string, size: number, delay: string, duration: string, opacity: number}[]>([]);
 
@@ -45,7 +45,7 @@ function GoldParticles() {
   );
 }
 
-// Linha de scan de IA
+// AI Scan Line component
 function AIScanLine() {
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none z-0" aria-hidden>
@@ -62,40 +62,25 @@ function AIScanLine() {
 
 export default function SplashPage() {
   const [revealed, setRevealed] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    timerRef.current = setTimeout(() => setRevealed(true), 120);
-    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+    const timer = setTimeout(() => setRevealed(true), 150);
+    return () => clearTimeout(timer);
   }, []);
 
   return (
     <div className="relative flex flex-col h-[100dvh] bg-[#050505] overflow-hidden" id="venus-splash">
 
-      {/* ── FUNDO: gradiente editorial em camadas ── */}
+      {/* ── BACKGROUND LAYER: Depth & Grid ── */}
       <div className="absolute inset-0 z-0 pointer-events-none">
-        {/* Canvas escuro base */}
         <div className="absolute inset-0 bg-[#050505]" />
+        
+        {/* Subtle Ambient Glow */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[60vh] opacity-10"
+             style={{ background: "radial-gradient(circle at 50% 0%, #D4AF37 0%, transparent 75%)" }} />
 
-        {/* Luz dourada lateral sutil */}
-        <div
-          className="absolute -top-1/4 -right-1/4 w-[80vw] h-[80vw] rounded-full opacity-[0.07]"
-          style={{ background: "radial-gradient(circle, #D4AF37 0%, transparent 70%)" }}
-        />
-
-        {/* Luz violeta quente no canto inferior */}
-        <div
-          className="absolute -bottom-1/3 -left-1/3 w-[90vw] h-[90vw] rounded-full opacity-[0.06]"
-          style={{ background: "radial-gradient(circle, #7C3AED 0%, transparent 65%)" }}
-        />
-
-        {/* Vinheta bordas */}
-        <div className="absolute inset-0" style={{
-          background: "radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.85) 100%)"
-        }} />
-
-        {/* Grade tecnológica sutil */}
-        <div className="absolute inset-0 opacity-[0.025]" style={{
+        {/* Global technical grid */}
+        <div className="absolute inset-0 opacity-[0.015]" style={{
           backgroundImage: "linear-gradient(rgba(212,175,55,1) 1px, transparent 1px), linear-gradient(90deg, rgba(212,175,55,1) 1px, transparent 1px)",
           backgroundSize: "60px 60px",
         }} />
@@ -104,133 +89,78 @@ export default function SplashPage() {
       <GoldParticles />
       <AIScanLine />
 
-      {/* ── HEADER: Logo marca ── */}
-      <div className={`relative z-10 flex items-center justify-center pt-14 pb-0 transition-all duration-700 ${revealed ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4"}`}>
-        <div className="flex flex-col items-center gap-2">
-          {/* Monograma V */}
-          <div className="relative w-14 h-14 flex items-center justify-center">
-            <div
-              className="absolute inset-0 rounded-full animate-pulse-gold"
-              style={{ background: "radial-gradient(circle, rgba(212,175,55,0.15) 0%, transparent 70%)" }}
-            />
-            <span
-              className="text-3xl font-bold tracking-[0.05em]"
-              style={{
-                fontFamily: "var(--font-playfair), serif",
-                color: "#D4AF37",
-                textShadow: "0 0 20px rgba(212,175,55,0.7)",
-              }}
-            >
-              V
-            </span>
-          </div>
-          <span className="text-[9px] tracking-[0.35em] font-light text-white/30 uppercase">
-            Venus Engine
-          </span>
-        </div>
-      </div>
+      {/* ── HEADER: BRAND IDENTITY ── */}
+      <header className={`relative z-20 flex flex-col items-center pt-24 transition-all duration-1000 ${revealed ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4"}`}>
+        <span className="text-4xl font-bold tracking-[0.1em] text-[#D4AF37]"
+              style={{ fontFamily: "var(--font-playfair), serif", textShadow: "0 0 20px rgba(212,175,55,0.4)" }}>
+          V
+        </span>
+        <span className="text-[10px] tracking-[0.5em] font-light text-white/30 uppercase mt-2">
+          Venus Engine
+        </span>
+      </header>
 
-      {/* ── HERO CENTRAL: Imagem editorial + copy ── */}
-      <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-6 -mt-8">
-
-        {/* Imagem hero editorial (Boxed) */}
-        <div className={`relative w-full max-w-[280px] mx-auto mb-8 transition-all duration-1000 delay-200 ${revealed ? "opacity-100 scale-100" : "opacity-0 scale-95"}`}>
-          {/* Frame dourado ext */}
-          <div className="absolute -inset-[1px] rounded-2xl" style={{
-            background: "linear-gradient(135deg, rgba(212,175,55,0.5) 0%, transparent 50%, rgba(212,175,55,0.3) 100%)"
-          }} />
-
-          {/* Imagem container */}
-          <div className="relative rounded-2xl overflow-hidden" style={{ aspectRatio: "3/4" }}>
+      {/* ── MAIN HERO SECTION ── */}
+      <main className="relative z-10 flex-1 flex flex-col items-center justify-center -mt-10 px-6">
+        
+        {/* Primary Hero Asset: Cropped rigorously to remove baked-in asset UI */}
+        <div className={`relative w-full aspect-[4/5] max-w-[320px] transition-all duration-1000 delay-300 ${revealed ? "opacity-100 scale-100" : "opacity-0 scale-95"}`}>
+          <div className="relative w-full h-full overflow-hidden rounded-[2.5rem] border border-white/[0.04] shadow-2xl">
             <img
               src="/hero-final.jpg"
-              alt="Venus Engine editorial"
+              alt="Luxury Silhouette"
               className="w-full h-full object-cover animate-breathe"
               style={{ 
-                objectPosition: "50% 35%", /* Crops strictly the upper torso/face, hiding fake UI elements */
-                filter: "brightness(0.9) contrast(1.15) saturate(1.1)" 
-              }}
-              onError={(e) => {
-                (e.target as HTMLImageElement).src =
-                  "https://images.unsplash.com/photo-1445205170230-053b83016050?auto=format&fit=crop&q=90&w=600&h=800";
+                // We zoom heavily (1.85x) to push any baked-in logos/text from the mockup asset out of the visible area.
+                objectPosition: "50% 12%", 
+                transform: "scale(1.85)", 
+                maskImage: "linear-gradient(to bottom, black 80%, transparent 100%)",
+                WebkitMaskImage: "linear-gradient(to bottom, black 80%, transparent 100%)",
+                filter: "brightness(0.95) contrast(1.1)"
               }}
             />
-            {/* Overlay dourado escuro interno */}
-            <div className="absolute inset-0" style={{
-              background: "linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.4) 50%, rgba(0,0,0,0.1) 100%)"
-            }} />
+            {/* Dark blending gradient to smooth the bottom transition */}
+            <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-transparent to-transparent opacity-85" />
             
-            {/* Linha dourada decorativa interna */}
-            <div className="absolute bottom-5 left-1/2 -translate-x-1/2 animate-line-grow h-px bg-[#D4AF37] delay-1000" style={{ width: 52 }} />
-
-            {/* Badge de IA interno */}
-            <div className="absolute top-4 right-4 px-2 py-1 rounded-full border border-[#D4AF37]/30 bg-black/60 backdrop-blur-md shadow-[0_0_15px_rgba(212,175,55,0.2)]">
-              <div className="flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 rounded-full bg-[#D4AF37] animate-pulse" />
-                <span className="text-[8px] tracking-[0.25em] text-[#D4AF37] font-bold uppercase">I.A. Ativa</span>
+            {/* Real Code-Rendered Badge (Exclusive) */}
+            <div className="absolute top-6 right-6">
+              <div className="px-3 py-1.5 rounded-full border border-[#D4AF37]/30 bg-black/70 backdrop-blur-md">
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-[#D4AF37] animate-pulse" />
+                  <span className="text-[8px] tracking-[0.2em] text-[#D4AF37] font-bold uppercase">I.A. Ativa</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Copy headline premium isolada abaixo */}
-        <div className="text-center space-y-5 max-w-[320px]">
-          {/* Pill secundario */}
-          <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-[#D4AF37]/25 bg-[#D4AF37]/5 backdrop-blur-sm transition-all duration-700 delay-300 ${revealed ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3"}`}>
-            <div className="w-1.5 h-1.5 rounded-full bg-[#D4AF37] animate-pulse" />
-            <span className="text-[9px] tracking-[0.3em] font-bold text-[#D4AF37] uppercase">
-              Inteligência de Estilo
-            </span>
-          </div>
-
-          {/* Headline */}
-          <h1
-            className={`transition-all duration-1000 delay-400 ${revealed ? "opacity-100 translate-y-0" : "opacity-0 translate-y-5"}`}
-            style={{
-              fontFamily: "var(--font-playfair), serif",
-              fontSize: "clamp(2.2rem, 9vw, 2.8rem)",
-              lineHeight: 1.1,
-              letterSpacing: "-0.02em",
-              color: "#ffffff",
-            }}
-          >
-            Sua <span className="shimmer-text">Assinatura</span>
-            {" "}Visual.{" "}
-            <span style={{ color: "#ffffff", opacity: 0.85 }}>Revelada.</span>
+        {/* Messaging Area */}
+        <div className={`text-center mt-6 space-y-5 max-w-[320px] transition-all duration-1000 delay-500 ${revealed ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}>
+          <h1 style={{ fontFamily: "var(--font-playfair), serif", fontSize: "clamp(2.1rem, 9vw, 2.7rem)", lineHeight: 1.15, color: "#fff" }}>
+            Sua <span className="shimmer-text">Assinatura.</span><br />
+            <span style={{ opacity: 0.85 }}>Revelada.</span>
           </h1>
 
-          <p
-            className={`text-sm leading-relaxed font-light transition-all duration-1000 delay-500 ${revealed ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}
-            style={{ color: "rgba(255,255,255,0.45)", maxWidth: 280, margin: "0 auto" }}
-          >
-            A primeira inteligência de imagem que lê seu biotipo, paleta e presença — e montam looks que fazem você ser{" "}
-            <span style={{ color: "rgba(212,175,55,0.8)" }}>visto.</span>
+          <p className="text-xs font-light leading-relaxed text-white/50 max-w-[240px] mx-auto">
+            A primeira inteligência que traduz sua presença em looks que comunicam sua melhor versão.
           </p>
         </div>
-      </div>
+      </main>
 
-      {/* ── FOOTER: CTA ── */}
-      <div className={`relative z-10 px-6 pb-12 space-y-5 transition-all duration-1000 delay-700 ${revealed ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
-        <Link href="/onboarding/intent" className="block w-full" id="btn-iniciar-analise">
-          <button
-            className="w-full relative overflow-hidden rounded-2xl py-4 text-sm font-bold tracking-[0.15em] uppercase transition-all duration-300 active:scale-[0.98] drop-shadow-[0_0_15px_rgba(212,175,55,0.25)]"
-            style={{
-              background: "linear-gradient(135deg, #D4AF37 0%, #F0D060 45%, #B8960C 100%)",
-              color: "#000000",
-            }}
-          >
-            {/* Brilho hover dinâmico */}
-            <span
-              className="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-300"
-              style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent)" }}
-            />
+      {/* ── FOOTER: PERSISTENT CTA ── */}
+      <footer className={`relative z-20 px-6 pb-16 flex flex-col items-center transition-all duration-1000 delay-700 ${revealed ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
+        <Link href="/onboarding/intent" className="block w-full max-w-[280px]">
+          <button className="w-full relative overflow-hidden rounded-full py-4 text-[11px] font-bold tracking-[0.25em] uppercase text-black transition-all duration-300 active:scale-95 shadow-[0_0_25px_rgba(212,175,55,0.3)] bg-gradient-to-r from-[#D4AF37] via-[#F0D060] to-[#D4AF37] bg-[length:200%_auto] hover:bg-right hover:shadow-[0_0_45px_rgba(212,175,55,0.45)]">
             <span className="relative z-10">Iniciar Análise</span>
+            {/* Interactive Shine Effect */}
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent -translate-x-full hover:translate-x-full transition-transform duration-1000 pointer-events-none" />
           </button>
         </Link>
-        <p className="text-center text-[10px] text-white/20 tracking-wide mt-4">
-          Sessão privada · Sem cadastro obrigatório · 100% confidencial
+        <p className="text-center text-[9px] text-white/30 tracking-[0.4em] mt-8 uppercase">
+          © 2026 VENUS ENGINE · PREMIUM AI EXPERIENCE
         </p>
-      </div>
+      </footer>
+
     </div>
   );
 }
