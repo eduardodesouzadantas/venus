@@ -93,20 +93,22 @@ export function RealCamera({ instruction, overlayType, onCaptured, showTimerOpti
       const video = videoRef.current;
       const canvas = canvasRef.current;
       
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      // Compute scaling to max 480px width to avoid massive base64 Strings crashing the Next.js Server Action
+      const maxWidth = 480;
+      const scale = Math.min(1, maxWidth / video.videoWidth);
+      canvas.width = video.videoWidth * scale;
+      canvas.height = video.videoHeight * scale;
       
       const ctx = canvas.getContext("2d");
       if (ctx) {
-        // If front camera, we might want to mirror the drawing so the picture matches the preview
         if (facingMode === "user") {
           ctx.translate(canvas.width, 0);
           ctx.scale(-1, 1);
         }
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         
-        // Convert to Base64
-        const imageDataUrl = canvas.toDataURL("image/jpeg", 0.8);
+        // Low fidelity JPEG to prevent hitting 1MB Server limit
+        const imageDataUrl = canvas.toDataURL("image/jpeg", 0.5);
         setCapturedImage(imageDataUrl);
       }
     }

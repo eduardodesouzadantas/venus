@@ -103,4 +103,18 @@ INSERT INTO products (name, category, primary_color, style, type, price_range, i
 -- ==========================================
 ('Cinto Fino Texturizado Python', 'Cinto', 'Bege', 'Sensual Refinado', 'acessorio', 'Premium', 'https://images.unsplash.com/photo-1553655110-d0fb02fe9cf6?auto=format&fit=crop&q=80&w=600&h=800', 'https://shop.venus.com/acc26'),
 ('Cinto em Couro Fivela Escurecida', 'Cinto', 'Preto', 'Dramático Urbano', 'acessorio', 'Médio', 'https://images.unsplash.com/photo-1628148906969-9e8cce505bdf?auto=format&fit=crop&q=80&w=600&h=800', 'https://shop.venus.com/acc27'),
-('Cinto Corset Extra-Largo Obí', 'Cinto', 'Vinho', 'Moderno', 'acessorio', 'Luxo', 'https://images.unsplash.com/photo-1548624313-0396c75e4b1a?auto=format&fit=crop&q=80&w=600&h=800', 'https://shop.venus.com/acc28');
+('Cinto Corset Extra-Largo Obí', 'Cinto', 'Vinho', 'Moderno', 'acessorio', 'Luxo', 'https://images.unsplash.com/photo-1548624313-0396c75e4b1a?auto=format&fit=crop&q=80&w=600&h=800', 'https://shop.venus.com/acc28'),
+
+-- ==========================================
+-- VESTUÁRIO MASCULINO PREMIUM / UNISSEX
+-- ==========================================
+('Blazer Masculino Alfaiataria Italiana', 'Blazer', 'Azul Marinho', 'Elegante', 'roupa', 'Luxo', 'https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&q=80&w=600&h=800', 'https://shop.venus.com/men01'),
+('Suéter Gola V Cashmere', 'Tricot', 'Cinza', 'Minimalista', 'roupa', 'Premium', 'https://images.unsplash.com/photo-1611312449408-fcece27cdbb1?auto=format&fit=crop&q=80&w=600&h=800', 'https://shop.venus.com/men02'),
+('Camisa Social Algodão Pima', 'Camisa', 'Branco', 'Clássico', 'roupa', 'Médio', 'https://images.unsplash.com/photo-1598033129183-c4f50c736f10?auto=format&fit=crop&q=80&w=600&h=800', 'https://shop.venus.com/men03'),
+('Calça de Sarja Chino Slim', 'Calça', 'Areia', 'Moderno', 'roupa', 'Médio', 'https://images.unsplash.com/photo-1624378440841-8631bc2a2fbd?auto=format&fit=crop&q=80&w=600&h=800', 'https://shop.venus.com/men04'),
+('Jaqueta de Couro Moto Racer', 'Casaco', 'Preto', 'Sensual Refinado', 'roupa', 'Premium', 'https://images.unsplash.com/photo-1520975954732-57dd22299614?auto=format&fit=crop&q=80&w=600&h=800', 'https://shop.venus.com/men05'),
+('Sobretudo Lã Fria Masculino', 'Casaco', 'Preto', 'Elegante', 'roupa', 'Luxo', 'https://images.unsplash.com/photo-1533827432537-70133748f5c8?auto=format&fit=crop&q=80&w=600&h=800', 'https://shop.venus.com/men06'),
+('Relógio Cronógrafo Aço Escovado', 'Relogio', 'Prateado', 'Moderno', 'acessorio', 'Premium', 'https://images.unsplash.com/photo-1533139502658-0198f920d8e8?auto=format&fit=crop&q=80&w=600&h=800', 'https://shop.venus.com/men07'),
+('Tênis Sneaker Minimalista Couro', 'Sapato', 'Branco', 'Minimalista', 'acessorio', 'Médio', 'https://images.unsplash.com/photo-1525966222134-fcfa99b8ae77?auto=format&fit=crop&q=80&w=600&h=800', 'https://shop.venus.com/men08'),
+('Sapato Oxford Brogue', 'Sapato', 'Terracota', 'Clássico', 'acessorio', 'Premium', 'https://images.unsplash.com/photo-1614252339460-e144c4fa56da?auto=format&fit=crop&q=80&w=600&h=800', 'https://shop.venus.com/men09'),
+('Óculos Grau Armação Tartaruga', 'Oculos', 'Terracota', 'Clássico', 'acessorio', 'Médio', 'https://images.unsplash.com/photo-1511499767150-a48a237f0083?auto=format&fit=crop&q=80&w=600&h=800', 'https://shop.venus.com/men10');
