@@ -9,7 +9,7 @@ export default function ProductNewPage({ searchParams }: { searchParams: { error
     <div className="flex flex-col min-h-screen p-6 pb-20">
       <div className="flex items-center justify-between mb-8">
         <Heading as="h2" className="text-[#D4AF37]">Novo Cadastro</Heading>
-        <Link href="/b2b/dashboard"><VenusButton variant="ghost" className="px-0 py-0 h-auto">Voltar</VenusButton></Link>
+        <Link href="/merchant"><VenusButton variant="ghost" className="px-0 py-0 h-auto">Voltar</VenusButton></Link>
       </div>
       
       <GlassContainer>

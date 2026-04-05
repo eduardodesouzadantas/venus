@@ -1,7 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
+import { resolveCurrentMerchantOrg } from "@/lib/tenant/core";
 
 export interface Product {
   id: string;
+  org_id: string | null;
   name: string;
   category: string;
   primary_color: string | null;
@@ -21,10 +23,22 @@ export async function getB2BProducts(): Promise<Product[]> {
 
   try {
     const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("products")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const resolved = await resolveCurrentMerchantOrg(supabase);
+    const orgId = resolved.org?.id || null;
+    const userId = resolved.user?.id || null;
+
+    let query = supabase.from("products").select("*").order("created_at", { ascending: false });
+
+    if (orgId && userId) {
+      // Ponte temporária de migração: org_id é a fonte canônica, b2b_user_id só cobre legado ainda não normalizado.
+      query = query.or(`org_id.eq.${orgId},b2b_user_id.eq.${userId}`);
+    } else if (orgId) {
+      query = query.eq("org_id", orgId);
+    } else if (userId) {
+      query = query.eq("b2b_user_id", userId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error("Error fetching products", error);
