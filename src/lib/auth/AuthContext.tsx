@@ -78,6 +78,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const { data: currentUserData } = await supabase.auth.getUser();
         canonicalUserId = currentUserData.user?.id || canonicalUserId;
+      } else if (role.startsWith("agency_")) {
+        const agencyPassword = password || "venus-demo-password";
+
+        const provisionResponse = await fetch("/api/auth/agency-provision", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-store",
+          },
+          body: JSON.stringify({
+            email,
+            password: agencyPassword,
+            role,
+          }),
+        });
+
+        if (!provisionResponse.ok) {
+          throw new Error("Unable to provision agency auth");
+        }
+
+        const { createClient } = await import("@/lib/supabase/client");
+        const supabase = createClient();
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password: agencyPassword,
+        });
+
+        if (signInError) {
+          throw signInError;
+        }
+
+        const { data: currentUserData } = await supabase.auth.getUser();
+        canonicalUserId = currentUserData.user?.id || canonicalUserId;
       }
 
       const newUser: User = {
@@ -85,7 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email,
         name: email.split('@')[0],
         role,
-        orgId
+        ...(orgId ? { orgId } : {}),
       };
 
       setUser(newUser);

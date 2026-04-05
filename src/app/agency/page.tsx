@@ -1,195 +1,310 @@
-"use client";
-
-import { LayoutGrid, Users, DollarSign, Zap, ShieldCheck, HeartPulse, Settings, FileText, ChevronRight, ArrowUpRight, TrendingUp, AlertCircle, Search, Filter, MessageSquare, Activity } from "lucide-react";
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import type { ReactNode } from "react";
+import { ShieldCheck, Users, DollarSign, Zap, HeartPulse, MessageSquare, AlertCircle, RefreshCw, CircleDashed } from "lucide-react";
 
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { VenusButton } from "@/components/ui/VenusButton";
+import { createClient } from "@/lib/supabase/server";
+import { isAgencyRole, isMerchantRole, resolveTenantContext } from "@/lib/tenant/core";
+import { listAgencyOrgRows, type AgencyOrgRow } from "@/lib/agency";
 
-export default function AgencyDashboard() {
-  
-  const stats = [
-    { label: "Total Merchants", value: "82", trend: "+12", icon: <Users className="w-5 h-5 text-[#D4AF37]" /> },
-    { label: "Active Now", value: "65", trend: "+5", icon: <Activity className="w-5 h-5 text-green-500" /> },
-    { label: "Platform MRR", value: "R$ 142k", trend: "+R$ 12k", icon: <DollarSign className="w-5 h-5 text-[#D4AF37]" /> },
-    { label: "AI Health Score", value: "98%", trend: "STABLE", icon: <Zap className="w-5 h-5 text-[#D4AF37]" /> },
-  ];
+export const dynamic = "force-dynamic";
 
-  const topMerchants = [
-    { name: "Maison Elite", status: "Active", health: 95, revenue: "R$ 420k", ads: "Gold Plan", waActive: true, waVolume: "4.2k msgs" },
-    { name: "Noir Concept", status: "Active", health: 88, revenue: "R$ 310k", ads: "Platinum", waActive: true, waVolume: "12k msgs" },
-    { name: "Saphira Luxury", status: "Active", health: 62, revenue: "R$ 120k", ads: "Basic", risk: true, waActive: false, waVolume: "0" },
-  ];
+function formatCount(value: number | null) {
+  if (value === null) return "Sem dados";
+  return value.toLocaleString("pt-BR");
+}
+
+function formatDate(value: string | null) {
+  if (!value) return "Sem dados";
+  return new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function badgeClasses(kind: "active" | "suspended" | "blocked" | "plan" | "kill" | "neutral") {
+  switch (kind) {
+    case "active":
+      return "bg-green-500/10 text-green-400 border-green-500/20";
+    case "suspended":
+      return "bg-yellow-500/10 text-yellow-300 border-yellow-500/20";
+    case "blocked":
+      return "bg-red-500/10 text-red-400 border-red-500/20";
+    case "kill":
+      return "bg-red-500/10 text-red-400 border-red-500/20";
+    case "plan":
+      return "bg-white/5 text-white/70 border-white/10";
+    default:
+      return "bg-white/5 text-white/50 border-white/10";
+  }
+}
+
+function getStatusKind(row: AgencyOrgRow) {
+  if (row.status === "blocked") return "blocked";
+  if (row.status === "suspended") return "suspended";
+  if (row.kill_switch) return "blocked";
+  return "active";
+}
+
+function metricValue(value: number | null) {
+  return value === null ? "Sem dados" : value.toLocaleString("pt-BR");
+}
+
+export default async function AgencyDashboardPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const context = resolveTenantContext(user);
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  if (context.role && isMerchantRole(context.role)) {
+    redirect("/merchant");
+  }
+
+  if (!context.role || !isAgencyRole(context.role)) {
+    redirect("/login");
+  }
+
+  let orgs: AgencyOrgRow[] = [];
+  try {
+    orgs = await listAgencyOrgRows();
+  } catch (error) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center p-6">
+        <div className="max-w-lg w-full space-y-6">
+          <div className="p-8 rounded-[40px] bg-red-500/10 border border-red-500/20 space-y-4">
+            <div className="flex items-center gap-3 text-red-400">
+              <AlertCircle className="w-5 h-5" />
+              <Heading as="h1" className="text-xl uppercase tracking-tight">Agency panel indisponível</Heading>
+            </div>
+            <Text className="text-sm text-white/70">
+              Não foi possível carregar as orgs reais no momento.
+            </Text>
+            <Text className="text-[10px] text-white/40 break-all">
+              {error instanceof Error ? error.message : "Erro desconhecido"}
+            </Text>
+            <Link href="/login">
+              <VenusButton variant="outline" className="w-full mt-4">
+                Voltar ao login
+              </VenusButton>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const totalOrgs = orgs.length;
+  const activeOrgs = orgs.filter((org) => org.status === "active" && !org.kill_switch).length;
+  const suspendedOrBlocked = orgs.filter((org) => org.status !== "active" || org.kill_switch).length;
+  const killSwitchOn = orgs.filter((org) => org.kill_switch).length;
+  const totalProducts = orgs.reduce((sum, org) => sum + org.total_products, 0);
+  const totalLeads = orgs.reduce((sum, org) => sum + org.total_leads, 0);
+  const totalSavedResults = orgs.reduce((sum, org) => sum + org.total_saved_results, 0);
 
   return (
-    <div className="min-h-screen bg-black text-white flex">
-      {/* Agency Sidebar */}
-      <aside className="w-64 border-r border-white/5 flex flex-col p-6 space-y-10 sticky top-0 h-screen overflow-y-auto no-scrollbar">
-         <div className="flex items-center gap-3 px-2">
-            <div className="w-8 h-8 rounded-full bg-[#D4AF37] flex items-center justify-center text-black font-serif font-bold transition-transform hover:scale-110">V</div>
-            <Heading as="h1" className="text-sm tracking-widest uppercase">Agency Master</Heading>
-         </div>
-
-         <nav className="flex-1 space-y-2">
-            <NavItem icon={<div className="text-[10px] uppercase font-bold">🏠</div>} label="Comando" active />
-            <NavItem icon={<Users size={16} />} label="Lojistas (Tenants)" />
-            <NavItem icon={<MessageSquare size={16} />} label="WhatsApp Ops" />
-            <NavItem icon={<DollarSign size={16} />} label="Financeiro" />
-            <NavItem icon={<Zap size={16} />} label="AI Ops" />
-            <NavItem icon={<HeartPulse size={16} />} label="Crescimento" />
-            <NavItem icon={<ShieldCheck size={16} />} label="Controles" />
-         </nav>
-
-
-         <div className="p-4 rounded-2xl bg-white/5 border border-white/10 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-white/10 overflow-hidden">
-               <img src="https://i.pravatar.cc/150?u=agency_admin" alt="Admin" />
-            </div>
-            <div className="flex flex-col">
-               <span className="text-[10px] font-bold text-white/80">Agency Owner</span>
-               <span className="text-[8px] text-white/40 uppercase tracking-widest">Master Auth</span>
-            </div>
-         </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 p-12 overflow-y-auto">
-         <header className="flex items-center justify-between mb-16">
-            <div className="space-y-1">
-               <Text className="text-[10px] uppercase font-bold tracking-[0.4em] text-[#D4AF37]">Global Control Center</Text>
-               <Heading as="h1" className="text-3xl tracking-tighter uppercase">Visão Macro da Plataforma</Heading>
-            </div>
-            <div className="flex gap-4">
-               <VenusButton variant="outline" className="border-white/10 rounded-full text-[10px] tracking-widest uppercase font-bold h-12 px-6">Atualizar Rede</VenusButton>
-               <VenusButton variant="solid" className="bg-white text-black rounded-full text-[10px] tracking-widest uppercase font-bold h-12 px-6">Novo Tenant</VenusButton>
-            </div>
-         </header>
-
-         {/* Stats Grid */}
-         <div className="grid grid-cols-4 gap-6 mb-16">
-            {stats.map((s, i) => (
-              <div key={i} className="p-8 rounded-[40px] bg-white/[0.03] border border-white/5 space-y-4">
-                 <div className="flex items-center justify-between">
-                    <div className="w-10 h-10 rounded-2xl bg-white/5 flex items-center justify-center">{s.icon}</div>
-                    <span className={`text-[10px] font-bold ${s.trend.startsWith('+') ? "text-green-500" : "text-white/40"}`}>{s.trend}</span>
-                 </div>
-                 <div className="space-y-1">
-                    <Heading as="h2" className="text-3xl tracking-tighter">{s.value}</Heading>
-                    <Text className="text-[10px] uppercase tracking-widest text-white/30 font-bold">{s.label}</Text>
-                 </div>
+    <div className="min-h-screen bg-black text-white">
+      <div className="px-6 pt-10 pb-8 border-b border-white/5 sticky top-0 z-40 bg-black/80 backdrop-blur-2xl">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-[#D4AF37] flex items-center justify-center text-black font-serif font-bold shadow-[0_0_24px_rgba(212,175,55,0.35)]">
+                V
               </div>
-            ))}
-         </div>
+              <div>
+                <Text className="text-[10px] uppercase font-bold tracking-[0.5em] text-[#D4AF37]">Agency Command Center</Text>
+                <Heading as="h1" className="text-3xl uppercase tracking-tighter">Painel Operacional Real</Heading>
+              </div>
+            </div>
+            <Text className="text-sm text-white/50 max-w-2xl">
+              Dados reais por org, status canônico, kill switch e ações mínimas de governança.
+            </Text>
+          </div>
+          <div className="flex gap-3">
+            <Link href="/admin">
+              <VenusButton variant="outline" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold border-white/10">
+                Portal
+              </VenusButton>
+            </Link>
+            <Link href="/login">
+              <VenusButton variant="solid" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold bg-white text-black">
+                Trocar Usuário
+              </VenusButton>
+            </Link>
+          </div>
+        </div>
+      </div>
 
-         <div className="grid grid-cols-3 gap-8">
-            {/* Tenant Health Manager */}
-            <section className="col-span-2 space-y-8">
-               <div className="flex items-center justify-between px-2">
-                  <Heading as="h3" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">Health Manager (Tenants)</Heading>
-                  <button className="text-[10px] text-[#D4AF37] font-bold uppercase tracking-widest flex items-center gap-2">Explorar Tudo <ChevronRight size={12} /></button>
-               </div>
+      <div className="px-6 py-8 space-y-10">
+        <div className="grid grid-cols-2 xl:grid-cols-6 gap-4">
+          <StatCard icon={<Users className="w-5 h-5 text-[#D4AF37]" />} label="Orgs" value={totalOrgs.toString()} />
+          <StatCard icon={<HeartPulse className="w-5 h-5 text-green-400" />} label="Ativas" value={activeOrgs.toString()} />
+          <StatCard icon={<ShieldCheck className="w-5 h-5 text-red-400" />} label="Bloqueadas / Suspensas" value={suspendedOrBlocked.toString()} />
+          <StatCard icon={<Zap className="w-5 h-5 text-[#D4AF37]" />} label="Kill switch ON" value={killSwitchOn.toString()} />
+          <StatCard icon={<DollarSign className="w-5 h-5 text-[#D4AF37]" />} label="Produtos" value={totalProducts.toString()} />
+          <StatCard icon={<MessageSquare className="w-5 h-5 text-[#D4AF37]" />} label="Leads / Saved" value={`${totalLeads} / ${totalSavedResults}`} />
+        </div>
 
-               <div className="space-y-4">
-                  {topMerchants.map((m, i) => (
-                    <div key={i} className="p-6 rounded-[32px] bg-white/[0.02] border border-white/5 flex items-center justify-between group transition-colors hover:bg-white/[0.04]">
-                       <div className="flex items-center gap-6">
-                          <div className={`w-3 h-3 rounded-full ${m.health > 80 ? "bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.4)]" : "bg-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.4)]"}`} />
-                          <div className="flex flex-col">
-                             <Heading as="h4" className="text-lg tracking-tight uppercase">{m.name}</Heading>
-                             <span className="text-[9px] uppercase font-bold tracking-widest text-white/20">Plano: {m.ads} · ID: 00{i+1}</span>
-                          </div>
-                       </div>
-                       <div className="flex items-center gap-12">
-                          <div className="flex flex-col items-end">
-                             <span className="text-[9px] uppercase font-bold tracking-widest text-white/30 mb-1">Health Score</span>
-                             <span className={`text-lg font-serif ${m.health > 80 ? "text-white" : "text-yellow-500"}`}>{m.health}%</span>
-                          </div>
-                          <div className="flex flex-col items-end">
-                             <span className="text-[9px] uppercase font-bold tracking-widest text-white/30 mb-1">Faturamento</span>
-                             <span className="text-lg font-serif text-white">{m.revenue}</span>
-                          </div>
-                          {m.risk && (
-                            <div className="px-3 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-500 text-[8px] font-bold tracking-widest animate-pulse">RISCO CHURN</div>
-                          )}
-                          <button className="w-10 h-10 rounded-full border border-white/5 flex items-center justify-center text-white/20 hover:text-white transition-colors group-hover:border-[#D4AF37]/40">
-                             <Settings size={16} />
-                          </button>
-                       </div>
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <Heading as="h2" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">Orgs reais</Heading>
+              <Text className="text-sm text-white/40">Lista canônica por org_id, com métricas operacionais mínimas e ações persistidas.</Text>
+            </div>
+            <Link href="/agency">
+              <VenusButton variant="outline" className="rounded-full h-11 px-5 text-[9px] uppercase tracking-[0.35em] font-bold border-white/10">
+                <RefreshCw className="w-3 h-3 mr-2" />
+                Atualizar
+              </VenusButton>
+            </Link>
+          </div>
+
+          <div className="space-y-4">
+            {orgs.map((org) => {
+              const statusKind = getStatusKind(org);
+              const usage = org.usage_today;
+              const statusLabel = org.kill_switch ? "blocked" : org.status;
+              return (
+                <div key={org.id} className="p-6 rounded-[32px] bg-white/[0.03] border border-white/5 space-y-6">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <Heading as="h3" className="text-2xl uppercase tracking-tighter">{org.name}</Heading>
+                        <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badgeClasses(statusKind)}`}>
+                          {statusLabel}
+                        </span>
+                        <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badgeClasses("plan")}`}>
+                          Plano {org.plan_id || "sem dados"}
+                        </span>
+                        <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badgeClasses("kill")}`}>
+                          Kill switch {org.kill_switch ? "ON" : "OFF"}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-4 text-[10px] uppercase tracking-widest text-white/35">
+                        <span>slug: {org.slug}</span>
+                        <span>org_id: {org.id}</span>
+                        <span>criado: {formatDate(org.created_at || null)}</span>
+                        <span>última atividade: {formatDate(org.last_activity_at)}</span>
+                      </div>
                     </div>
-                  ))}
-               </div>
-            </section>
 
-            {/* AI Ops & Support alerts */}
-            <section className="space-y-8">
-               <Heading as="h3" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">Alertas & AI Ops</Heading>
-               
-               <div className="p-8 rounded-[48px] bg-gradient-to-br from-red-500/10 to-transparent border border-red-500/20 space-y-6">
-                  <div className="flex items-center gap-3 text-red-500">
-                     <AlertCircle size={20} />
-                     <span className="text-[9px] uppercase font-bold tracking-widest">Atenção Necessária</span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 min-w-[280px]">
+                      <Metric label="Membros" value={org.total_members} />
+                      <Metric label="Produtos" value={org.total_products} />
+                      <Metric label="Leads" value={org.total_leads} />
+                      <Metric label="Saved" value={org.total_saved_results} />
+                    </div>
                   </div>
-                  <div className="space-y-4">
-                     <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-1">
-                        <span className="text-[10px] font-bold text-white/80">Saphira Luxury</span>
-                        <Text className="text-[10px] text-white/40 leading-relaxed">Taxa de falha no AI Enrichment: 42%. Necessita intervenção manual.</Text>
-                     </div>
-                     <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-1">
-                        <span className="text-[10px] font-bold text-white/80">Noir Concept</span>
-                        <Text className="text-[10px] text-white/40 leading-relaxed">MRR estagnado há 3 semanas. Upsell do Try-On sugerido.</Text>
-                     </div>
-                  </div>
-                  <VenusButton variant="solid" className="w-full py-6 h-auto bg-white/10 text-white border border-white/10 text-[9px] font-bold uppercase tracking-widest rounded-full">Abrir Suporte Master</VenusButton>
-               </div>
 
-               <div className="p-8 rounded-[48px] bg-white/[0.03] border border-white/5 space-y-6">
-                  <div className="flex items-center gap-3 text-[#D4AF37]">
-                     <Zap size={20} />
-                     <span className="text-[8px] uppercase font-bold tracking-widest">Orquestração Gen-AI</span>
+                  <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+                    <div className="p-4 rounded-3xl bg-black/40 border border-white/5 space-y-1">
+                      <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">WhatsApp conversas</Text>
+                      <Heading as="h4" className="text-xl tracking-tighter">{metricValue(org.total_whatsapp_conversations)}</Heading>
+                    </div>
+                    <div className="p-4 rounded-3xl bg-black/40 border border-white/5 space-y-1">
+                      <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">WhatsApp mensagens</Text>
+                      <Heading as="h4" className="text-xl tracking-tighter">{metricValue(org.total_whatsapp_messages)}</Heading>
+                    </div>
+                    <div className="p-4 rounded-3xl bg-black/40 border border-white/5 space-y-1">
+                      <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">
+                        Uso {usage ? `(${org.usage_source})` : ""}
+                      </Text>
+                      <Heading as="h4" className="text-xl tracking-tighter">
+                        {usage ? formatCount(usage.messages_sent) : "Sem dados"}
+                      </Heading>
+                      <Text className="text-[10px] text-white/35 uppercase tracking-widest">
+                        msgs · tokens {usage ? formatCount(usage.ai_tokens) : "sem dados"}
+                      </Text>
+                    </div>
+                    <div className="p-4 rounded-3xl bg-black/40 border border-white/5 space-y-1">
+                      <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Última interação</Text>
+                      <Heading as="h4" className="text-xl tracking-tighter">{formatDate(org.last_activity_at)}</Heading>
+                      <Text className="text-[10px] text-white/35 uppercase tracking-widest">Governança real</Text>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                     <div className="p-4 rounded-2xl bg-black border border-white/5 space-y-1">
-                        <span className="text-[9px] text-white/40 font-bold">Try-On Loads</span>
-                        <span className="text-lg font-serif">12.4k</span>
-                     </div>
-                     <div className="p-4 rounded-2xl bg-black border border-white/5 space-y-1">
-                        <span className="text-[9px] text-white/40 font-bold">Token Cost</span>
-                        <span className="text-lg font-serif">R$ 1.2k</span>
-                     </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    <form action={`/api/admin/orgs/${org.id}`} method="post">
+                      <input type="hidden" name="action" value={org.status === "active" ? "suspend" : "activate"} />
+                      <VenusButton
+                        type="submit"
+                        variant="outline"
+                        className="h-11 px-5 rounded-full uppercase tracking-[0.3em] text-[9px] font-bold border-white/10"
+                      >
+                        {org.status === "active" ? "Suspender org" : "Ativar org"}
+                      </VenusButton>
+                    </form>
+                    <form action={`/api/admin/orgs/${org.id}`} method="post">
+                      <input type="hidden" name="action" value="toggle_kill_switch" />
+                      <VenusButton
+                        type="submit"
+                        variant="solid"
+                        className={`h-11 px-5 rounded-full uppercase tracking-[0.3em] text-[9px] font-bold ${
+                          org.kill_switch ? "bg-red-500 text-white" : "bg-[#D4AF37] text-black"
+                        }`}
+                      >
+                        {org.kill_switch ? "Desligar kill switch" : "Ligar kill switch"}
+                      </VenusButton>
+                    </form>
                   </div>
-               </div>
-            </section>
-         </div>
-      </main>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {orgs.length === 0 && (
+          <div className="p-8 rounded-[32px] bg-white/[0.03] border border-white/5 text-center">
+            <CircleDashed className="w-6 h-6 text-white/30 mx-auto mb-3" />
+            <Heading as="h3" className="text-lg uppercase tracking-tight">Nenhuma org encontrada</Heading>
+            <Text className="text-sm text-white/40 mt-2">O core de tenant está online, mas não há orgs disponíveis para exibir.</Text>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-function NavItem({ icon, label, active = false }: { icon: any, label: string, active?: boolean }) {
+function StatCard({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+}) {
   return (
-    <button className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all ${active ? "bg-[#D4AF37] text-black shadow-[0_0_20px_rgba(212,175,55,0.4)]" : "text-white/40 hover:bg-white/5 hover:text-white"}`}>
-       {icon}
-       <span className="text-[11px] font-bold uppercase tracking-widest">{label}</span>
-    </button>
+    <div className="p-5 rounded-[28px] bg-white/[0.03] border border-white/5 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="w-10 h-10 rounded-2xl bg-white/5 flex items-center justify-center">{icon}</div>
+      </div>
+      <div className="space-y-1">
+        <Heading as="h3" className="text-2xl tracking-tighter">{value}</Heading>
+        <Text className="text-[9px] uppercase tracking-[0.35em] text-white/35 font-bold">{label}</Text>
+      </div>
+    </div>
   );
 }
 
-function ActivityIcon(props: any) {
+function Metric({
+  label,
+  value,
+}: {
+  label: string;
+  value: number;
+}) {
   return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-    </svg>
+    <div className="p-4 rounded-3xl bg-black/40 border border-white/5 space-y-1">
+      <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">{label}</Text>
+      <Heading as="h4" className="text-lg tracking-tighter">{value.toLocaleString("pt-BR")}</Heading>
+    </div>
   );
 }
-

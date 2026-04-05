@@ -45,6 +45,7 @@ export async function updateSession(request: NextRequest) {
   const isMerchantLogin = pathname.startsWith("/b2b/login");
   const isB2BRoute = pathname.startsWith("/b2b");
   const isMerchantRoute = pathname.startsWith("/merchant");
+  const isAgencyRoute = pathname.startsWith("/agency");
   const isOrgRoute = pathname.startsWith("/org/");
 
   const redirectTo = (targetPath: string) => {
@@ -71,6 +72,18 @@ export async function updateSession(request: NextRequest) {
 
   if (isMerchantRoute && user && tenantContext.role && isAgencyRole(tenantContext.role)) {
     return redirectTo("/agency");
+  }
+
+  if (isAgencyRoute) {
+    if (!user) {
+      return redirectTo("/login");
+    }
+
+    if (tenantContext.role && isAgencyRole(tenantContext.role)) {
+      return supabaseResponse;
+    }
+
+    return redirectTo("/merchant");
   }
 
   if (isOrgRoute) {
