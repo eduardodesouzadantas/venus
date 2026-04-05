@@ -201,6 +201,11 @@ export default async function AgencyBillingPage() {
                 Governança
               </VenusButton>
             </Link>
+            <Link href="/agency/playbooks">
+              <VenusButton variant="outline" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold border-white/10">
+                Playbooks
+              </VenusButton>
+            </Link>
             <Link href="/agency/billing">
               <VenusButton variant="solid" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold bg-white text-black">
                 <RefreshCw className="w-3 h-3 mr-2" />

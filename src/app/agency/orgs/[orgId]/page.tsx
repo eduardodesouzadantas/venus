@@ -13,6 +13,7 @@ import { VenusButton } from "@/components/ui/VenusButton";
 import { createClient } from "@/lib/supabase/server";
 import { isAgencyRole, isMerchantRole, resolveTenantContext } from "@/lib/tenant/core";
 import { getAgencyOrgDetail } from "@/lib/agency/org-details";
+import { listPlaybookQueueByOrg } from "@/lib/agency/playbook-queue";
 import { getOrgGuidanceSummary } from "@/lib/billing/guidance";
 
 export const dynamic = "force-dynamic";
@@ -186,6 +187,7 @@ export default async function AgencyOrgDetailPage({
   const softCaps = billing?.soft_cap_summary || null;
   const guidance = getOrgGuidanceSummary(org);
   const playbook = detail.playbook;
+  const queueItems = await listPlaybookQueueByOrg(org.id, 10);
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -461,6 +463,38 @@ export default async function AgencyOrgDetailPage({
             </div>
           ) : (
             <EmptyState title="Sem ações leves" description="Este playbook não expõe automações leves neste momento." />
+          )}
+        </SectionShell>
+
+        <SectionShell
+          title="Fila operacional recente"
+          description="Últimos playbooks marcados para esta org, vindos da mesma trilha de tenant_events."
+        >
+          {queueItems.length > 0 ? (
+            <div className="space-y-3">
+              {queueItems.map((item) => (
+                <div key={item.event_id} className="p-4 rounded-[24px] bg-white/[0.03] border border-white/5 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="space-y-1">
+                    <Heading as="h3" className="text-lg tracking-tighter">
+                      {item.label}
+                    </Heading>
+                    <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
+                      {item.action_type} · {item.created_at}
+                    </Text>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badge(item.status_light === "recent" ? "active" : item.status_light === "open" ? "plan" : "blocked")}`}>
+                    {item.status_light}
+                  </span>
+                </div>
+              ))}
+              <Link href={`/agency/playbooks?orgId=${org.id}`}>
+                <VenusButton variant="glass" className="h-11 px-5 rounded-full uppercase tracking-[0.3em] text-[9px] font-bold border-white/10">
+                  Ver fila completa
+                </VenusButton>
+              </Link>
+            </div>
+          ) : (
+            <EmptyState title="Sem itens na fila" description="Ainda não existem playbooks marcados para esta org." />
           )}
         </SectionShell>
 
