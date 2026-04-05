@@ -1,6 +1,7 @@
 import "server-only";
 
 import { listAgencyOrgRows } from "@/lib/agency";
+import { normalizeAgencyTimeRange, resolveAgencyTimeRangeWindow, type AgencyTimeRange } from "@/lib/agency/time-range";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { AgencyOrgRow } from "@/lib/agency";
 import {
@@ -55,6 +56,11 @@ export interface OrgBillingSummary extends OrgUsageSummary {
 }
 
 export interface AgencyBillingRow extends AgencyOrgRow, OrgBillingSummary {}
+
+export interface AgencyBillingFilters {
+  range?: AgencyTimeRange | null;
+  orgId?: string | null;
+}
 
 const CATEGORY_COSTS = {
   ai_result_generation: 150,
@@ -112,11 +118,20 @@ function latestMapUpdate(map: Map<string, string | null>, key: string, value?: s
   }
 }
 
-export async function listAgencyBillingRows(): Promise<AgencyBillingRow[]> {
-  const orgRows = await listAgencyOrgRows();
+function inRange(value: string | null | undefined, dateFrom: string | null) {
+  if (!dateFrom || !value) return true;
+  return value >= dateFrom;
+}
+
+async function listAgencyBillingRowsWithFilters(filters: AgencyBillingFilters): Promise<AgencyBillingRow[]> {
+  const allOrgRows = await listAgencyOrgRows();
   const admin = createAdminClient();
   const today = new Date().toISOString().slice(0, 10);
+  const range = normalizeAgencyTimeRange(filters.range, "all");
+  const rangeWindow = resolveAgencyTimeRangeWindow(range);
+  const dateFrom = rangeWindow.dateFrom;
 
+  const orgRows = filters.orgId ? allOrgRows.filter((org) => org.id === normalize(filters.orgId)) : allOrgRows;
   const orgById = new Map(orgRows.map((org) => [org.id, org]));
   const orgBySlug = new Map(orgRows.map((org) => [normalize(org.slug), org]));
 
@@ -145,6 +160,11 @@ export async function listAgencyBillingRows(): Promise<AgencyBillingRow[]> {
   const whatsappMessagesAvailable = !whatsappMessagesResult.error;
 
   const totalEventsByOrgId = new Map<string, number>();
+  const totalProductsByOrgId = new Map<string, number>();
+  const totalLeadsByOrgId = new Map<string, number>();
+  const totalSavedResultsByOrgId = new Map<string, number>();
+  const totalWhatsappConversationsByOrgId = new Map<string, number>();
+  const totalWhatsappMessagesByOrgId = new Map<string, number>();
   const todayEventsByOrgId = new Map<string, number>();
   const todayProductsByOrgId = new Map<string, number>();
   const todayLeadsByOrgId = new Map<string, number>();
@@ -155,6 +175,7 @@ export async function listAgencyBillingRows(): Promise<AgencyBillingRow[]> {
 
   for (const row of (tenantEventsResult.data || []) as Array<{ org_id: string | null; created_at: string | null }>) {
     if (!row.org_id || !orgById.has(row.org_id)) continue;
+    if (!inRange(row.created_at, dateFrom)) continue;
     countMapIncrement(totalEventsByOrgId, row.org_id);
     if (sameUtcDay(row.created_at, today)) {
       countMapIncrement(todayEventsByOrgId, row.org_id);
@@ -164,6 +185,8 @@ export async function listAgencyBillingRows(): Promise<AgencyBillingRow[]> {
 
   for (const row of (productsResult.data || []) as Array<{ org_id: string | null; created_at: string | null }>) {
     if (!row.org_id || !orgById.has(row.org_id)) continue;
+    if (!inRange(row.created_at, dateFrom)) continue;
+    countMapIncrement(totalProductsByOrgId, row.org_id);
     if (sameUtcDay(row.created_at, today)) {
       countMapIncrement(todayProductsByOrgId, row.org_id);
     }
@@ -172,6 +195,8 @@ export async function listAgencyBillingRows(): Promise<AgencyBillingRow[]> {
 
   for (const row of (leadsResult.data || []) as Array<{ org_id: string | null; created_at: string | null; updated_at: string | null; last_interaction_at: string | null }>) {
     if (!row.org_id || !orgById.has(row.org_id)) continue;
+    if (!inRange(row.created_at, dateFrom)) continue;
+    countMapIncrement(totalLeadsByOrgId, row.org_id);
     if (sameUtcDay(row.created_at, today)) {
       countMapIncrement(todayLeadsByOrgId, row.org_id);
     }
@@ -180,6 +205,8 @@ export async function listAgencyBillingRows(): Promise<AgencyBillingRow[]> {
 
   for (const row of (savedResultsResult.data || []) as Array<{ org_id: string | null; created_at: string | null; updated_at: string | null }>) {
     if (!row.org_id || !orgById.has(row.org_id)) continue;
+    if (!inRange(row.created_at, dateFrom)) continue;
+    countMapIncrement(totalSavedResultsByOrgId, row.org_id);
     if (sameUtcDay(row.created_at, today)) {
       countMapIncrement(todaySavedResultsByOrgId, row.org_id);
     }
@@ -190,6 +217,8 @@ export async function listAgencyBillingRows(): Promise<AgencyBillingRow[]> {
     for (const row of (whatsappConversationsResult.data || []) as Array<{ org_slug: string | null; created_at: string | null }>) {
       const org = row.org_slug ? orgBySlug.get(normalize(row.org_slug)) : null;
       if (!org) continue;
+      if (!inRange(row.created_at, dateFrom)) continue;
+      countMapIncrement(totalWhatsappConversationsByOrgId, org.id);
       if (sameUtcDay(row.created_at, today)) {
         countMapIncrement(todayWhatsappConversationsByOrgId, org.id);
       }
@@ -201,6 +230,8 @@ export async function listAgencyBillingRows(): Promise<AgencyBillingRow[]> {
     for (const row of (whatsappMessagesResult.data || []) as Array<{ org_slug: string | null; created_at: string | null }>) {
       const org = row.org_slug ? orgBySlug.get(normalize(row.org_slug)) : null;
       if (!org) continue;
+      if (!inRange(row.created_at, dateFrom)) continue;
+      countMapIncrement(totalWhatsappMessagesByOrgId, org.id);
       if (sameUtcDay(row.created_at, today)) {
         countMapIncrement(todayWhatsappMessagesByOrgId, org.id);
       }
@@ -211,6 +242,11 @@ export async function listAgencyBillingRows(): Promise<AgencyBillingRow[]> {
   return orgRows.map((org) => {
     const usage = org.usage_today || null;
     const totalEvents = totalEventsByOrgId.get(org.id) || 0;
+    const totalProducts = totalProductsByOrgId.get(org.id) || 0;
+    const totalLeads = totalLeadsByOrgId.get(org.id) || 0;
+    const totalSavedResults = totalSavedResultsByOrgId.get(org.id) || 0;
+    const totalWhatsappConversations = totalWhatsappConversationsByOrgId.get(org.id) || 0;
+    const totalWhatsappMessages = totalWhatsappMessagesByOrgId.get(org.id) || 0;
     const todayEvents = todayEventsByOrgId.get(org.id) || 0;
     const todayProducts = todayProductsByOrgId.get(org.id) || 0;
     const todayLeads = todayLeadsByOrgId.get(org.id) || 0;
@@ -219,11 +255,11 @@ export async function listAgencyBillingRows(): Promise<AgencyBillingRow[]> {
     const todayWhatsappMessages = todayWhatsappMessagesByOrgId.get(org.id) || 0;
 
     const totalBreakdown = {
-      ai_result_generation: costSnapshot(org.total_saved_results, CATEGORY_COSTS.ai_result_generation),
-      catalog_product_created: costSnapshot(org.total_products, CATEGORY_COSTS.catalog_product_created),
-      leads_created: costSnapshot(org.total_leads, CATEGORY_COSTS.leads_created),
-      whatsapp_messages: costSnapshot(org.total_whatsapp_messages ?? 0, CATEGORY_COSTS.whatsapp_messages),
-      whatsapp_conversations: costSnapshot(org.total_whatsapp_conversations ?? 0, CATEGORY_COSTS.whatsapp_conversations),
+      ai_result_generation: costSnapshot(totalSavedResults, CATEGORY_COSTS.ai_result_generation),
+      catalog_product_created: costSnapshot(totalProducts, CATEGORY_COSTS.catalog_product_created),
+      leads_created: costSnapshot(totalLeads, CATEGORY_COSTS.leads_created),
+      whatsapp_messages: costSnapshot(totalWhatsappMessages, CATEGORY_COSTS.whatsapp_messages),
+      whatsapp_conversations: costSnapshot(totalWhatsappConversations, CATEGORY_COSTS.whatsapp_conversations),
       tenant_events: costSnapshot(totalEvents, CATEGORY_COSTS.tenant_events),
     };
 
@@ -242,10 +278,10 @@ export async function listAgencyBillingRows(): Promise<AgencyBillingRow[]> {
     const lastActivityAt = latestMapValue(lastActivityByOrgId, org.id) || org.last_activity_at || org.updated_at || org.created_at || null;
     const softCapSummary = buildOrgSoftCapSummary({
       plan_id: org.plan_id,
-      saved_results: org.total_saved_results,
-      leads: org.total_leads,
-      products: org.total_products,
-      whatsapp_messages: org.total_whatsapp_messages,
+      saved_results: totalSavedResults,
+      leads: totalLeads,
+      products: totalProducts,
+      whatsapp_messages: totalWhatsappMessages,
       estimated_cost_today_cents: estimatedCostToday,
       estimated_cost_total_cents: estimatedCostTotal,
     });
@@ -263,6 +299,11 @@ export async function listAgencyBillingRows(): Promise<AgencyBillingRow[]> {
       tenant_events_count: totalEvents,
       last_activity_at: lastActivityAt,
       usage_source: org.usage_source,
+      total_products: totalProducts,
+      total_leads: totalLeads,
+      total_saved_results: totalSavedResults,
+      total_whatsapp_conversations: whatsappConversationsAvailable ? totalWhatsappConversations : null,
+      total_whatsapp_messages: whatsappMessagesAvailable ? totalWhatsappMessages : null,
       estimated_cost_today_cents: estimatedCostToday,
       estimated_cost_total_cents: estimatedCostTotal,
       estimated_ai_cost_today_cents: todayBreakdown.ai_result_generation.estimated_cost_cents,
@@ -297,6 +338,10 @@ export async function listAgencyBillingRows(): Promise<AgencyBillingRow[]> {
 
 function latestMapValue(map: Map<string, string | null>, key: string) {
   return map.get(key) || null;
+}
+
+export async function listAgencyBillingRows(filters: AgencyBillingFilters = {}): Promise<AgencyBillingRow[]> {
+  return listAgencyBillingRowsWithFilters(filters);
 }
 
 export async function getOrgUsageSummary(orgId: string): Promise<OrgUsageSummary | null> {

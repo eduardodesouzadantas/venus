@@ -16,6 +16,7 @@ import { VenusButton } from "@/components/ui/VenusButton";
 import { createClient } from "@/lib/supabase/server";
 import { isAgencyRole, isMerchantRole, resolveTenantContext } from "@/lib/tenant/core";
 import { listAgencyPlaybookRows, type AgencyPlaybookRow } from "@/lib/billing/playbooks";
+import { normalizeAgencyTimeRange, type AgencyTimeRange } from "@/lib/agency/time-range";
 
 export const dynamic = "force-dynamic";
 
@@ -99,6 +100,29 @@ function guidanceKind(value: "info" | "warning" | "critical") {
   return "risk-low";
 }
 
+function rangeLabel(range: AgencyTimeRange) {
+  switch (range) {
+    case "7d":
+      return "7 dias";
+    case "30d":
+      return "30 dias";
+    case "90d":
+      return "90 dias";
+    default:
+      return "Tudo";
+  }
+}
+
+function buildHref(pathname: string, params: Record<string, string | number | undefined>) {
+  const searchParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === "") continue;
+    searchParams.set(key, String(value));
+  }
+  const query = searchParams.toString();
+  return query ? `${pathname}?${query}` : pathname;
+}
+
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="p-4 rounded-3xl bg-black/40 border border-white/5 space-y-1">
@@ -110,7 +134,11 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-export default async function AgencyBillingPage() {
+export default async function AgencyBillingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -129,9 +157,12 @@ export default async function AgencyBillingPage() {
     redirect("/login");
   }
 
+  const resolved = await searchParams;
+  const range = normalizeAgencyTimeRange(Array.isArray(resolved.range) ? resolved.range[0] : resolved.range, "all");
+
   let rows: AgencyPlaybookRow[] = [];
   try {
-    rows = await listAgencyPlaybookRows();
+    rows = await listAgencyPlaybookRows({ range });
   } catch (error) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center p-6">
@@ -172,6 +203,7 @@ export default async function AgencyBillingPage() {
   }, null);
   const attentionOrgs = rows.filter((row) => row.soft_cap_summary.overall_status === "warning").length;
   const criticalOrgs = rows.filter((row) => row.soft_cap_summary.overall_status === "critical").length;
+  const exportParams = { range };
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -195,18 +227,31 @@ export default async function AgencyBillingPage() {
               Uso e custo estimado por org, com base em dados reais do tenant core, catálogo, CRM e WhatsApp.
             </Text>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3 items-center">
+            <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badge("plan")}`}>
+              Janela {rangeLabel(range)}
+            </span>
             <Link href="/agency">
               <VenusButton variant="outline" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold border-white/10">
                 Governança
               </VenusButton>
             </Link>
-            <Link href="/agency/playbooks">
+            <Link href={buildHref("/agency/playbooks", { range })}>
               <VenusButton variant="outline" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold border-white/10">
                 Playbooks
               </VenusButton>
             </Link>
-            <Link href="/agency/billing">
+            <Link href={buildHref("/api/agency/billing/export", { ...exportParams, format: "csv" })}>
+              <VenusButton variant="outline" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold border-white/10">
+                CSV
+              </VenusButton>
+            </Link>
+            <Link href={buildHref("/api/agency/billing/export", { ...exportParams, format: "json" })}>
+              <VenusButton variant="outline" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold border-white/10">
+                JSON
+              </VenusButton>
+            </Link>
+            <Link href={buildHref("/agency/billing", exportParams)}>
               <VenusButton variant="solid" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold bg-white text-black">
                 <RefreshCw className="w-3 h-3 mr-2" />
                 Atualizar
@@ -214,6 +259,30 @@ export default async function AgencyBillingPage() {
             </Link>
           </div>
         </div>
+      </div>
+
+      <div className="px-6 pt-6">
+        <section className="p-5 rounded-[28px] bg-white/[0.03] border border-white/5 space-y-4">
+          <Heading as="h2" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">
+            Filtro temporal
+          </Heading>
+          <form className="grid grid-cols-1 md:grid-cols-3 gap-3" method="get">
+            <label className="space-y-2">
+              <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Período</Text>
+              <select name="range" defaultValue={range} className="w-full rounded-2xl bg-black/40 border border-white/10 px-4 py-3 text-sm text-white">
+                <option value="all">Tudo</option>
+                <option value="7d">7 dias</option>
+                <option value="30d">30 dias</option>
+                <option value="90d">90 dias</option>
+              </select>
+            </label>
+            <div className="flex items-end">
+              <VenusButton type="submit" variant="solid" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold bg-white text-black w-full">
+                Aplicar
+              </VenusButton>
+            </div>
+          </form>
+        </section>
       </div>
 
       <div className="px-6 py-8 space-y-10">

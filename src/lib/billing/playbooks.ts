@@ -3,6 +3,7 @@ import "server-only";
 import type { AgencyGuidanceRow, OrgGuidanceSummary, RecommendedAction, GuidanceLevel } from "@/lib/billing/guidance";
 import { listAgencyGuidanceRows } from "@/lib/billing/guidance";
 import type { PlanTier } from "@/lib/billing/limits";
+import type { AgencyBillingFilters } from "@/lib/billing";
 
 export type OrgPlaybookActionKey =
   | "mark_monitoring"
@@ -253,8 +254,8 @@ export function getOrgPlaybookSummary(guidance: OrgGuidanceSummary): OrgPlaybook
   };
 }
 
-export async function listAgencyPlaybookRows(): Promise<AgencyPlaybookRow[]> {
-  const rows = await listAgencyGuidanceRows();
+export async function listAgencyPlaybookRows(filters: AgencyBillingFilters = {}): Promise<AgencyPlaybookRow[]> {
+  const rows = await listAgencyGuidanceRows(filters);
   return rows.map((row) => ({
     ...row,
     playbook_summary: getOrgPlaybookSummary(row.guidance_summary),

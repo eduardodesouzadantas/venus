@@ -2,6 +2,7 @@ import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { listAgencyOrgRows, type AgencyOrgRow } from "@/lib/agency";
+import { normalizeAgencyTimeRange, resolveAgencyTimeRangeWindow, type AgencyTimeRange } from "@/lib/agency/time-range";
 
 export type PlaybookQueueStatusLight = "recent" | "open" | "aging";
 
@@ -12,6 +13,7 @@ export type PlaybookQueueActionType =
   | "agency.anomaly_investigation_marked";
 
 export interface AgencyPlaybookQueueFilters {
+  range?: AgencyTimeRange | null;
   orgId?: string | null;
   actionType?: PlaybookQueueActionType | null;
   dateFrom?: string | null;
@@ -122,6 +124,10 @@ export async function listPlaybookQueueItems(
   filters: AgencyPlaybookQueueFilters = {}
 ): Promise<AgencyPlaybookQueueItem[]> {
   const limit = normalizeLimit(filters.limit);
+  const range = normalizeAgencyTimeRange(filters.range, "all");
+  const rangeWindow = resolveAgencyTimeRangeWindow(range);
+  const dateFrom = filters.dateFrom || rangeWindow.dateFrom;
+  const dateTo = filters.dateTo || null;
   const admin = createAdminClient();
   const { orgById, orgBySlug } = await loadOrgMap();
 
@@ -138,12 +144,12 @@ export async function listPlaybookQueueItems(
     query.eq("event_type", filters.actionType);
   }
 
-  if (filters.dateFrom) {
-    query.gte("created_at", `${filters.dateFrom}T00:00:00`);
+  if (dateFrom) {
+    query.gte("created_at", `${dateFrom}T00:00:00`);
   }
 
-  if (filters.dateTo) {
-    query.lte("created_at", `${filters.dateTo}T23:59:59.999`);
+  if (dateTo) {
+    query.lte("created_at", `${dateTo}T23:59:59.999`);
   }
 
   const { data, error } = await query.order("created_at", { ascending: false }).limit(limit);
@@ -159,7 +165,7 @@ export async function listPlaybookQueueItems(
       payload: unknown;
       created_at: string | null;
     }, orgById, orgBySlug))
-    .filter((item) => (item ? matchesDateRange(item.created_at, filters.dateFrom, filters.dateTo) : false))
+    .filter((item) => (item ? matchesDateRange(item.created_at, dateFrom, dateTo) : false))
     .filter((item): item is AgencyPlaybookQueueItem => Boolean(item));
 }
 

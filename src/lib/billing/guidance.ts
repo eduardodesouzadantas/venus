@@ -1,6 +1,6 @@
 import "server-only";
 
-import { listAgencyBillingRows, type AgencyBillingRow } from "@/lib/billing";
+import { listAgencyBillingRows, type AgencyBillingFilters, type AgencyBillingRow } from "@/lib/billing";
 import {
   type OrgAlertStatus,
   type PlanTier,
@@ -332,8 +332,8 @@ export async function getOrgGuidanceSummaryByOrgId(orgId: string): Promise<OrgGu
   return buildGuidanceFromRow(row);
 }
 
-export async function listAgencyGuidanceRows(): Promise<AgencyGuidanceRow[]> {
-  const rows = await listAgencyBillingRows();
+export async function listAgencyGuidanceRows(filters: AgencyBillingFilters = {}): Promise<AgencyGuidanceRow[]> {
+  const rows = await listAgencyBillingRows(filters);
   return rows.map((row) => ({
     ...row,
     guidance_summary: buildGuidanceFromRow(row),

@@ -7,6 +7,7 @@ import { VenusButton } from "@/components/ui/VenusButton";
 import { createClient } from "@/lib/supabase/server";
 import { isAgencyRole, isMerchantRole, resolveTenantContext } from "@/lib/tenant/core";
 import { listAgencyOrgRows } from "@/lib/agency";
+import { normalizeAgencyTimeRange, type AgencyTimeRange } from "@/lib/agency/time-range";
 import {
   getPlaybookQueueSummary,
   listPlaybookQueueItems,
@@ -24,6 +25,29 @@ function normalize(value: unknown) {
 function firstValue(value: string | string[] | undefined): string {
   if (Array.isArray(value)) return value[0] || "";
   return value || "";
+}
+
+function rangeLabel(range: AgencyTimeRange) {
+  switch (range) {
+    case "7d":
+      return "7 dias";
+    case "30d":
+      return "30 dias";
+    case "90d":
+      return "90 dias";
+    default:
+      return "Tudo";
+  }
+}
+
+function buildHref(pathname: string, params: Record<string, string | number | undefined>) {
+  const searchParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === "") continue;
+    searchParams.set(key, String(value));
+  }
+  const query = searchParams.toString();
+  return query ? `${pathname}?${query}` : pathname;
 }
 
 function badge(kind: "recent" | "open" | "aging" | "neutral" | "plan" | "active" | "suspended" | "blocked") {
@@ -84,12 +108,14 @@ export default async function AgencyPlaybooksPage({
   }
 
   const resolved = await searchParams;
+  const range = normalizeAgencyTimeRange(firstValue(resolved.range), "all");
   const orgId = normalize(firstValue(resolved.orgId));
   const actionTypeValue = normalize(firstValue(resolved.actionType));
   const actionType = actionTypeValue.startsWith("agency.") ? (actionTypeValue as PlaybookQueueActionType) : "";
   const limit = Number(firstValue(resolved.limit)) || 50;
 
   const filters: AgencyPlaybookQueueFilters = {
+    range,
     orgId: orgId || null,
     actionType: actionType && actionType.startsWith("agency.") ? (actionType as PlaybookQueueActionType) : null,
     limit,
@@ -105,6 +131,12 @@ export default async function AgencyPlaybooksPage({
     .slice()
     .sort((left, right) => left.name.localeCompare(right.name, "pt-BR"))
     .slice(0, 50);
+  const exportParams = {
+    range,
+    orgId: orgId || undefined,
+    actionType: actionType || undefined,
+    limit,
+  };
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -121,15 +153,28 @@ export default async function AgencyPlaybooksPage({
               Eventos operacionais já marcados, com status leve e links diretos para a org.
             </Text>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3 items-center">
+            <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badge("plan")}`}>
+              Janela {rangeLabel(range)}
+            </span>
             <Link href="/agency">
               <VenusButton variant="outline" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold border-white/10">
                 Agency
               </VenusButton>
             </Link>
-            <Link href="/agency/billing">
+            <Link href={buildHref("/agency/billing", { range })}>
               <VenusButton variant="outline" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold border-white/10">
                 Billing
+              </VenusButton>
+            </Link>
+            <Link href={buildHref("/api/agency/playbooks/export", { ...exportParams, format: "csv" })}>
+              <VenusButton variant="outline" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold border-white/10">
+                CSV
+              </VenusButton>
+            </Link>
+            <Link href={buildHref("/api/agency/playbooks/export", { ...exportParams, format: "json" })}>
+              <VenusButton variant="outline" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold border-white/10">
+                JSON
               </VenusButton>
             </Link>
           </div>
@@ -158,7 +203,16 @@ export default async function AgencyPlaybooksPage({
           <Heading as="h2" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">
             Filtros simples
           </Heading>
-          <form className="grid grid-cols-1 md:grid-cols-4 gap-3" method="get">
+          <form className="grid grid-cols-1 md:grid-cols-5 gap-3" method="get">
+            <label className="space-y-2">
+              <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Período</Text>
+              <select name="range" defaultValue={range} className="w-full rounded-2xl bg-black/40 border border-white/10 px-4 py-3 text-sm text-white">
+                <option value="all">Tudo</option>
+                <option value="7d">7 dias</option>
+                <option value="30d">30 dias</option>
+                <option value="90d">90 dias</option>
+              </select>
+            </label>
             <label className="space-y-2">
               <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Org</Text>
               <select name="orgId" defaultValue={orgId} className="w-full rounded-2xl bg-black/40 border border-white/10 px-4 py-3 text-sm text-white">
