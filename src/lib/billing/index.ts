@@ -3,6 +3,12 @@ import "server-only";
 import { listAgencyOrgRows } from "@/lib/agency";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { AgencyOrgRow } from "@/lib/agency";
+import {
+  buildOrgSoftCapSummary,
+  type OrgAlertStatus,
+  type OrgSoftCapSummary,
+  type PlanSoftCaps,
+} from "@/lib/billing/limits";
 
 export interface BillingCategorySnapshot {
   count: number;
@@ -42,6 +48,10 @@ export interface OrgBillingSummary extends OrgUsageSummary {
   plan_budget_monthly_cents: number;
   breakdown_today: Record<string, BillingCategorySnapshot>;
   breakdown_total: Record<string, BillingCategorySnapshot>;
+  plan_soft_caps: PlanSoftCaps;
+  soft_cap_summary: OrgSoftCapSummary;
+  plan_soft_cap_status: OrgAlertStatus;
+  plan_soft_cap_message: string;
 }
 
 export interface AgencyBillingRow extends AgencyOrgRow, OrgBillingSummary {}
@@ -77,14 +87,6 @@ function getPlanBudget(planId?: string | null) {
   if (normalized === "scale") return PLAN_BUDGETS.scale;
   if (normalized === "enterprise") return PLAN_BUDGETS.enterprise;
   return PLAN_BUDGETS.starter;
-}
-
-function deriveHealth(value: number, budget: number): "low" | "medium" | "high" {
-  if (budget <= 0) return "low";
-  const ratio = value / budget;
-  if (ratio < 0.5) return "low";
-  if (ratio < 0.85) return "medium";
-  return "high";
 }
 
 function costSnapshot(count: number, unitCents: number): BillingCategorySnapshot {
@@ -238,6 +240,15 @@ export async function listAgencyBillingRows(): Promise<AgencyBillingRow[]> {
     const estimatedCostTotal = sumBreakdown(totalBreakdown);
     const planBudget = getPlanBudget(org.plan_id);
     const lastActivityAt = latestMapValue(lastActivityByOrgId, org.id) || org.last_activity_at || org.updated_at || org.created_at || null;
+    const softCapSummary = buildOrgSoftCapSummary({
+      plan_id: org.plan_id,
+      saved_results: org.total_saved_results,
+      leads: org.total_leads,
+      products: org.total_products,
+      whatsapp_messages: org.total_whatsapp_messages,
+      estimated_cost_today_cents: estimatedCostToday,
+      estimated_cost_total_cents: estimatedCostTotal,
+    });
 
     return {
       ...org,
@@ -264,12 +275,16 @@ export async function listAgencyBillingRows(): Promise<AgencyBillingRow[]> {
       estimated_whatsapp_cost_total_cents: totalBreakdown.whatsapp_messages.estimated_cost_cents + totalBreakdown.whatsapp_conversations.estimated_cost_cents,
       estimated_event_overhead_today_cents: todayBreakdown.tenant_events.estimated_cost_cents,
       estimated_event_overhead_total_cents: totalBreakdown.tenant_events.estimated_cost_cents,
-      usage_health: deriveHealth(estimatedCostToday, planBudget.daily),
-      billing_risk: deriveHealth(estimatedCostTotal, planBudget.monthly),
+      usage_health: softCapSummary.usage_health,
+      billing_risk: softCapSummary.billing_risk,
       plan_budget_daily_cents: planBudget.daily,
       plan_budget_monthly_cents: planBudget.monthly,
       breakdown_today: todayBreakdown,
       breakdown_total: totalBreakdown,
+      plan_soft_caps: softCapSummary.plan_soft_caps,
+      soft_cap_summary: softCapSummary,
+      plan_soft_cap_status: softCapSummary.overall_status,
+      plan_soft_cap_message: softCapSummary.top_alerts[0]?.message || "Sem alertas",
     } satisfies AgencyBillingRow;
   }).sort((left, right) => {
     const byCost = right.estimated_cost_today_cents - left.estimated_cost_today_cents;

@@ -58,6 +58,27 @@ function badge(kind: "active" | "suspended" | "blocked" | "plan" | "neutral" | "
   }
 }
 
+function softCapBadge(kind: "ok" | "warning" | "critical" | "no_data") {
+  if (kind === "critical") return "risk-high";
+  if (kind === "warning") return "risk-medium";
+  if (kind === "ok") return "risk-low";
+  return "neutral";
+}
+
+function softCapLabel(kind: "ok" | "warning" | "critical" | "no_data") {
+  if (kind === "critical") return "Crítico";
+  if (kind === "warning") return "Atenção";
+  if (kind === "ok") return "Saudável";
+  return "Sem dados";
+}
+
+function softCapChipText(label: string, usage: number | null, cap: number | null, pct: number | null) {
+  const usageText = usage === null ? "Sem dados" : usage.toLocaleString("pt-BR");
+  const capText = cap === null ? "Sem dados" : cap.toLocaleString("pt-BR");
+  const pctText = pct === null ? "sem base" : `${Math.round(pct)}%`;
+  return `${label}: ${usageText}/${capText} (${pctText})`;
+}
+
 function SectionShell({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
     <section className="space-y-4">
@@ -155,6 +176,7 @@ export default async function AgencyOrgDetailPage({
   const billing = detail.billing.summary;
   const usageRows = detail.billing.recent_usage_rows;
   const statusLabel = org.kill_switch ? "blocked" : org.status;
+  const softCaps = billing?.soft_cap_summary || null;
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -254,6 +276,76 @@ export default async function AgencyOrgDetailPage({
             <div className="p-6 rounded-[28px] bg-white/[0.03] border border-white/5">
               <Text className="text-sm text-white/40">Sem dados de billing para esta org.</Text>
             </div>
+          )}
+        </SectionShell>
+
+        <SectionShell
+          title="Operational Alerts"
+          description="Alertas heurísticos e explicáveis com base no plano e no uso real da org."
+        >
+          {softCaps ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <SimpleCard label="Status geral" value={softCapLabel(softCaps.overall_status)} subvalue={`plan ${softCaps.plan_tier}`} />
+                <SimpleCard label="Health" value={softCaps.usage_health} subvalue={`warnings ${softCaps.warning_count}`} />
+                <SimpleCard label="Billing risk" value={softCaps.billing_risk} subvalue={`critical ${softCaps.critical_count}`} />
+                <SimpleCard label="Alertas" value={softCaps.alerts.length.toString()} subvalue={softCaps.has_data ? "dados reais" : "sem dados"} />
+              </div>
+
+              {softCaps.top_alerts.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {softCaps.top_alerts.slice(0, 3).map((alert) => (
+                    <span
+                      key={`${org.id}-${alert.key}`}
+                      className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badge(softCapBadge(alert.status))}`}
+                    >
+                      {softCapChipText(alert.label, alert.usage, alert.cap, alert.usage_pct)}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  title="Sem alertas"
+                  description="A org não possui sinais suficientes para gerar alertas operacionais."
+                />
+              )}
+            </div>
+          ) : (
+            <EmptyState
+              title="Sem soft caps"
+              description="Não foi possível carregar os limites operacionais do plano desta org."
+            />
+          )}
+        </SectionShell>
+
+        <SectionShell
+          title="Plan Soft Caps"
+          description="Consumo atual vs soft cap do plano, sem enforcement duro."
+        >
+          {softCaps ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {softCaps.alerts.map((alert) => (
+                <div key={alert.key} className="p-5 rounded-[28px] bg-white/[0.03] border border-white/5 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">{alert.label}</Text>
+                    <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badge(softCapBadge(alert.status))}`}>
+                      {softCapLabel(alert.status)}
+                    </span>
+                  </div>
+                  <Heading as="h3" className="text-2xl tracking-tighter">
+                    {softCapChipText(alert.label, alert.usage, alert.cap, alert.usage_pct)}
+                  </Heading>
+                  <Text className="text-[10px] uppercase tracking-widest text-white/35">
+                    {alert.message}
+                  </Text>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="Sem dados de soft caps"
+              description="Os limites do plano não puderam ser carregados para esta org."
+            />
           )}
         </SectionShell>
 

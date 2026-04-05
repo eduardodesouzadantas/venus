@@ -60,6 +60,27 @@ function badge(kind: "active" | "suspended" | "blocked" | "plan" | "risk-low" | 
   }
 }
 
+function softCapBadge(kind: "ok" | "warning" | "critical" | "no_data") {
+  if (kind === "critical") return "risk-high";
+  if (kind === "warning") return "risk-medium";
+  if (kind === "ok") return "risk-low";
+  return "neutral";
+}
+
+function softCapLabel(kind: "ok" | "warning" | "critical" | "no_data") {
+  if (kind === "critical") return "Crítico";
+  if (kind === "warning") return "Atenção";
+  if (kind === "ok") return "Saudável";
+  return "Sem dados";
+}
+
+function softCapChipText(label: string, usage: number | null, cap: number | null, pct: number | null) {
+  const usageText = usage === null ? "Sem dados" : usage.toLocaleString("pt-BR");
+  const capText = cap === null ? "Sem dados" : cap.toLocaleString("pt-BR");
+  const pctText = pct === null ? "sem base" : `${Math.round(pct)}%`;
+  return `${label} ${usageText}/${capText} (${pctText})`;
+}
+
 function statusKind(row: AgencyBillingRow) {
   if (row.kill_switch || row.status === "blocked") return "blocked";
   if (row.status === "suspended") return "suspended";
@@ -143,6 +164,8 @@ export default async function AgencyBillingPage() {
     if (!current || row.usage_date > current) return row.usage_date;
     return current;
   }, null);
+  const attentionOrgs = rows.filter((row) => row.soft_cap_summary.overall_status === "warning").length;
+  const criticalOrgs = rows.filter((row) => row.soft_cap_summary.overall_status === "critical").length;
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -192,6 +215,19 @@ export default async function AgencyBillingPage() {
           <Metric label="Último uso" value={latestUsageDate || "Sem dados"} />
         </div>
 
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="p-5 rounded-[28px] bg-white/[0.03] border border-white/5 space-y-2">
+            <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Em atenção</Text>
+            <Heading as="h3" className="text-2xl tracking-tighter">{attentionOrgs.toString()}</Heading>
+            <Text className="text-[10px] uppercase tracking-widest text-white/35">orgs em warning nos soft caps</Text>
+          </div>
+          <div className="p-5 rounded-[28px] bg-white/[0.03] border border-white/5 space-y-2">
+            <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Críticas</Text>
+            <Heading as="h3" className="text-2xl tracking-tighter">{criticalOrgs.toString()}</Heading>
+            <Text className="text-[10px] uppercase tracking-widest text-white/35">orgs em critical nos soft caps</Text>
+          </div>
+        </div>
+
         <section className="space-y-4">
           <div className="space-y-1">
             <Heading as="h2" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">
@@ -208,6 +244,8 @@ export default async function AgencyBillingPage() {
               const totalCost = formatCurrency(row.estimated_cost_total_cents);
               const todayCost = formatCurrency(row.estimated_cost_today_cents);
               const statusLabel = row.kill_switch ? "blocked" : row.status;
+              const softCaps = row.soft_cap_summary;
+              const topAlerts = softCaps.top_alerts.slice(0, 3);
 
               return (
                 <div key={row.id} className="p-6 rounded-[32px] bg-white/[0.03] border border-white/5 space-y-6">
@@ -283,6 +321,33 @@ export default async function AgencyBillingPage() {
                       </Text>
                     </div>
                   </div>
+
+                  <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.3em] text-white/45">
+                    <span className={`px-3 py-1 rounded-full border ${badge(softCapBadge(softCaps.overall_status))}`}>
+                      Soft cap {softCapLabel(softCaps.overall_status)}
+                    </span>
+                    <span className={`px-3 py-1 rounded-full border ${badge(softCapBadge(softCaps.usage_health === "high" ? "critical" : softCaps.usage_health === "medium" ? "warning" : "ok"))}`}>
+                      Health {softCaps.usage_health}
+                    </span>
+                    <span className={`px-3 py-1 rounded-full border ${badge(softCapBadge(softCaps.billing_risk === "high" ? "critical" : softCaps.billing_risk === "medium" ? "warning" : "ok"))}`}>
+                      Billing {softCaps.billing_risk}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.3em] text-white/45">
+                    {topAlerts.map((alert) => (
+                      <span
+                        key={`${row.id}-${alert.key}`}
+                        className={`px-3 py-1 rounded-full border ${badge(softCapBadge(alert.status))}`}
+                      >
+                        {softCapChipText(alert.label, alert.usage, alert.cap, alert.usage_pct)}
+                      </span>
+                    ))}
+                  </div>
+
+                  <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
+                    {row.plan_soft_cap_message}
+                  </Text>
 
                   <div className="flex flex-wrap gap-2">
                     <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badge("neutral")}`}>

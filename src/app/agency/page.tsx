@@ -8,7 +8,7 @@ import { Text } from "@/components/ui/Text";
 import { VenusButton } from "@/components/ui/VenusButton";
 import { createClient } from "@/lib/supabase/server";
 import { isAgencyRole, isMerchantRole, resolveTenantContext } from "@/lib/tenant/core";
-import { listAgencyOrgRows, type AgencyOrgRow } from "@/lib/agency";
+import { listAgencyBillingRows, type AgencyBillingRow } from "@/lib/billing";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +25,7 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
-function badgeClasses(kind: "active" | "suspended" | "blocked" | "plan" | "kill" | "neutral") {
+function badgeClasses(kind: "active" | "suspended" | "blocked" | "plan" | "kill" | "neutral" | "warning" | "critical" | "ok") {
   switch (kind) {
     case "active":
       return "bg-green-500/10 text-green-400 border-green-500/20";
@@ -35,6 +35,12 @@ function badgeClasses(kind: "active" | "suspended" | "blocked" | "plan" | "kill"
       return "bg-red-500/10 text-red-400 border-red-500/20";
     case "kill":
       return "bg-red-500/10 text-red-400 border-red-500/20";
+    case "warning":
+      return "bg-yellow-500/10 text-yellow-300 border-yellow-500/20";
+    case "critical":
+      return "bg-red-500/10 text-red-400 border-red-500/20";
+    case "ok":
+      return "bg-green-500/10 text-green-400 border-green-500/20";
     case "plan":
       return "bg-white/5 text-white/70 border-white/10";
     default:
@@ -42,7 +48,7 @@ function badgeClasses(kind: "active" | "suspended" | "blocked" | "plan" | "kill"
   }
 }
 
-function getStatusKind(row: AgencyOrgRow) {
+function getStatusKind(row: AgencyBillingRow) {
   if (row.status === "blocked") return "blocked";
   if (row.status === "suspended") return "suspended";
   if (row.kill_switch) return "blocked";
@@ -51,6 +57,27 @@ function getStatusKind(row: AgencyOrgRow) {
 
 function metricValue(value: number | null) {
   return value === null ? "Sem dados" : value.toLocaleString("pt-BR");
+}
+
+function softCapKind(status: "ok" | "warning" | "critical" | "no_data") {
+  if (status === "critical") return "critical";
+  if (status === "warning") return "warning";
+  if (status === "ok") return "ok";
+  return "neutral";
+}
+
+function softCapLabel(status: "ok" | "warning" | "critical" | "no_data") {
+  if (status === "critical") return "Crítico";
+  if (status === "warning") return "Atenção";
+  if (status === "ok") return "Saudável";
+  return "Sem dados";
+}
+
+function softCapChipText(label: string, usage: number | null, cap: number | null, pct: number | null) {
+  const usageText = usage === null ? "Sem dados" : usage.toLocaleString("pt-BR");
+  const capText = cap === null ? "Sem dados" : cap.toLocaleString("pt-BR");
+  const pctText = pct === null ? "sem base" : `${Math.round(pct)}%`;
+  return `${label}: ${usageText}/${capText} (${pctText})`;
 }
 
 export default async function AgencyDashboardPage() {
@@ -72,9 +99,9 @@ export default async function AgencyDashboardPage() {
     redirect("/login");
   }
 
-  let orgs: AgencyOrgRow[] = [];
+  let orgs: AgencyBillingRow[] = [];
   try {
-    orgs = await listAgencyOrgRows();
+    orgs = await listAgencyBillingRows();
   } catch (error) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center p-6">
@@ -176,6 +203,7 @@ export default async function AgencyDashboardPage() {
               const statusKind = getStatusKind(org);
               const usage = org.usage_today;
               const statusLabel = org.kill_switch ? "blocked" : org.status;
+              const softCaps = org.soft_cap_summary;
               return (
                 <div key={org.id} className="p-6 rounded-[32px] bg-white/[0.03] border border-white/5 space-y-6">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -198,6 +226,30 @@ export default async function AgencyDashboardPage() {
                         <span>criado: {formatDate(org.created_at || null)}</span>
                         <span>última atividade: {formatDate(org.last_activity_at)}</span>
                       </div>
+                      <div className="flex flex-wrap gap-2">
+                        <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badgeClasses(softCapKind(softCaps.overall_status))}`}>
+                          Soft cap {softCapLabel(softCaps.overall_status)}
+                        </span>
+                        <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badgeClasses(softCapKind(softCaps.usage_health === "high" ? "critical" : softCaps.usage_health === "medium" ? "warning" : "ok"))}`}>
+                          Health {softCaps.usage_health}
+                        </span>
+                        <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badgeClasses(softCapKind(softCaps.billing_risk === "high" ? "critical" : softCaps.billing_risk === "medium" ? "warning" : "ok"))}`}>
+                          Billing {softCaps.billing_risk}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {softCaps.top_alerts.slice(0, 2).map((alert) => (
+                          <span
+                            key={`${org.id}-${alert.key}`}
+                            className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badgeClasses(softCapKind(alert.status))}`}
+                          >
+                            {softCapChipText(alert.label, alert.usage, alert.cap, alert.usage_pct)}
+                          </span>
+                        ))}
+                      </div>
+                      <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
+                        {org.plan_soft_cap_message}
+                      </Text>
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 min-w-[280px]">
