@@ -123,6 +123,10 @@ function buildHref(pathname: string, params: Record<string, string | number | un
   return query ? `${pathname}?${query}` : pathname;
 }
 
+function detailHref(orgId: string, range: AgencyTimeRange) {
+  return buildHref(`/agency/orgs/${orgId}`, { range: range === "all" ? undefined : range });
+}
+
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="p-4 rounded-3xl bg-black/40 border border-white/5 space-y-1">
@@ -456,7 +460,7 @@ export default async function AgencyBillingPage({
                           </VenusButton>
                         </form>
                       ))}
-                      <Link href={`/agency/orgs/${row.id}`}>
+                      <Link href={detailHref(row.id, range)}>
                         <VenusButton variant="glass" className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-white/10">
                           Ver playbook
                         </VenusButton>
@@ -495,7 +499,7 @@ export default async function AgencyBillingPage({
                     <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badge("neutral")}`}>
                       Usage source {row.usage_source}
                     </span>
-                    <Link href={`/agency/orgs/${row.id}`}>
+                    <Link href={detailHref(row.id, range)}>
                       <VenusButton variant="glass" className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-white/10">
                         Ver detalhe
                       </VenusButton>

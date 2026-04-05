@@ -50,6 +50,10 @@ function buildHref(pathname: string, params: Record<string, string | number | un
   return query ? `${pathname}?${query}` : pathname;
 }
 
+function detailHref(orgId: string, range: AgencyTimeRange) {
+  return buildHref(`/agency/orgs/${orgId}`, { range: range === "all" ? undefined : range });
+}
+
 function badge(kind: "recent" | "open" | "aging" | "neutral" | "plan" | "active" | "suspended" | "blocked") {
   switch (kind) {
     case "recent":
@@ -276,7 +280,7 @@ export default async function AgencyPlaybooksPage({
                     <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badge(item.status_light)}`}>
                       {item.status_light}
                     </span>
-                    <Link href={`/agency/orgs/${item.org_id}`}>
+                    <Link href={detailHref(item.org_id, range)}>
                       <VenusButton variant="glass" className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-white/10">
                         Ver org
                       </VenusButton>

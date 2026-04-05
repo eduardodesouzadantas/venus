@@ -9,6 +9,7 @@ import { VenusButton } from "@/components/ui/VenusButton";
 import { createClient } from "@/lib/supabase/server";
 import { isAgencyRole, isMerchantRole, resolveTenantContext } from "@/lib/tenant/core";
 import { listAgencyPlaybookRows, type AgencyPlaybookRow } from "@/lib/billing/playbooks";
+import { normalizeAgencyTimeRange, type AgencyTimeRange } from "@/lib/agency/time-range";
 
 export const dynamic = "force-dynamic";
 
@@ -80,7 +81,30 @@ function softCapChipText(label: string, usage: number | null, cap: number | null
   return `${label}: ${usageText}/${capText} (${pctText})`;
 }
 
-export default async function AgencyDashboardPage() {
+function firstValue(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) return value[0] || "";
+  return value || "";
+}
+
+function buildHref(pathname: string, params: Record<string, string | number | undefined>) {
+  const searchParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === "") continue;
+    searchParams.set(key, String(value));
+  }
+  const query = searchParams.toString();
+  return query ? `${pathname}?${query}` : pathname;
+}
+
+function detailHref(orgId: string, range: AgencyTimeRange) {
+  return buildHref(`/agency/orgs/${orgId}`, { range: range === "all" ? undefined : range });
+}
+
+export default async function AgencyDashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -98,6 +122,9 @@ export default async function AgencyDashboardPage() {
   if (!context.role || !isAgencyRole(context.role)) {
     redirect("/login");
   }
+
+  const resolved = await searchParams;
+  const range = normalizeAgencyTimeRange(firstValue(resolved.range), "all");
 
   let orgs: AgencyPlaybookRow[] = [];
   try {
@@ -155,12 +182,12 @@ export default async function AgencyDashboardPage() {
             </Text>
           </div>
           <div className="flex gap-3">
-            <Link href="/agency/billing">
+            <Link href={buildHref("/agency/billing", { range: range === "all" ? undefined : range })}>
               <VenusButton variant="outline" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold border-white/10">
                 Usage / Billing
               </VenusButton>
             </Link>
-            <Link href="/agency/playbooks">
+            <Link href={buildHref("/agency/playbooks", { range: range === "all" ? undefined : range })}>
               <VenusButton variant="outline" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold border-white/10">
                 Playbooks
               </VenusButton>
@@ -341,10 +368,10 @@ export default async function AgencyDashboardPage() {
                   </div>
 
                   <div className="flex flex-wrap gap-3">
-                    <Link href={`/agency/orgs/${org.id}`}>
-                      <VenusButton
-                        variant="glass"
-                        className="h-11 px-5 rounded-full uppercase tracking-[0.3em] text-[9px] font-bold border-white/10"
+                        <Link href={detailHref(org.id, range)}>
+                          <VenusButton
+                            variant="glass"
+                            className="h-11 px-5 rounded-full uppercase tracking-[0.3em] text-[9px] font-bold border-white/10"
                       >
                         Ver detalhe
                       </VenusButton>

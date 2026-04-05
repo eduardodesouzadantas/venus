@@ -5,6 +5,8 @@ import { extractLeadSignalsFromSavedResultPayload } from "@/lib/leads";
 import { listAgencyBillingRows, type AgencyBillingRow } from "@/lib/billing";
 import { getOrgGuidanceSummary } from "@/lib/billing/guidance";
 import { getOrgPlaybookSummary, type OrgActionPlaybook } from "@/lib/billing/playbooks";
+import { resolveAgencyTimeRangeWindow, type AgencyTimeRange } from "@/lib/agency/time-range";
+import { listPlaybookQueueItems, type AgencyPlaybookQueueItem } from "@/lib/agency/playbook-queue";
 
 export interface AgencyOrgLeadRow {
   id: string;
@@ -91,6 +93,7 @@ export interface AgencyOrgWhatsAppSummary {
 
 export interface AgencyOrgDetail {
   org: AgencyBillingRow;
+  guidance: ReturnType<typeof getOrgGuidanceSummary>;
   playbook: OrgActionPlaybook;
   billing: AgencyOrgBillingDetail;
   leads: AgencyOrgLeadRow[];
@@ -98,6 +101,7 @@ export interface AgencyOrgDetail {
   saved_results: AgencyOrgSavedResultRow[];
   whatsapp: AgencyOrgWhatsAppSummary;
   events: AgencyOrgEventRow[];
+  playbook_queue: AgencyPlaybookQueueItem[];
 }
 
 function normalize(value: unknown) {
@@ -123,6 +127,10 @@ function asRecord(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
+function rangeWindow(range: AgencyTimeRange) {
+  return resolveAgencyTimeRangeWindow(range);
+}
+
 function summarizePayload(payload: unknown) {
   const record = asRecord(payload);
   const tenant = asRecord(record.tenant);
@@ -144,19 +152,26 @@ async function resolveAgencyOrgRow(orgId: string) {
   return rows.find((row) => row.id === normalize(orgId)) || null;
 }
 
-export async function getAgencyOrgBillingDetail(orgId: string): Promise<AgencyOrgBillingDetail | null> {
+export async function getAgencyOrgBillingDetail(orgId: string, range: AgencyTimeRange = "all"): Promise<AgencyOrgBillingDetail | null> {
   const org = await resolveAgencyOrgRow(orgId);
   if (!org) {
     return null;
   }
 
   const admin = createAdminClient();
-  const { data, error } = await admin
+  const window = rangeWindow(range);
+  const query = admin
     .from("org_usage_daily")
     .select("usage_date, ai_tokens, ai_requests, messages_sent, events_count, revenue_cents, cost_cents, leads, updated_at")
     .eq("org_id", org.id)
     .order("usage_date", { ascending: false })
     .limit(7);
+
+  if (window.dateFrom) {
+    query.gte("usage_date", window.dateFrom);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     return {
@@ -181,20 +196,27 @@ export async function getAgencyOrgBillingDetail(orgId: string): Promise<AgencyOr
   };
 }
 
-export async function getAgencyOrgLeadRows(orgId: string): Promise<AgencyOrgLeadRow[]> {
+export async function getAgencyOrgLeadRows(orgId: string, range: AgencyTimeRange = "all"): Promise<AgencyOrgLeadRow[]> {
   const admin = createAdminClient();
-  const { data, error } = await admin
+  const window = rangeWindow(range);
+  const query = admin
     .from("leads")
     .select("id, name, email, phone, source, status, intent_score, whatsapp_key, created_at, updated_at, last_interaction_at")
     .eq("org_id", normalize(orgId))
     .order("last_interaction_at", { ascending: false, nullsFirst: false })
     .limit(20);
 
-  if (error) {
+  if (window.dateFrom) {
+    query.gte("created_at", `${window.dateFrom}T00:00:00`);
+  }
+
+  const result = await query;
+
+  if (result.error) {
     return [];
   }
 
-  return (data || []).map((row) => ({
+  return (result.data || []).map((row) => ({
     id: normalize(row.id),
     name: toNullableString(row.name),
     email: toNullableString(row.email),
@@ -209,20 +231,27 @@ export async function getAgencyOrgLeadRows(orgId: string): Promise<AgencyOrgLead
   }));
 }
 
-export async function getAgencyOrgProductRows(orgId: string): Promise<AgencyOrgProductRow[]> {
+export async function getAgencyOrgProductRows(orgId: string, range: AgencyTimeRange = "all"): Promise<AgencyOrgProductRow[]> {
   const admin = createAdminClient();
-  const { data, error } = await admin
+  const window = rangeWindow(range);
+  const query = admin
     .from("products")
     .select("id, name, category, style, primary_color, created_at, updated_at")
     .eq("org_id", normalize(orgId))
     .order("created_at", { ascending: false })
     .limit(20);
 
-  if (error) {
+  if (window.dateFrom) {
+    query.gte("created_at", `${window.dateFrom}T00:00:00`);
+  }
+
+  const result = await query;
+
+  if (result.error) {
     return [];
   }
 
-  return (data || []).map((row) => ({
+  return (result.data || []).map((row) => ({
     id: normalize(row.id),
     name: normalize(row.name),
     category: normalize(row.category),
@@ -233,20 +262,27 @@ export async function getAgencyOrgProductRows(orgId: string): Promise<AgencyOrgP
   }));
 }
 
-export async function getAgencyOrgSavedResultsRows(orgId: string): Promise<AgencyOrgSavedResultRow[]> {
+export async function getAgencyOrgSavedResultsRows(orgId: string, range: AgencyTimeRange = "all"): Promise<AgencyOrgSavedResultRow[]> {
   const admin = createAdminClient();
-  const { data, error } = await admin
+  const window = rangeWindow(range);
+  const query = admin
     .from("saved_results")
     .select("id, user_name, user_email, created_at, updated_at, org_id, payload")
     .eq("org_id", normalize(orgId))
     .order("created_at", { ascending: false })
     .limit(20);
 
-  if (error) {
+  if (window.dateFrom) {
+    query.gte("created_at", `${window.dateFrom}T00:00:00`);
+  }
+
+  const result = await query;
+
+  if (result.error) {
     return [];
   }
 
-  return (data || []).map((row) => {
+  return (result.data || []).map((row) => {
     const payload = asRecord(row.payload);
     const tenant = asRecord(payload.tenant);
     const signals = extractLeadSignalsFromSavedResultPayload(payload);
@@ -267,14 +303,21 @@ export async function getAgencyOrgSavedResultsRows(orgId: string): Promise<Agenc
   });
 }
 
-export async function getAgencyOrgEventsRows(orgId: string): Promise<AgencyOrgEventRow[]> {
+export async function getAgencyOrgEventsRows(orgId: string, range: AgencyTimeRange = "all"): Promise<AgencyOrgEventRow[]> {
   const admin = createAdminClient();
-  const { data, error } = await admin
+  const window = rangeWindow(range);
+  const query = admin
     .from("tenant_events")
     .select("id, event_type, event_source, created_at, payload")
     .eq("org_id", normalize(orgId))
     .order("created_at", { ascending: false })
     .limit(20);
+
+  if (window.dateFrom) {
+    query.gte("created_at", `${window.dateFrom}T00:00:00`);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     return [];
@@ -289,21 +332,31 @@ export async function getAgencyOrgEventsRows(orgId: string): Promise<AgencyOrgEv
   }));
 }
 
-export async function getAgencyOrgWhatsAppSummary(orgId: string): Promise<AgencyOrgWhatsAppSummary | null> {
+export async function getAgencyOrgWhatsAppSummary(orgId: string, range: AgencyTimeRange = "all"): Promise<AgencyOrgWhatsAppSummary | null> {
   const org = await resolveAgencyOrgRow(orgId);
   if (!org) {
     return null;
   }
 
   const admin = createAdminClient();
+  const window = rangeWindow(range);
+  const conversationQuery = admin
+    .from("whatsapp_conversations")
+    .select("id, status, priority, last_message, unread_count, user_name, user_phone, created_at, last_updated")
+    .eq("org_slug", org.slug)
+    .order("last_updated", { ascending: false })
+    .limit(5);
+
+  const messageQuery = admin.from("whatsapp_messages").select("id", { count: "exact", head: true }).eq("org_slug", org.slug);
+
+  if (window.dateFrom) {
+    conversationQuery.gte("created_at", `${window.dateFrom}T00:00:00`);
+    messageQuery.gte("created_at", `${window.dateFrom}T00:00:00`);
+  }
+
   const [conversationResult, messageResult] = await Promise.all([
-    admin
-      .from("whatsapp_conversations")
-      .select("id, status, priority, last_message, unread_count, user_name, user_phone, created_at, last_updated")
-      .eq("org_slug", org.slug)
-      .order("last_updated", { ascending: false })
-      .limit(5),
-    admin.from("whatsapp_messages").select("id", { count: "exact", head: true }).eq("org_slug", org.slug),
+    conversationQuery,
+    messageQuery,
   ]);
 
   const recentConversations = conversationResult.error
@@ -337,25 +390,32 @@ export async function getAgencyOrgWhatsAppSummary(orgId: string): Promise<Agency
   };
 }
 
-export async function getAgencyOrgDetail(orgId: string): Promise<AgencyOrgDetail | null> {
+export async function getAgencyOrgPlaybookQueue(orgId: string, range: AgencyTimeRange = "all") {
+  return listPlaybookQueueItems({ orgId, range, limit: 10 });
+}
+
+export async function getAgencyOrgDetail(orgId: string, range: AgencyTimeRange = "all"): Promise<AgencyOrgDetail | null> {
   const org = await resolveAgencyOrgRow(orgId);
   if (!org) {
     return null;
   }
 
+  const filteredBillingRows = await listAgencyBillingRows({ orgId: org.id, range });
   const [billing, leads, products, savedResults, whatsapp, events] = await Promise.all([
-    getAgencyOrgBillingDetail(org.id),
-    getAgencyOrgLeadRows(org.id),
-    getAgencyOrgProductRows(org.id),
-    getAgencyOrgSavedResultsRows(org.id),
-    getAgencyOrgWhatsAppSummary(org.id),
-    getAgencyOrgEventsRows(org.id),
+    getAgencyOrgBillingDetail(org.id, range),
+    getAgencyOrgLeadRows(org.id, range),
+    getAgencyOrgProductRows(org.id, range),
+    getAgencyOrgSavedResultsRows(org.id, range),
+    getAgencyOrgWhatsAppSummary(org.id, range),
+    getAgencyOrgEventsRows(org.id, range),
   ]);
 
-  const guidance = getOrgGuidanceSummary(org);
+  const guidanceRow = filteredBillingRows.find((row) => row.id === org.id) || org;
+  const guidance = getOrgGuidanceSummary(guidanceRow);
 
   return {
     org,
+    guidance,
     playbook: getOrgPlaybookSummary(guidance),
     billing: billing || { summary: org, recent_usage_rows: [] },
     leads,
@@ -369,5 +429,6 @@ export async function getAgencyOrgDetail(orgId: string): Promise<AgencyOrgDetail
       recent_conversations: [],
     },
     events,
+    playbook_queue: await getAgencyOrgPlaybookQueue(org.id, range),
   };
 }

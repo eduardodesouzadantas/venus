@@ -13,8 +13,7 @@ import { VenusButton } from "@/components/ui/VenusButton";
 import { createClient } from "@/lib/supabase/server";
 import { isAgencyRole, isMerchantRole, resolveTenantContext } from "@/lib/tenant/core";
 import { getAgencyOrgDetail } from "@/lib/agency/org-details";
-import { listPlaybookQueueByOrg } from "@/lib/agency/playbook-queue";
-import { getOrgGuidanceSummary } from "@/lib/billing/guidance";
+import { normalizeAgencyTimeRange, type AgencyTimeRange } from "@/lib/agency/time-range";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +36,34 @@ function formatCurrency(cents: number | null) {
 function formatNumber(value: number | null) {
   if (value === null) return "Sem dados";
   return value.toLocaleString("pt-BR");
+}
+
+function firstValue(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) return value[0] || "";
+  return value || "";
+}
+
+function buildHref(pathname: string, params: Record<string, string | number | undefined>) {
+  const searchParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === "") continue;
+    searchParams.set(key, String(value));
+  }
+  const query = searchParams.toString();
+  return query ? `${pathname}?${query}` : pathname;
+}
+
+function rangeLabel(range: AgencyTimeRange) {
+  switch (range) {
+    case "7d":
+      return "7 dias";
+    case "30d":
+      return "30 dias";
+    case "90d":
+      return "90 dias";
+    default:
+      return "Tudo";
+  }
 }
 
 function badge(kind: "active" | "suspended" | "blocked" | "plan" | "neutral" | "risk-low" | "risk-medium" | "risk-high") {
@@ -131,10 +158,14 @@ function SimpleCard({ label, value, subvalue }: { label: string; value: string; 
 
 export default async function AgencyOrgDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ orgId: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const { orgId } = await params;
+  const resolvedSearchParams = await searchParams;
+  const range = normalizeAgencyTimeRange(firstValue(resolvedSearchParams.range), "all");
   const supabase = await createClient();
   const {
     data: { user },
@@ -153,7 +184,7 @@ export default async function AgencyOrgDetailPage({
     redirect("/login");
   }
 
-  const detail = await getAgencyOrgDetail(orgId);
+  const detail = await getAgencyOrgDetail(orgId, range);
 
   if (!detail) {
     return (
@@ -185,9 +216,11 @@ export default async function AgencyOrgDetailPage({
   const usageRows = detail.billing.recent_usage_rows;
   const statusLabel = org.kill_switch ? "blocked" : org.status;
   const softCaps = billing?.soft_cap_summary || null;
-  const guidance = getOrgGuidanceSummary(org);
+  const guidance = detail.guidance;
   const playbook = detail.playbook;
-  const queueItems = await listPlaybookQueueByOrg(org.id, 10);
+  const queueItems = detail.playbook_queue;
+  const rangeText = range === "all" ? "todos os períodos" : `últimos ${rangeLabel(range)}`;
+  const rangeHref = range === "all" ? undefined : range;
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -212,18 +245,18 @@ export default async function AgencyOrgDetailPage({
             </Text>
           </div>
           <div className="flex gap-3">
-            <Link href="/agency">
+            <Link href={buildHref("/agency", { range: rangeHref })}>
               <VenusButton variant="outline" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold border-white/10">
                 <ArrowLeft className="w-3 h-3 mr-2" />
                 Agency
               </VenusButton>
             </Link>
-            <Link href="/agency/billing">
+            <Link href={buildHref("/agency/billing", { range: rangeHref })}>
               <VenusButton variant="outline" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold border-white/10">
                 Billing
               </VenusButton>
             </Link>
-            <Link href={`/agency/orgs/${org.id}`}>
+            <Link href={buildHref(`/agency/orgs/${org.id}`, { range: rangeHref })}>
               <VenusButton variant="solid" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold bg-white text-black">
                 <RefreshCw className="w-3 h-3 mr-2" />
                 Atualizar
@@ -233,24 +266,53 @@ export default async function AgencyOrgDetailPage({
         </div>
       </div>
 
+      <div className="px-6 pt-6">
+        <section className="p-5 rounded-[28px] bg-white/[0.03] border border-white/5 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <Heading as="h2" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">
+              Janela temporal
+            </Heading>
+            <span className="px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border bg-white/5 text-white/70 border-white/10">
+              {rangeText}
+            </span>
+          </div>
+          <form className="grid grid-cols-1 md:grid-cols-3 gap-3" method="get">
+            <label className="space-y-2">
+              <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Período</Text>
+              <select name="range" defaultValue={range} className="w-full rounded-2xl bg-black/40 border border-white/10 px-4 py-3 text-sm text-white">
+                <option value="all">Tudo</option>
+                <option value="7d">7 dias</option>
+                <option value="30d">30 dias</option>
+                <option value="90d">90 dias</option>
+              </select>
+            </label>
+            <div className="flex items-end">
+              <VenusButton type="submit" variant="solid" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold bg-white text-black w-full">
+                Aplicar
+              </VenusButton>
+            </div>
+          </form>
+        </section>
+      </div>
+
       <div className="px-6 py-8 space-y-10">
         <div className="grid grid-cols-2 xl:grid-cols-6 gap-4">
           <SimpleCard label="Status" value={statusLabel} subvalue={`Plano ${org.plan_id || "sem dados"}`} />
           <SimpleCard label="Kill switch" value={org.kill_switch ? "ON" : "OFF"} subvalue={`Criado ${formatDate(org.created_at || null)}`} />
-          <SimpleCard label="Membros" value={formatNumber(org.total_members)} subvalue="org_members" />
-          <SimpleCard label="Produtos" value={formatNumber(org.total_products)} subvalue="products" />
-          <SimpleCard label="Leads" value={formatNumber(org.total_leads)} subvalue="leads" />
-          <SimpleCard label="Saved results" value={formatNumber(org.total_saved_results)} subvalue="saved_results" />
+          <SimpleCard label="Membros" value={formatNumber(org.total_members)} subvalue="totais consolidados" />
+          <SimpleCard label="Produtos" value={formatNumber(org.total_products)} subvalue="totais consolidados" />
+          <SimpleCard label="Leads" value={formatNumber(org.total_leads)} subvalue="totais consolidados" />
+          <SimpleCard label="Saved results" value={formatNumber(org.total_saved_results)} subvalue="totais consolidados" />
         </div>
 
         <SectionShell
           title="Resumo operacional"
-          description="Visão consolidada real com uso, custo estimado e sinais básicos de saúde."
+          description={`Visão consolidada real com uso, custo estimado e sinais básicos de saúde. A janela ativa é ${rangeText}.`}
         >
           <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4">
-            <SimpleCard label="Última atividade" value={formatDate(org.last_activity_at)} subvalue="tenant core" />
+            <SimpleCard label="Última atividade" value={formatDate(org.last_activity_at)} subvalue={`janela ${rangeText}`} />
             <SimpleCard label="Uso hoje" value={formatCurrency(billing?.estimated_cost_today_cents ?? null)} subvalue={`usage source ${org.usage_source}`} />
-            <SimpleCard label="Uso total" value={formatCurrency(billing?.estimated_cost_total_cents ?? null)} subvalue="estimativa explícita" />
+            <SimpleCard label="Uso total" value={formatCurrency(billing?.estimated_cost_total_cents ?? null)} subvalue="estimativa explícita consolidada" />
             <SimpleCard label="Saúde" value={billing?.usage_health || "Sem dados"} subvalue={`billing risk ${billing?.billing_risk || "sem dados"}`} />
             <SimpleCard label="Plano" value={org.plan_id || "sem dados"} subvalue={`limite diário ${formatCurrency(billing?.plan_budget_daily_cents ?? null)}`} />
           </div>
@@ -331,7 +393,7 @@ export default async function AgencyOrgDetailPage({
 
         <SectionShell
           title="Plan Soft Caps"
-          description="Consumo atual vs soft cap do plano, sem enforcement duro."
+          description={`Consumo atual vs soft cap do plano, sem enforcement duro, na janela ${rangeText}.`}
         >
           {softCaps ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -362,7 +424,7 @@ export default async function AgencyOrgDetailPage({
 
         <SectionShell
           title="Upgrade Guidance"
-          description="Sinal de upgrade ou revisão de plano, derivado de uso real e soft caps."
+          description={`Sinal de upgrade ou revisão de plano, derivado de uso real e soft caps na janela ${rangeText}.`}
         >
           {guidance ? (
             <div className="space-y-4">
@@ -396,7 +458,7 @@ export default async function AgencyOrgDetailPage({
 
         <SectionShell
           title="Action Playbook"
-          description="Plano prático derivado do guidance real, com passos priorizados e janela de revisão."
+          description={`Plano prático derivado do guidance real, com passos priorizados e janela de revisão. Dados filtrados em ${rangeText}.`}
         >
           {playbook ? (
             <div className="space-y-4">
@@ -450,7 +512,7 @@ export default async function AgencyOrgDetailPage({
               {playbook.light_automations.map((automation) => (
                 <form key={`${org.id}-${automation.action_key}`} action={`/api/admin/orgs/${org.id}/playbook`} method="post">
                   <input type="hidden" name="action" value={automation.action_key} />
-                  <input type="hidden" name="redirect_to" value={`/agency/orgs/${org.id}`} />
+                  <input type="hidden" name="redirect_to" value={buildHref(`/agency/orgs/${org.id}`, { range: rangeHref })} />
                   <VenusButton
                     type="submit"
                     variant="outline"
@@ -468,7 +530,7 @@ export default async function AgencyOrgDetailPage({
 
         <SectionShell
           title="Fila operacional recente"
-          description="Últimos playbooks marcados para esta org, vindos da mesma trilha de tenant_events."
+          description={`Últimos playbooks marcados para esta org, filtrados em ${rangeText}, vindos da mesma trilha de tenant_events.`}
         >
           {queueItems.length > 0 ? (
             <div className="space-y-3">
@@ -487,7 +549,7 @@ export default async function AgencyOrgDetailPage({
                   </span>
                 </div>
               ))}
-              <Link href={`/agency/playbooks?orgId=${org.id}`}>
+              <Link href={buildHref("/agency/playbooks", { orgId: org.id, range: rangeHref })}>
                 <VenusButton variant="glass" className="h-11 px-5 rounded-full uppercase tracking-[0.3em] text-[9px] font-bold border-white/10">
                   Ver fila completa
                 </VenusButton>
@@ -500,7 +562,7 @@ export default async function AgencyOrgDetailPage({
 
         <SectionShell
           title="Operational Recommendations"
-          description="Recomendações auxiliares para otimizar uso e conversão antes de mudar o plano."
+          description="Recomendações auxiliares para otimizar uso e conversão antes de mudar o plano. Totais consolidados abaixo continuam como referência geral."
         >
           {guidance && guidance.operational_recommendations.length > 0 ? (
             <div className="space-y-3">
@@ -534,7 +596,7 @@ export default async function AgencyOrgDetailPage({
 
         <SectionShell
           title="Billing recente"
-          description="Últimos registros diários do ledger operacional da org."
+          description={`Últimos registros diários do ledger operacional da org na janela ${rangeText}.`}
         >
           {usageRows.length > 0 ? (
             <div className="space-y-3">
@@ -563,7 +625,7 @@ export default async function AgencyOrgDetailPage({
           )}
         </SectionShell>
 
-        <SectionShell title="Leads recentes" description="Leads reais vinculados à org_id, com status e intent score.">
+        <SectionShell title="Leads recentes" description={`Leads reais vinculados à org_id, filtrados em ${rangeText}, com status e intent score.`}>
           {detail.leads.length > 0 ? (
             <div className="space-y-3">
               {detail.leads.map((lead) => (
@@ -595,7 +657,7 @@ export default async function AgencyOrgDetailPage({
           )}
         </SectionShell>
 
-        <SectionShell title="Produtos recentes" description="Catálogo canônico vinculado à org.">
+        <SectionShell title="Produtos recentes" description={`Catálogo canônico vinculado à org, filtrado em ${rangeText}. Totais consolidados permanecem no resumo acima.`}>
           {detail.products.length > 0 ? (
             <div className="space-y-3">
               {detail.products.map((product) => (
@@ -621,7 +683,7 @@ export default async function AgencyOrgDetailPage({
           )}
         </SectionShell>
 
-        <SectionShell title="Saved results recentes" description="Resultados persistidos da jornada com contexto canônico.">
+        <SectionShell title="Saved results recentes" description={`Resultados persistidos da jornada com contexto canônico, filtrados em ${rangeText}.`}>
           {detail.saved_results.length > 0 ? (
             <div className="space-y-3">
               {detail.saved_results.map((result) => (
@@ -655,7 +717,7 @@ export default async function AgencyOrgDetailPage({
           )}
         </SectionShell>
 
-        <SectionShell title="WhatsApp" description="Resumo operacional do inbox e das conversas tenant-aware.">
+        <SectionShell title="WhatsApp" description={`Resumo operacional do inbox e das conversas tenant-aware. Quando disponível, a atividade recente respeita ${rangeText}.`}>
           {detail.whatsapp ? (
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -712,7 +774,7 @@ export default async function AgencyOrgDetailPage({
           )}
         </SectionShell>
 
-        <SectionShell title="Atividade recente" description="Eventos da org, com metadata resumida quando útil.">
+        <SectionShell title="Atividade recente" description={`Eventos da org filtrados em ${rangeText}, com metadata resumida quando útil.`}>
           {detail.events.length > 0 ? (
             <div className="space-y-3">
               {detail.events.map((event) => (
