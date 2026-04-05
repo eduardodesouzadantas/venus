@@ -84,9 +84,9 @@ export interface AgencyOrgBillingDetail {
 }
 
 export interface AgencyOrgWhatsAppSummary {
-  total_conversations: number | null;
-  total_messages: number | null;
-  last_activity_at: string | null;
+  recent_conversations_count: number | null;
+  recent_messages_count: number | null;
+  latest_whatsapp_activity_at: string | null;
   available: boolean;
   recent_conversations: AgencyOrgWhatsAppConversationRow[];
 }
@@ -115,8 +115,8 @@ export interface AgencyOrgExportSummary {
   total_products: number;
   total_leads: number;
   total_saved_results: number;
-  total_whatsapp_conversations: number | null;
-  total_whatsapp_messages: number | null;
+  recent_whatsapp_conversations_count: number | null;
+  recent_whatsapp_messages_count: number | null;
   usage_date: string | null;
   last_activity_at: string | null;
   estimated_cost_today_cents: number;
@@ -379,16 +379,35 @@ export async function getAgencyOrgWhatsAppSummary(orgId: string, range: AgencyTi
     .order("last_updated", { ascending: false })
     .limit(5);
 
-  const messageQuery = admin.from("whatsapp_messages").select("id", { count: "exact", head: true }).eq("org_slug", org.slug);
+  const conversationCountQuery = admin
+    .from("whatsapp_conversations")
+    .select("id", { count: "exact", head: true })
+    .eq("org_slug", org.slug);
+
+  const messageCountQuery = admin
+    .from("whatsapp_messages")
+    .select("id", { count: "exact", head: true })
+    .eq("org_slug", org.slug);
+
+  const latestMessageQuery = admin
+    .from("whatsapp_messages")
+    .select("created_at")
+    .eq("org_slug", org.slug)
+    .order("created_at", { ascending: false })
+    .limit(1);
 
   if (window.dateFrom) {
     conversationQuery.gte("created_at", `${window.dateFrom}T00:00:00`);
-    messageQuery.gte("created_at", `${window.dateFrom}T00:00:00`);
+    conversationCountQuery.gte("created_at", `${window.dateFrom}T00:00:00`);
+    messageCountQuery.gte("created_at", `${window.dateFrom}T00:00:00`);
+    latestMessageQuery.gte("created_at", `${window.dateFrom}T00:00:00`);
   }
 
-  const [conversationResult, messageResult] = await Promise.all([
+  const [conversationResult, conversationCountResult, messageCountResult, latestMessageResult] = await Promise.all([
     conversationQuery,
-    messageQuery,
+    conversationCountQuery,
+    messageCountQuery,
+    latestMessageQuery,
   ]);
 
   const recentConversations = conversationResult.error
@@ -405,19 +424,28 @@ export async function getAgencyOrgWhatsAppSummary(orgId: string, range: AgencyTi
         last_updated: toNullableDate(row.last_updated),
       }));
 
-  const totalMessages = messageResult.error ? null : messageResult.count ?? 0;
-  const lastConversationActivity = recentConversations.reduce<string | null>((current, row) => {
+  const recentConversationsCount = conversationCountResult.error ? null : conversationCountResult.count ?? 0;
+  const recentMessagesCount = messageCountResult.error ? null : messageCountResult.count ?? 0;
+  const latestConversationActivity = recentConversations.reduce<string | null>((current, row) => {
     const candidate = row.last_updated || row.created_at;
     if (!candidate) return current;
     if (!current || candidate > current) return candidate;
     return current;
-  }, org.last_activity_at || null);
+  }, null);
+
+  const latestMessageActivity = latestMessageResult.error ? null : latestMessageResult.data?.[0]?.created_at || null;
+  const latestWhatsAppActivityAt = [latestConversationActivity, latestMessageActivity]
+    .filter((value): value is string => Boolean(value))
+    .reduce<string | null>((current, candidate) => {
+      if (!current || candidate > current) return candidate;
+      return current;
+    }, null);
 
   return {
-    total_conversations: org.total_whatsapp_conversations,
-    total_messages: totalMessages,
-    last_activity_at: lastConversationActivity,
-    available: !conversationResult.error && !messageResult.error,
+    recent_conversations_count: recentConversationsCount,
+    recent_messages_count: recentMessagesCount,
+    latest_whatsapp_activity_at: latestWhatsAppActivityAt,
+    available: !conversationResult.error && !conversationCountResult.error && !messageCountResult.error && !latestMessageResult.error,
     recent_conversations: recentConversations,
   };
 }
@@ -454,9 +482,9 @@ export async function getAgencyOrgDetail(orgId: string, range: AgencyTimeRange =
     products,
     saved_results: savedResults,
     whatsapp: whatsapp || {
-      total_conversations: org.total_whatsapp_conversations,
-      total_messages: org.total_whatsapp_messages,
-      last_activity_at: org.last_activity_at,
+      recent_conversations_count: null,
+      recent_messages_count: null,
+      latest_whatsapp_activity_at: null,
       available: false,
       recent_conversations: [],
     },
@@ -486,8 +514,8 @@ export async function getAgencyOrgExportDetail(orgId: string, range: AgencyTimeR
       total_products: detail.org.total_products,
       total_leads: detail.org.total_leads,
       total_saved_results: detail.org.total_saved_results,
-      total_whatsapp_conversations: detail.whatsapp.total_conversations,
-      total_whatsapp_messages: detail.whatsapp.total_messages,
+      recent_whatsapp_conversations_count: detail.whatsapp.recent_conversations_count,
+      recent_whatsapp_messages_count: detail.whatsapp.recent_messages_count,
       usage_date: usageRow?.usage_date || null,
       last_activity_at: detail.org.last_activity_at,
       estimated_cost_today_cents: detail.org.estimated_cost_today_cents,

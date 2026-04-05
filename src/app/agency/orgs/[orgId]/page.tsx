@@ -750,19 +750,19 @@ export default async function AgencyOrgDetailPage({
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <SimpleCard
-                  label="Conversas"
-                  value={formatNumber(detail.whatsapp.total_conversations)}
-                  subvalue={detail.whatsapp.available ? "whatsapp_conversations" : "Sem dados"}
+                  label="Conversas na janela"
+                  value={formatNumber(detail.whatsapp.recent_conversations_count)}
+                  subvalue={detail.whatsapp.available ? rangeText : "Sem dados"}
                 />
                 <SimpleCard
-                  label="Mensagens"
-                  value={formatNumber(detail.whatsapp.total_messages)}
-                  subvalue={detail.whatsapp.available ? "whatsapp_messages" : "Sem dados"}
+                  label="Mensagens na janela"
+                  value={formatNumber(detail.whatsapp.recent_messages_count)}
+                  subvalue={detail.whatsapp.available ? rangeText : "Sem dados"}
                 />
                 <SimpleCard
-                  label="Última atividade"
-                  value={formatDate(detail.whatsapp.last_activity_at)}
-                  subvalue="org_slug tenant-aware"
+                  label="Última atividade na janela"
+                  value={formatDate(detail.whatsapp.latest_whatsapp_activity_at)}
+                  subvalue={detail.whatsapp.available ? rangeText : "Sem dados"}
                 />
               </div>
 
