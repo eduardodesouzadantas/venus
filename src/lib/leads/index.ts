@@ -296,3 +296,38 @@ export async function listLeadsByOrg(supabase: SupabaseClient, orgId: string) {
 
   return { leads: (data as LeadRecord[]) || [], error: null };
 }
+
+export interface LeadStatusUpdateInput {
+  orgId: string;
+  leadId: string;
+  status: LeadStatus;
+  lastInteractionAt?: string | null;
+}
+
+export async function updateLeadStatus(supabase: SupabaseClient, input: LeadStatusUpdateInput) {
+  const orgId = normalizeString(input.orgId);
+  const leadId = normalizeString(input.leadId);
+  if (!orgId || !leadId) {
+    throw new Error("Missing lead identifiers");
+  }
+
+  const nextTimestamp = input.lastInteractionAt || new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("leads")
+    .update({
+      status: input.status,
+      last_interaction_at: nextTimestamp,
+      updated_at: nextTimestamp,
+    })
+    .eq("org_id", orgId)
+    .eq("id", leadId)
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message || "Failed to update lead status");
+  }
+
+  return { lead: data as LeadRecord };
+}

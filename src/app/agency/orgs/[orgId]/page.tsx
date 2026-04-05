@@ -225,6 +225,10 @@ export default async function AgencyOrgDetailPage({
   const guidance = detail.guidance;
   const playbook = detail.playbook;
   const queueItems = detail.playbook_queue;
+  const leadPipelineCounts = detail.leads.reduce<Record<string, number>>((acc, lead) => {
+    acc[lead.status] = (acc[lead.status] || 0) + 1;
+    return acc;
+  }, {});
   const rangeText = range === "all" ? "todos os períodos" : `últimos ${rangeLabel(range)}`;
   const rangeHref = range === "all" ? undefined : range;
   const backHref = buildAgencyBackHref({
@@ -235,6 +239,13 @@ export default async function AgencyOrgDetailPage({
     limit: playbooksLimit,
   });
   const backLabel = origin === "billing" ? "Voltar para Billing" : origin === "playbooks" ? "Voltar para Fila" : "Voltar para Agency";
+  const detailHref = buildHref(`/agency/orgs/${org.id}`, {
+    from: origin || "agency",
+    range: range === "all" ? undefined : range,
+    orgId: playbooksOrgId || undefined,
+    actionType: playbooksActionType || undefined,
+    limit: playbooksLimit || undefined,
+  });
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -653,12 +664,35 @@ export default async function AgencyOrgDetailPage({
           )}
         </SectionShell>
 
-        <SectionShell title="Leads na janela" description={`Leads reais vinculados à org_id, filtrados em ${rangeText}, com status e intent score.`}>
+        <SectionShell title="Leads na janela" description={`Leads reais vinculados à org_id, filtrados em ${rangeText}, com status, intent score e estágio comercial simples.`}>
           {detail.leads.length > 0 ? (
-            <div className="space-y-3">
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                {(["new", "engaged", "qualified", "offer_sent", "won", "lost"] as const).map((status) => (
+                  <span
+                    key={status}
+                    className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badge(status === "won" ? "active" : status === "lost" ? "blocked" : status === "new" ? "plan" : "neutral")}`}
+                  >
+                    {status === "new"
+                      ? "Novo"
+                      : status === "engaged"
+                        ? "Engajado"
+                        : status === "qualified"
+                          ? "Qualificado"
+                          : status === "offer_sent"
+                            ? "Oferta"
+                            : status === "won"
+                              ? "Ganho"
+                              : "Perdido"}
+                    {" "}
+                    {leadPipelineCounts[status] || 0}
+                  </span>
+                ))}
+              </div>
+              <div className="space-y-3">
               {detail.leads.map((lead) => (
                 <div key={lead.id} className="p-4 rounded-[24px] bg-white/[0.03] border border-white/5">
-                  <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                     <div className="space-y-1">
                       <Heading as="h3" className="text-lg tracking-tighter">
                         {lead.name || "Sem nome"}
@@ -676,9 +710,35 @@ export default async function AgencyOrgDetailPage({
                         {formatDate(lead.last_interaction_at || lead.updated_at || lead.created_at)}
                       </span>
                     </div>
+                    <form action={`/api/admin/orgs/${org.id}/leads/${lead.id}`} method="post" className="flex flex-wrap items-end gap-2">
+                      <input type="hidden" name="redirect_to" value={detailHref} />
+                      <label className="space-y-1">
+                        <span className="block text-[8px] uppercase tracking-[0.3em] text-white/30 font-bold">Estágio</span>
+                        <select
+                          name="status"
+                          defaultValue={lead.status}
+                          className="h-10 rounded-full bg-black/40 border border-white/10 px-4 text-[10px] uppercase tracking-[0.3em] font-bold text-white outline-none"
+                        >
+                          <option value="new">Novo</option>
+                          <option value="engaged">Engajado</option>
+                          <option value="qualified">Qualificado</option>
+                          <option value="offer_sent">Oferta enviada</option>
+                          <option value="won">Ganho</option>
+                          <option value="lost">Perdido</option>
+                        </select>
+                      </label>
+                      <VenusButton
+                        type="submit"
+                        variant="outline"
+                        className="h-10 px-4 rounded-full uppercase tracking-[0.3em] text-[8px] font-bold border-white/10"
+                      >
+                        Salvar estágio
+                      </VenusButton>
+                    </form>
                   </div>
                 </div>
               ))}
+              </div>
             </div>
           ) : (
             <EmptyState title="Sem leads" description="Nenhum lead recente encontrado para esta org." />
