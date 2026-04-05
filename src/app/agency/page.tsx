@@ -348,7 +348,7 @@ export default async function AgencyDashboardPage({
                     </div>
                     <div className="p-4 rounded-3xl bg-black/40 border border-white/5 space-y-1">
                       <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">
-                        Uso consolidado {usage ? `(${org.usage_source})` : ""}
+                        Fonte do uso {usage ? `(${org.usage_source})` : ""}
                       </Text>
                       <Heading as="h4" className="text-xl tracking-tighter">
                         {usage ? formatCount(usage.messages_sent) : "Sem dados"}
