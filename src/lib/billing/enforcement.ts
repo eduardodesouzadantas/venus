@@ -3,9 +3,18 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getOrgBillingSummary } from "@/lib/billing";
 
-export type HardCapOperation = "saved_result_generation" | "catalog_product_creation";
+export type HardCapOperation =
+  | "saved_result_generation"
+  | "ai_recommendation_generation"
+  | "catalog_product_creation"
+  | "whatsapp_handoff_sync";
 
-export type HardCapMetric = "saved_results" | "estimated_cost_today" | "estimated_cost_total" | "products";
+export type HardCapMetric =
+  | "saved_results"
+  | "estimated_cost_today"
+  | "estimated_cost_total"
+  | "products"
+  | "whatsapp_messages";
 
 export interface HardCapDecision {
   allowed: boolean;
@@ -92,7 +101,7 @@ function evaluateHardCap(summary: Awaited<ReturnType<typeof getOrgBillingSummary
   const planId = summary.plan_id || null;
   const caps = summary.plan_soft_caps;
 
-  if (operation === "saved_result_generation") {
+  if (operation === "saved_result_generation" || operation === "ai_recommendation_generation") {
     if (summary.total_saved_results >= caps.saved_results) {
       return blockDecision(
         operation,
@@ -136,6 +145,41 @@ function evaluateHardCap(summary: Awaited<ReturnType<typeof getOrgBillingSummary
         caps.products,
         planId,
         `O plano ${planId || "atual"} atingiu o limite de produtos (${summary.total_products}/${caps.products}).`
+      );
+    }
+  }
+
+  if (operation === "whatsapp_handoff_sync") {
+    if ((summary.total_whatsapp_messages || 0) >= caps.whatsapp_messages) {
+      return blockDecision(
+        operation,
+        "whatsapp_messages",
+        summary.total_whatsapp_messages || 0,
+        caps.whatsapp_messages,
+        planId,
+        `O plano ${planId || "atual"} atingiu o limite de mensagens do WhatsApp (${summary.total_whatsapp_messages || 0}/${caps.whatsapp_messages}).`
+      );
+    }
+
+    if (summary.estimated_cost_today_cents >= caps.estimated_cost_today_cents) {
+      return blockDecision(
+        operation,
+        "estimated_cost_today",
+        summary.estimated_cost_today_cents,
+        caps.estimated_cost_today_cents,
+        planId,
+        `O plano ${planId || "atual"} atingiu o teto de custo diário (${formatCurrency(summary.estimated_cost_today_cents)} / ${formatCurrency(caps.estimated_cost_today_cents)}).`
+      );
+    }
+
+    if (summary.estimated_cost_total_cents >= caps.estimated_cost_total_cents) {
+      return blockDecision(
+        operation,
+        "estimated_cost_total",
+        summary.estimated_cost_total_cents,
+        caps.estimated_cost_total_cents,
+        planId,
+        `O plano ${planId || "atual"} atingiu o teto de custo acumulado (${formatCurrency(summary.estimated_cost_total_cents)} / ${formatCurrency(caps.estimated_cost_total_cents)}).`
       );
     }
   }

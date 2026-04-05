@@ -6,7 +6,6 @@ import { getB2BProducts, Product } from "@/lib/catalog";
 import { generateOpenAIRecommendation } from "@/lib/ai";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { extractLeadSignalsFromSavedResultPayload, findOrCreateLead } from "@/lib/leads";
-import { enforceOrgHardCap } from "@/lib/billing/enforcement";
 import { bumpTenantUsageDaily, resolveAppTenantOrg } from "@/lib/tenant/core";
 
 function generateHeuristicFallback(userData: OnboardingData, products: Product[]): ResultPayload {
@@ -113,13 +112,23 @@ function generateHeuristicFallback(userData: OnboardingData, products: Product[]
   };
 }
 
-export async function generateEngineResult(userData: OnboardingData): Promise<ResultPayload> {
+export async function generateEngineResult(
+  userData: OnboardingData,
+  hardCapContext?: {
+    orgId?: string | null;
+    orgSlug?: string | null;
+    eventSource?: string | null;
+  }
+): Promise<ResultPayload> {
   const products = await getB2BProducts();
 
   try {
-    const aiPayload = await generateOpenAIRecommendation(userData, products);
+    const aiPayload = await generateOpenAIRecommendation(userData, products, hardCapContext);
     return aiPayload;
   } catch (err) {
+    if (err instanceof Error && err.message.startsWith("HARD_CAP_BLOCKED:")) {
+      throw err;
+    }
     console.error("OpenAI falhou. Usando Graceful Degradation Engine. Erro: ", err);
     return generateHeuristicFallback(userData, products);
   }
@@ -138,22 +147,20 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
       return "MOCK_DB_FAIL";
     }
 
-    const hardCapDecision = await enforceOrgHardCap({
-      orgId: resolvedTenant.org.id,
-      operation: "saved_result_generation",
-      actorUserId: null,
-      eventSource: "app",
-      metadata: {
-        source: resolvedTenant.source,
-      },
-    });
-
-    if (!hardCapDecision.allowed) {
-      console.warn("[BILLING] saved result generation blocked by hard cap", hardCapDecision);
-      return `HARD_CAP_BLOCKED:${hardCapDecision.metric || "saved_result_generation"}`;
+    let result: ResultPayload;
+    try {
+      result = await generateEngineResult(userData, {
+        orgId: resolvedTenant.org.id,
+        orgSlug: resolvedTenant.org.slug,
+        eventSource: "app",
+      });
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith("HARD_CAP_BLOCKED:")) {
+        console.warn("[BILLING] saved result generation blocked by hard cap", err.message);
+        return err.message;
+      }
+      throw err;
     }
-
-    const result = await generateEngineResult(userData);
 
     // Clone userData stripping massive base64 camera blobs to prevent Vercel limits and Supabase JSON overflow
     const safeUserData = { ...userData };

@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { enforceOrgHardCap } from "@/lib/billing/enforcement";
 import { extractLeadSignalsFromSavedResultPayload, findOrCreateLead } from "@/lib/leads";
 import { bumpTenantUsageDaily, resolveAppTenantOrg } from "@/lib/tenant/core";
 
@@ -36,6 +37,29 @@ export async function POST(request: Request) {
 
   if (!org) {
     return Response.json({ error: "Unable to resolve tenant for saved result" }, { status: 409 });
+  }
+
+  const hardCapDecision = await enforceOrgHardCap({
+    orgId: org.id,
+    operation: "whatsapp_handoff_sync",
+    actorUserId: null,
+    eventSource: "whatsapp",
+    metadata: {
+      saved_result_id: body.resultId,
+      org_slug: org.slug,
+    },
+  });
+
+  if (!hardCapDecision.allowed) {
+    return Response.json(
+      {
+        error: hardCapDecision.message || "WhatsApp handoff blocked by plan limit",
+        hard_cap_blocked: true,
+        hard_cap_operation: hardCapDecision.operation,
+        hard_cap_metric: hardCapDecision.metric,
+      },
+      { status: 429 }
+    );
   }
 
   const leadSignals = extractLeadSignalsFromSavedResultPayload({

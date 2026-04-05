@@ -1,9 +1,37 @@
+import "server-only";
+
 import OpenAI from "openai";
 import { OnboardingData } from "@/types/onboarding";
 import { Product } from "@/lib/catalog";
 import { ResultPayload } from "@/types/result";
+import { enforceOrgHardCap } from "@/lib/billing/enforcement";
 
-export async function generateOpenAIRecommendation(userData: OnboardingData, catalog: Product[]): Promise<ResultPayload> {
+export interface OpenAIRecommendationHardCapContext {
+  orgId?: string | null;
+  orgSlug?: string | null;
+  eventSource?: string | null;
+}
+
+export async function generateOpenAIRecommendation(
+  userData: OnboardingData,
+  catalog: Product[],
+  hardCapContext?: OpenAIRecommendationHardCapContext
+): Promise<ResultPayload> {
+  if (hardCapContext?.orgId) {
+    const hardCapDecision = await enforceOrgHardCap({
+      orgId: hardCapContext.orgId,
+      operation: "ai_recommendation_generation",
+      eventSource: hardCapContext.eventSource || "ai",
+      metadata: {
+        org_slug: hardCapContext.orgSlug || null,
+      },
+    });
+
+    if (!hardCapDecision.allowed) {
+      throw new Error(`HARD_CAP_BLOCKED:${hardCapDecision.metric || "saved_results"}`);
+    }
+  }
+
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error("Missing OPENAI_API_KEY");
