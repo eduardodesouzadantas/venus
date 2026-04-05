@@ -128,6 +128,11 @@ export default async function AgencyDashboardPage() {
             </Text>
           </div>
           <div className="flex gap-3">
+            <Link href="/agency/billing">
+              <VenusButton variant="outline" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold border-white/10">
+                Usage / Billing
+              </VenusButton>
+            </Link>
             <Link href="/admin">
               <VenusButton variant="outline" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold border-white/10">
                 Portal
@@ -231,6 +236,14 @@ export default async function AgencyDashboardPage() {
                   </div>
 
                   <div className="flex flex-wrap gap-3">
+                    <Link href={`/agency/orgs/${org.id}`}>
+                      <VenusButton
+                        variant="glass"
+                        className="h-11 px-5 rounded-full uppercase tracking-[0.3em] text-[9px] font-bold border-white/10"
+                      >
+                        Ver detalhe
+                      </VenusButton>
+                    </Link>
                     <form action={`/api/admin/orgs/${org.id}`} method="post">
                       <input type="hidden" name="action" value={org.status === "active" ? "suspend" : "activate"} />
                       <VenusButton
