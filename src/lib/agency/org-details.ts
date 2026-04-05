@@ -3,6 +3,8 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { extractLeadSignalsFromSavedResultPayload } from "@/lib/leads";
 import { listAgencyBillingRows, type AgencyBillingRow } from "@/lib/billing";
+import { getOrgGuidanceSummary } from "@/lib/billing/guidance";
+import { getOrgPlaybookSummary, type OrgActionPlaybook } from "@/lib/billing/playbooks";
 
 export interface AgencyOrgLeadRow {
   id: string;
@@ -89,6 +91,7 @@ export interface AgencyOrgWhatsAppSummary {
 
 export interface AgencyOrgDetail {
   org: AgencyBillingRow;
+  playbook: OrgActionPlaybook;
   billing: AgencyOrgBillingDetail;
   leads: AgencyOrgLeadRow[];
   products: AgencyOrgProductRow[];
@@ -349,8 +352,11 @@ export async function getAgencyOrgDetail(orgId: string): Promise<AgencyOrgDetail
     getAgencyOrgEventsRows(org.id),
   ]);
 
+  const guidance = getOrgGuidanceSummary(org);
+
   return {
     org,
+    playbook: getOrgPlaybookSummary(guidance),
     billing: billing || { summary: org, recent_usage_rows: [] },
     leads,
     products,

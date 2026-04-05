@@ -15,7 +15,7 @@ import { Text } from "@/components/ui/Text";
 import { VenusButton } from "@/components/ui/VenusButton";
 import { createClient } from "@/lib/supabase/server";
 import { isAgencyRole, isMerchantRole, resolveTenantContext } from "@/lib/tenant/core";
-import { listAgencyGuidanceRows, type AgencyGuidanceRow } from "@/lib/billing/guidance";
+import { listAgencyPlaybookRows, type AgencyPlaybookRow } from "@/lib/billing/playbooks";
 
 export const dynamic = "force-dynamic";
 
@@ -81,7 +81,7 @@ function softCapChipText(label: string, usage: number | null, cap: number | null
   return `${label} ${usageText}/${capText} (${pctText})`;
 }
 
-function statusKind(row: AgencyGuidanceRow) {
+function statusKind(row: AgencyPlaybookRow) {
   if (row.kill_switch || row.status === "blocked") return "blocked";
   if (row.status === "suspended") return "suspended";
   return "active";
@@ -129,9 +129,9 @@ export default async function AgencyBillingPage() {
     redirect("/login");
   }
 
-  let rows: AgencyGuidanceRow[] = [];
+  let rows: AgencyPlaybookRow[] = [];
   try {
-    rows = await listAgencyGuidanceRows();
+    rows = await listAgencyPlaybookRows();
   } catch (error) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center p-6">
@@ -342,6 +342,52 @@ export default async function AgencyBillingPage() {
                     <span className={`px-3 py-1 rounded-full border ${badge(guidanceKind(guidance.guidance_level))}`}>
                       Guidance {guidance.title}
                     </span>
+                  </div>
+
+                  <div className="p-4 rounded-3xl bg-black/40 border border-white/5 space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="space-y-1">
+                        <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Playbook</Text>
+                        <Heading as="h4" className="text-xl tracking-tighter">{row.playbook_summary.title}</Heading>
+                      </div>
+                      <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badge(guidanceKind(row.playbook_summary.guidance_level))}`}>
+                        {row.playbook_summary.guidance_level}
+                      </span>
+                    </div>
+                    <Text className="text-sm text-white/55">{row.playbook_summary.summary}</Text>
+                    <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
+                      Próxima revisão: {row.playbook_summary.next_review_window}
+                    </Text>
+                    <div className="flex flex-wrap gap-2">
+                      {row.playbook_summary.steps.slice(0, 2).map((step) => (
+                        <span
+                          key={`${row.id}-step-${step.id}`}
+                          className="px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border bg-white/5 text-white/70 border-white/10"
+                        >
+                          {step.label}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {row.playbook_summary.light_automations.slice(0, 1).map((automation) => (
+                        <form key={`${row.id}-${automation.action_key}`} action={`/api/admin/orgs/${row.id}/playbook`} method="post">
+                          <input type="hidden" name="action" value={automation.action_key} />
+                          <input type="hidden" name="redirect_to" value="/agency/billing" />
+                          <VenusButton
+                            type="submit"
+                            variant="outline"
+                            className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-white/10"
+                          >
+                            {automation.label}
+                          </VenusButton>
+                        </form>
+                      ))}
+                      <Link href={`/agency/orgs/${row.id}`}>
+                        <VenusButton variant="glass" className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-white/10">
+                          Ver playbook
+                        </VenusButton>
+                      </Link>
+                    </div>
                   </div>
 
                   <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.3em] text-white/45">

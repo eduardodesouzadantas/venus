@@ -8,7 +8,7 @@ import { Text } from "@/components/ui/Text";
 import { VenusButton } from "@/components/ui/VenusButton";
 import { createClient } from "@/lib/supabase/server";
 import { isAgencyRole, isMerchantRole, resolveTenantContext } from "@/lib/tenant/core";
-import { listAgencyGuidanceRows, type AgencyGuidanceRow } from "@/lib/billing/guidance";
+import { listAgencyPlaybookRows, type AgencyPlaybookRow } from "@/lib/billing/playbooks";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +48,7 @@ function badgeClasses(kind: "active" | "suspended" | "blocked" | "plan" | "kill"
   }
 }
 
-function getStatusKind(row: AgencyGuidanceRow) {
+function getStatusKind(row: AgencyPlaybookRow) {
   if (row.status === "blocked") return "blocked";
   if (row.status === "suspended") return "suspended";
   if (row.kill_switch) return "blocked";
@@ -99,9 +99,9 @@ export default async function AgencyDashboardPage() {
     redirect("/login");
   }
 
-  let orgs: AgencyGuidanceRow[] = [];
+  let orgs: AgencyPlaybookRow[] = [];
   try {
-    orgs = await listAgencyGuidanceRows();
+    orgs = await listAgencyPlaybookRows();
   } catch (error) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center p-6">
@@ -205,6 +205,7 @@ export default async function AgencyDashboardPage() {
               const statusLabel = org.kill_switch ? "blocked" : org.status;
               const softCaps = org.soft_cap_summary;
               const guidance = org.guidance_summary;
+              const playbook = org.playbook_summary;
               return (
                 <div key={org.id} className="p-6 rounded-[32px] bg-white/[0.03] border border-white/5 space-y-6">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -250,6 +251,46 @@ export default async function AgencyDashboardPage() {
                             {softCapChipText(alert.label, alert.usage, alert.cap, alert.usage_pct)}
                           </span>
                         ))}
+                      </div>
+                      <div className="p-4 rounded-3xl bg-black/40 border border-white/5 space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="space-y-1">
+                            <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Playbook</Text>
+                            <Heading as="h4" className="text-xl tracking-tighter">{playbook.title}</Heading>
+                          </div>
+                          <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badgeClasses(softCapKind(playbook.guidance_level === "critical" ? "critical" : playbook.guidance_level === "warning" ? "warning" : "ok"))}`}>
+                            {playbook.guidance_level}
+                          </span>
+                        </div>
+                        <Text className="text-sm text-white/55">{playbook.summary}</Text>
+                        <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
+                          Próxima revisão: {playbook.next_review_window}
+                        </Text>
+                        <div className="flex flex-wrap gap-2">
+                          {playbook.steps.slice(0, 2).map((step) => (
+                            <span
+                              key={`${org.id}-step-${step.id}`}
+                              className="px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border bg-white/5 text-white/70 border-white/10"
+                            >
+                              {step.label}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {playbook.light_automations.slice(0, 2).map((automation) => (
+                            <form key={`${org.id}-${automation.action_key}`} action={`/api/admin/orgs/${org.id}/playbook`} method="post">
+                              <input type="hidden" name="action" value={automation.action_key} />
+                              <input type="hidden" name="redirect_to" value="/agency" />
+                              <VenusButton
+                                type="submit"
+                                variant="outline"
+                                className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-white/10"
+                              >
+                                {automation.label}
+                              </VenusButton>
+                            </form>
+                          ))}
+                        </div>
                       </div>
                       <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
                         {org.plan_soft_cap_message}

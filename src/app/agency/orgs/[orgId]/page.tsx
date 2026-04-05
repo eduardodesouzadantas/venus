@@ -185,6 +185,7 @@ export default async function AgencyOrgDetailPage({
   const statusLabel = org.kill_switch ? "blocked" : org.status;
   const softCaps = billing?.soft_cap_summary || null;
   const guidance = getOrgGuidanceSummary(org);
+  const playbook = detail.playbook;
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -388,6 +389,78 @@ export default async function AgencyOrgDetailPage({
             </div>
           ) : (
             <EmptyState title="Sem guidance" description="Não foi possível calcular guidance para esta org." />
+          )}
+        </SectionShell>
+
+        <SectionShell
+          title="Action Playbook"
+          description="Plano prático derivado do guidance real, com passos priorizados e janela de revisão."
+        >
+          {playbook ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <SimpleCard label="Playbook" value={playbook.title} subvalue={`action ${playbook.recommended_action}`} />
+                <SimpleCard label="Guidance" value={playbook.guidance_level} subvalue={playbook.trigger_reason} />
+                <SimpleCard label="Plano sugerido" value={playbook.suggested_plan_if_any || "Sem dados"} subvalue="quando fizer sentido" />
+                <SimpleCard label="Janela" value={playbook.next_review_window} subvalue="revisão operacional" />
+              </div>
+
+              <div className="p-5 rounded-[28px] bg-white/[0.03] border border-white/5 space-y-2">
+                <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Summary</Text>
+                <Heading as="h3" className="text-xl tracking-tighter">
+                  {playbook.summary}
+                </Heading>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                {playbook.steps.map((step) => (
+                  <div key={step.id} className="p-4 rounded-[24px] bg-white/[0.03] border border-white/5 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">{step.category}</Text>
+                      <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badge(step.priority === "high" ? "risk-high" : step.priority === "medium" ? "risk-medium" : "risk-low")}`}>
+                        {step.priority}
+                      </span>
+                    </div>
+                    <Heading as="h4" className="text-lg tracking-tighter">
+                      {step.label}
+                    </Heading>
+                    <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
+                      {step.description}
+                    </Text>
+                    <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
+                      {step.action_type}
+                    </Text>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <EmptyState title="Sem playbook" description="Não foi possível montar um playbook para esta org." />
+          )}
+        </SectionShell>
+
+        <SectionShell
+          title="Light Automations / Operational Actions"
+          description="Ações leves, seguras e reversíveis. Nenhum status ou plano é alterado automaticamente."
+        >
+          {playbook && playbook.light_automations.length > 0 ? (
+            <div className="flex flex-wrap gap-3">
+              {playbook.light_automations.map((automation) => (
+                <form key={`${org.id}-${automation.action_key}`} action={`/api/admin/orgs/${org.id}/playbook`} method="post">
+                  <input type="hidden" name="action" value={automation.action_key} />
+                  <input type="hidden" name="redirect_to" value={`/agency/orgs/${org.id}`} />
+                  <VenusButton
+                    type="submit"
+                    variant="outline"
+                    className="h-11 px-5 rounded-full uppercase tracking-[0.3em] text-[9px] font-bold border-white/10"
+                  >
+                    {automation.label}
+                  </VenusButton>
+                </form>
+              ))}
+            </div>
+          ) : (
+            <EmptyState title="Sem ações leves" description="Este playbook não expõe automações leves neste momento." />
           )}
         </SectionShell>
 
