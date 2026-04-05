@@ -8,7 +8,7 @@ import { Text } from "@/components/ui/Text";
 import { VenusButton } from "@/components/ui/VenusButton";
 import { createClient } from "@/lib/supabase/server";
 import { isAgencyRole, isMerchantRole, resolveTenantContext } from "@/lib/tenant/core";
-import { listAgencyBillingRows, type AgencyBillingRow } from "@/lib/billing";
+import { listAgencyGuidanceRows, type AgencyGuidanceRow } from "@/lib/billing/guidance";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +48,7 @@ function badgeClasses(kind: "active" | "suspended" | "blocked" | "plan" | "kill"
   }
 }
 
-function getStatusKind(row: AgencyBillingRow) {
+function getStatusKind(row: AgencyGuidanceRow) {
   if (row.status === "blocked") return "blocked";
   if (row.status === "suspended") return "suspended";
   if (row.kill_switch) return "blocked";
@@ -99,9 +99,9 @@ export default async function AgencyDashboardPage() {
     redirect("/login");
   }
 
-  let orgs: AgencyBillingRow[] = [];
+  let orgs: AgencyGuidanceRow[] = [];
   try {
-    orgs = await listAgencyBillingRows();
+    orgs = await listAgencyGuidanceRows();
   } catch (error) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center p-6">
@@ -204,6 +204,7 @@ export default async function AgencyDashboardPage() {
               const usage = org.usage_today;
               const statusLabel = org.kill_switch ? "blocked" : org.status;
               const softCaps = org.soft_cap_summary;
+              const guidance = org.guidance_summary;
               return (
                 <div key={org.id} className="p-6 rounded-[32px] bg-white/[0.03] border border-white/5 space-y-6">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -236,6 +237,9 @@ export default async function AgencyDashboardPage() {
                         <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badgeClasses(softCapKind(softCaps.billing_risk === "high" ? "critical" : softCaps.billing_risk === "medium" ? "warning" : "ok"))}`}>
                           Billing {softCaps.billing_risk}
                         </span>
+                        <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badgeClasses(softCapKind(guidance.guidance_level === "critical" ? "critical" : guidance.guidance_level === "warning" ? "warning" : "ok"))}`}>
+                          Guidance {guidance.title}
+                        </span>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {softCaps.top_alerts.slice(0, 2).map((alert) => (
@@ -249,6 +253,9 @@ export default async function AgencyDashboardPage() {
                       </div>
                       <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
                         {org.plan_soft_cap_message}
+                      </Text>
+                      <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
+                        Próximo: {guidance.next_step}
                       </Text>
                     </div>
 

@@ -15,7 +15,7 @@ import { Text } from "@/components/ui/Text";
 import { VenusButton } from "@/components/ui/VenusButton";
 import { createClient } from "@/lib/supabase/server";
 import { isAgencyRole, isMerchantRole, resolveTenantContext } from "@/lib/tenant/core";
-import { listAgencyBillingRows, type AgencyBillingRow } from "@/lib/billing";
+import { listAgencyGuidanceRows, type AgencyGuidanceRow } from "@/lib/billing/guidance";
 
 export const dynamic = "force-dynamic";
 
@@ -81,7 +81,7 @@ function softCapChipText(label: string, usage: number | null, cap: number | null
   return `${label} ${usageText}/${capText} (${pctText})`;
 }
 
-function statusKind(row: AgencyBillingRow) {
+function statusKind(row: AgencyGuidanceRow) {
   if (row.kill_switch || row.status === "blocked") return "blocked";
   if (row.status === "suspended") return "suspended";
   return "active";
@@ -90,6 +90,12 @@ function statusKind(row: AgencyBillingRow) {
 function riskKind(value: "low" | "medium" | "high") {
   if (value === "high") return "risk-high";
   if (value === "medium") return "risk-medium";
+  return "risk-low";
+}
+
+function guidanceKind(value: "info" | "warning" | "critical") {
+  if (value === "critical") return "risk-high";
+  if (value === "warning") return "risk-medium";
   return "risk-low";
 }
 
@@ -123,9 +129,9 @@ export default async function AgencyBillingPage() {
     redirect("/login");
   }
 
-  let rows: AgencyBillingRow[] = [];
+  let rows: AgencyGuidanceRow[] = [];
   try {
-    rows = await listAgencyBillingRows();
+    rows = await listAgencyGuidanceRows();
   } catch (error) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center p-6">
@@ -246,6 +252,7 @@ export default async function AgencyBillingPage() {
               const statusLabel = row.kill_switch ? "blocked" : row.status;
               const softCaps = row.soft_cap_summary;
               const topAlerts = softCaps.top_alerts.slice(0, 3);
+              const guidance = row.guidance_summary;
 
               return (
                 <div key={row.id} className="p-6 rounded-[32px] bg-white/[0.03] border border-white/5 space-y-6">
@@ -332,6 +339,9 @@ export default async function AgencyBillingPage() {
                     <span className={`px-3 py-1 rounded-full border ${badge(softCapBadge(softCaps.billing_risk === "high" ? "critical" : softCaps.billing_risk === "medium" ? "warning" : "ok"))}`}>
                       Billing {softCaps.billing_risk}
                     </span>
+                    <span className={`px-3 py-1 rounded-full border ${badge(guidanceKind(guidance.guidance_level))}`}>
+                      Guidance {guidance.title}
+                    </span>
                   </div>
 
                   <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.3em] text-white/45">
@@ -347,6 +357,9 @@ export default async function AgencyBillingPage() {
 
                   <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
                     {row.plan_soft_cap_message}
+                  </Text>
+                  <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
+                    Próximo: {guidance.next_step}
                   </Text>
 
                   <div className="flex flex-wrap gap-2">

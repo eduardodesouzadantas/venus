@@ -13,6 +13,7 @@ import { VenusButton } from "@/components/ui/VenusButton";
 import { createClient } from "@/lib/supabase/server";
 import { isAgencyRole, isMerchantRole, resolveTenantContext } from "@/lib/tenant/core";
 import { getAgencyOrgDetail } from "@/lib/agency/org-details";
+import { getOrgGuidanceSummary } from "@/lib/billing/guidance";
 
 export const dynamic = "force-dynamic";
 
@@ -77,6 +78,12 @@ function softCapChipText(label: string, usage: number | null, cap: number | null
   const capText = cap === null ? "Sem dados" : cap.toLocaleString("pt-BR");
   const pctText = pct === null ? "sem base" : `${Math.round(pct)}%`;
   return `${label}: ${usageText}/${capText} (${pctText})`;
+}
+
+function guidanceBadge(kind: "info" | "warning" | "critical") {
+  if (kind === "critical") return "risk-high";
+  if (kind === "warning") return "risk-medium";
+  return "risk-low";
 }
 
 function SectionShell({ title, description, children }: { title: string; description: string; children: ReactNode }) {
@@ -177,6 +184,7 @@ export default async function AgencyOrgDetailPage({
   const usageRows = detail.billing.recent_usage_rows;
   const statusLabel = org.kill_switch ? "blocked" : org.status;
   const softCaps = billing?.soft_cap_summary || null;
+  const guidance = getOrgGuidanceSummary(org);
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -346,6 +354,74 @@ export default async function AgencyOrgDetailPage({
               title="Sem dados de soft caps"
               description="Os limites do plano não puderam ser carregados para esta org."
             />
+          )}
+        </SectionShell>
+
+        <SectionShell
+          title="Upgrade Guidance"
+          description="Sinal de upgrade ou revisão de plano, derivado de uso real e soft caps."
+        >
+          {guidance ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <SimpleCard label="Guidance level" value={guidance.guidance_level} subvalue={guidance.title} />
+                <SimpleCard label="Recommended action" value={guidance.recommended_action} subvalue={guidance.guidance_reason} />
+                <SimpleCard label="Suggested plan" value={guidance.recommended_plan_if_any || "Sem dados"} subvalue="se fizer sentido" />
+                <SimpleCard label="Upgrade signal" value={guidance.upgrade_signal} subvalue={`operational ${guidance.operational_signal}`} />
+              </div>
+              <div className="p-5 rounded-[28px] bg-white/[0.03] border border-white/5 space-y-2">
+                <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Reason</Text>
+                <Heading as="h3" className="text-xl tracking-tighter">
+                  {guidance.guidance_reason}
+                </Heading>
+                <Text className="text-[10px] uppercase tracking-widest text-white/35">
+                  Next step: {guidance.next_step}
+                </Text>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {guidance.trigger_categories.map((category) => (
+                  <span key={`${org.id}-upgrade-${category}`} className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badge(guidanceBadge(guidance.guidance_level))}`}>
+                    {category}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <EmptyState title="Sem guidance" description="Não foi possível calcular guidance para esta org." />
+          )}
+        </SectionShell>
+
+        <SectionShell
+          title="Operational Recommendations"
+          description="Recomendações auxiliares para otimizar uso e conversão antes de mudar o plano."
+        >
+          {guidance && guidance.operational_recommendations.length > 0 ? (
+            <div className="space-y-3">
+              {guidance.operational_recommendations.map((item) => (
+                <div key={`${org.id}-${item.title}-${item.recommended_action}`} className="p-4 rounded-[24px] bg-white/[0.03] border border-white/5">
+                  <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="space-y-1">
+                      <Heading as="h3" className="text-lg tracking-tighter">
+                        {item.title}
+                      </Heading>
+                      <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
+                        {item.guidance_reason}
+                      </Text>
+                    </div>
+                    <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.3em]">
+                      <span className={`px-3 py-1 rounded-full border ${badge(guidanceBadge(item.guidance_level))}`}>{item.guidance_level}</span>
+                      <span className={`px-3 py-1 rounded-full border ${badge(guidanceBadge(item.guidance_level))}`}>{item.recommended_action}</span>
+                      <span className={`px-3 py-1 rounded-full border ${badge("plan")}`}>{item.recommended_plan_if_any || "sem plano"}</span>
+                    </div>
+                  </div>
+                  <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35 mt-2">
+                    Next step: {item.next_step}
+                  </Text>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState title="Sem recomendações" description="A org não possui recomendações operacionais adicionais no momento." />
           )}
         </SectionShell>
 
