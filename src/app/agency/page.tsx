@@ -170,23 +170,23 @@ export default async function AgencyDashboardPage({
                 V
               </div>
               <div>
-                <Text className="text-[10px] uppercase font-bold tracking-[0.5em] text-[#D4AF37]">Agency Command Center</Text>
-                <Heading as="h1" className="text-3xl uppercase tracking-tighter">Painel Operacional Real</Heading>
+                <Text className="text-[10px] uppercase font-bold tracking-[0.5em] text-[#D4AF37]">Snapshot consolidado / Agency Command Center</Text>
+                <Heading as="h1" className="text-3xl uppercase tracking-tighter">Painel de comando consolidado</Heading>
               </div>
             </div>
             <Text className="text-sm text-white/50 max-w-2xl">
-              Dados reais por org, status canônico, kill switch e ações mínimas de governança.
+              Visão consolidada da operação por org_id, com dados reais, status canônico, kill switch e atalhos para o drill-down operacional.
             </Text>
           </div>
           <div className="flex gap-3">
             <Link href={buildHref("/agency/billing", { range: range === "all" ? undefined : range })}>
               <VenusButton variant="outline" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold border-white/10">
-                Usage / Billing
+                Visão econômica
               </VenusButton>
             </Link>
             <Link href={buildHref("/agency/playbooks", { range: range === "all" ? undefined : range })}>
               <VenusButton variant="outline" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold border-white/10">
-                Playbooks
+                Fila operacional
               </VenusButton>
             </Link>
             <Link href="/admin">
@@ -205,19 +205,19 @@ export default async function AgencyDashboardPage({
 
       <div className="px-6 py-8 space-y-10">
         <div className="grid grid-cols-2 xl:grid-cols-6 gap-4">
-          <StatCard icon={<Users className="w-5 h-5 text-[#D4AF37]" />} label="Orgs" value={totalOrgs.toString()} />
-          <StatCard icon={<HeartPulse className="w-5 h-5 text-green-400" />} label="Ativas" value={activeOrgs.toString()} />
-          <StatCard icon={<ShieldCheck className="w-5 h-5 text-red-400" />} label="Bloqueadas / Suspensas" value={suspendedOrBlocked.toString()} />
-          <StatCard icon={<Zap className="w-5 h-5 text-[#D4AF37]" />} label="Kill switch ON" value={killSwitchOn.toString()} />
-          <StatCard icon={<DollarSign className="w-5 h-5 text-[#D4AF37]" />} label="Produtos" value={totalProducts.toString()} />
-          <StatCard icon={<MessageSquare className="w-5 h-5 text-[#D4AF37]" />} label="Leads / Saved results" value={`${totalLeads} / ${totalSavedResults}`} />
+          <StatCard icon={<Users className="w-5 h-5 text-[#D4AF37]" />} label="Orgs totais" value={totalOrgs.toString()} />
+          <StatCard icon={<HeartPulse className="w-5 h-5 text-green-400" />} label="Orgs ativas" value={activeOrgs.toString()} />
+          <StatCard icon={<ShieldCheck className="w-5 h-5 text-red-400" />} label="Bloqueadas ou suspensas" value={suspendedOrBlocked.toString()} />
+          <StatCard icon={<Zap className="w-5 h-5 text-[#D4AF37]" />} label="Kill switch ativo" value={killSwitchOn.toString()} />
+          <StatCard icon={<DollarSign className="w-5 h-5 text-[#D4AF37]" />} label="Produtos totais" value={totalProducts.toString()} />
+          <StatCard icon={<MessageSquare className="w-5 h-5 text-[#D4AF37]" />} label="Leads totais / Saved results totais" value={`${totalLeads} / ${totalSavedResults}`} />
         </div>
 
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="space-y-1">
-              <Heading as="h2" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">Orgs reais</Heading>
-              <Text className="text-sm text-white/40">Lista canônica por org_id, com métricas operacionais mínimas e ações persistidas.</Text>
+              <Heading as="h2" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">Snapshot consolidado por org</Heading>
+              <Text className="text-sm text-white/40">Lista canônica por org_id, com métricas consolidadas e pontos de entrada para o detalhe operacional.</Text>
             </div>
             <Link href="/agency">
               <VenusButton variant="outline" className="rounded-full h-11 px-5 text-[9px] uppercase tracking-[0.35em] font-bold border-white/10">
@@ -330,16 +330,16 @@ export default async function AgencyDashboardPage({
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 min-w-[280px]">
-                      <Metric label="Membros" value={org.total_members} />
-                      <Metric label="Produtos" value={org.total_products} />
-                      <Metric label="Leads" value={org.total_leads} />
-                      <Metric label="Saved results" value={org.total_saved_results} />
+                      <Metric label="Membros totais" value={org.total_members} />
+                      <Metric label="Produtos totais" value={org.total_products} />
+                      <Metric label="Leads totais" value={org.total_leads} />
+                      <Metric label="Saved results totais" value={org.total_saved_results} />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
                     <div className="p-4 rounded-3xl bg-black/40 border border-white/5 space-y-1">
-                      <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">WhatsApp conversas</Text>
+                      <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">WhatsApp consolidado</Text>
                       <Heading as="h4" className="text-xl tracking-tighter">{metricValue(org.total_whatsapp_conversations)}</Heading>
                     </div>
                     <div className="p-4 rounded-3xl bg-black/40 border border-white/5 space-y-1">
@@ -348,7 +348,7 @@ export default async function AgencyDashboardPage({
                     </div>
                     <div className="p-4 rounded-3xl bg-black/40 border border-white/5 space-y-1">
                       <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">
-                        Uso {usage ? `(${org.usage_source})` : ""}
+                        Uso consolidado {usage ? `(${org.usage_source})` : ""}
                       </Text>
                       <Heading as="h4" className="text-xl tracking-tighter">
                         {usage ? formatCount(usage.messages_sent) : "Sem dados"}
@@ -358,9 +358,9 @@ export default async function AgencyDashboardPage({
                       </Text>
                     </div>
                     <div className="p-4 rounded-3xl bg-black/40 border border-white/5 space-y-1">
-                      <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Última interação</Text>
+                      <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Última atividade</Text>
                       <Heading as="h4" className="text-xl tracking-tighter">{formatDate(org.last_activity_at)}</Heading>
-                      <Text className="text-[10px] text-white/35 uppercase tracking-widest">Governança real</Text>
+                      <Text className="text-[10px] text-white/35 uppercase tracking-widest">Snapshot consolidado</Text>
                     </div>
                   </div>
 
