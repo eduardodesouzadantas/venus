@@ -11,6 +11,13 @@ export const metadata: Metadata = {
   description: "Sua inteligência pessoal de estilo.",
 };
 
+import { DemoTour } from "@/components/ui/DemoTour";
+import { Suspense } from "react";
+
+import { UserImageProvider } from "@/lib/onboarding/UserImageContext";
+import { AuthProvider } from "@/lib/auth/AuthContext";
+import { WhatsAppProvider } from "@/lib/whatsapp/WhatsAppContext";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -18,13 +25,25 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR" className={`${inter.variable} ${playfair.variable} dark`} suppressHydrationWarning>
-      <body className="min-h-screen bg-black text-white antialiased">
-        <OnboardingProvider>
-          <main className="mx-auto w-full max-w-md min-h-screen bg-[#121212] relative shadow-2xl overflow-x-hidden">
-            {children}
-          </main>
-        </OnboardingProvider>
+      <body className="min-h-screen bg-black text-white antialiased" suppressHydrationWarning>
+        <UserImageProvider>
+          <AuthProvider>
+            <OnboardingProvider>
+              <WhatsAppProvider>
+                <main className="min-h-screen bg-black relative overflow-x-hidden antialiased">
+                  {children}
+                  <Suspense fallback={null}>
+                    <DemoTour />
+                  </Suspense>
+                </main>
+              </WhatsAppProvider>
+            </OnboardingProvider>
+          </AuthProvider>
+        </UserImageProvider>
       </body>
     </html>
   );
 }
+
+
+
