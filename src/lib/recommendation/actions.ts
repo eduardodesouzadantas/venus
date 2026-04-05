@@ -4,7 +4,9 @@ import { OnboardingData } from "@/types/onboarding";
 import { ResultPayload, LookData, LookItem } from "@/types/result";
 import { getB2BProducts, Product } from "@/lib/catalog";
 import { generateOpenAIRecommendation } from "@/lib/ai";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { extractLeadSignalsFromSavedResultPayload, findOrCreateLead } from "@/lib/leads";
+import { bumpTenantUsageDaily, resolveAppTenantOrg } from "@/lib/tenant/core";
 
 function generateHeuristicFallback(userData: OnboardingData, products: Product[]): ResultPayload {
   const goal = userData.intent.imageGoal || "Elegância";
@@ -129,7 +131,13 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
   const result = await generateEngineResult(userData);
   
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
+    const resolvedTenant = await resolveAppTenantOrg(supabase);
+
+    if (!resolvedTenant.org) {
+      console.warn("[SAVED_RESULTS] unable to resolve canonical tenant for persisted result");
+      return "MOCK_DB_FAIL";
+    }
     
     // Clone userData stripping massive base64 camera blobs to prevent Vercel limits and Supabase JSON overflow
     const safeUserData = { ...userData };
@@ -140,18 +148,84 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
     };
 
     // Insere um registro cego (anônimo) no Supabase contendo o resultado da inteligência
-    const { data, error } = await supabase.from("saved_results").insert([
-      {
-        payload: {
-          onboardingContext: safeUserData,
-          finalResult: result
-        }
-      }
-    ]).select("id").single();
+    const { data, error } = await supabase
+      .from("saved_results")
+      .insert([
+        {
+          org_id: resolvedTenant.org.id,
+          user_email: safeUserData.contact?.email || null,
+          user_name: safeUserData.contact?.name || null,
+          payload: {
+            tenant: {
+              orgId: resolvedTenant.org.id,
+              orgSlug: resolvedTenant.org.slug,
+              source: resolvedTenant.source,
+            },
+            onboardingContext: safeUserData,
+            finalResult: result,
+          },
+        },
+      ])
+      .select("id")
+      .single();
 
     if (error || !data) {
       console.error("Erro ao salvar Dossiê Anônimo", error);
       return "MOCK_DB_FAIL"; 
+    }
+
+    const leadSignals = extractLeadSignalsFromSavedResultPayload({
+      onboardingContext: safeUserData,
+      finalResult: result,
+      user_email: safeUserData.contact?.email || null,
+      user_name: safeUserData.contact?.name || null,
+    });
+
+    await supabase.from("tenant_events").insert({
+      org_id: resolvedTenant.org.id,
+      actor_user_id: null,
+      event_type: "app.saved_result_created",
+      event_source: "app",
+      dedupe_key: `saved_result_created:${resolvedTenant.org.id}:${data.id}`,
+      payload: {
+        saved_result_id: data.id,
+        org_slug: resolvedTenant.org.slug,
+        org_source: resolvedTenant.source,
+      },
+    });
+
+    try {
+      const { lead, created } = await findOrCreateLead(supabase, {
+        orgId: resolvedTenant.org.id,
+        name: leadSignals.name || safeUserData.contact?.name || null,
+        email: leadSignals.email || safeUserData.contact?.email || null,
+        phone: leadSignals.phone || safeUserData.contact?.phone || null,
+        source: "app",
+        status: "new",
+        savedResultId: data.id,
+        intentScore: leadSignals.intentScore ?? Math.round(Number(safeUserData.intent.satisfaction || 0) * 10),
+        whatsappKey: leadSignals.whatsappKey || safeUserData.contact?.phone || null,
+        lastInteractionAt: leadSignals.lastInteractionAt || undefined,
+      });
+
+      await supabase.from("tenant_events").insert({
+        org_id: resolvedTenant.org.id,
+        actor_user_id: null,
+        event_type: created ? "lead.created_from_app" : "lead.updated_from_app",
+        event_source: "app",
+        dedupe_key: `lead_from_app:${resolvedTenant.org.id}:${lead.id}:${data.id}`,
+        payload: {
+          lead_id: lead.id,
+          saved_result_id: data.id,
+          org_slug: resolvedTenant.org.slug,
+          created,
+        },
+      });
+
+      await bumpTenantUsageDaily(supabase, resolvedTenant.org.id, { events_count: 1, leads: created ? 1 : 0 });
+    } catch (leadError) {
+      console.warn("[LEADS] failed to sync lead from saved result creation", leadError);
+      await bumpTenantUsageDaily(supabase, resolvedTenant.org.id, { events_count: 1 });
     }
 
     return data.id;
