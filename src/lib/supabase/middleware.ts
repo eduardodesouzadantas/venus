@@ -1,10 +1,16 @@
-import { createServerClient } from '@supabase/ssr'
-import { NextResponse, type NextRequest } from 'next/server'
+import { createServerClient } from "@supabase/ssr";
+import { NextResponse, type NextRequest } from "next/server";
+import {
+  fetchTenantBySlug,
+  isAgencyRole,
+  isTenantActive,
+  resolveTenantContext,
+} from "@/lib/tenant/core";
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
-  })
+  });
 
   // Ignore missing ENV keys in development so build doesn't break if .env isn't set
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
@@ -17,36 +23,77 @@ export async function updateSession(request: NextRequest) {
     {
       cookies: {
         getAll() {
-          return request.cookies.getAll()
+          return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value))
-          supabaseResponse = NextResponse.next({ request })
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          supabaseResponse = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
-          )
+          );
         },
       },
     }
-  )
+  );
 
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await supabase.auth.getUser();
 
-  // Proteger rotas B2B exceto login
-  if (!user && request.nextUrl.pathname.startsWith('/b2b') && !request.nextUrl.pathname.startsWith('/b2b/login')) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/b2b/login'
-    return NextResponse.redirect(url)
+  const tenantContext = resolveTenantContext(user);
+  const pathname = request.nextUrl.pathname;
+  const isMerchantLogin = pathname.startsWith("/b2b/login");
+  const isB2BRoute = pathname.startsWith("/b2b");
+  const isMerchantRoute = pathname.startsWith("/merchant");
+  const isOrgRoute = pathname.startsWith("/org/");
+
+  const redirectTo = (targetPath: string) => {
+    const url = request.nextUrl.clone();
+    url.pathname = targetPath;
+    return NextResponse.redirect(url);
+  };
+
+  if (!user && isB2BRoute && !isMerchantLogin) {
+    return redirectTo("/b2b/login");
   }
 
-  // Redirect pro dashboard se tentar logar já estando autorizado
-  if (user && request.nextUrl.pathname.startsWith('/b2b/login')) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/b2b/dashboard'
-    return NextResponse.redirect(url)
+  if (user && isMerchantLogin) {
+    if (tenantContext.role && isAgencyRole(tenantContext.role)) {
+      return redirectTo("/agency");
+    }
+
+    return redirectTo("/merchant");
   }
 
-  return supabaseResponse
+  if (isMerchantRoute && !user) {
+    return redirectTo("/b2b/login");
+  }
+
+  if (isMerchantRoute && user && tenantContext.role && isAgencyRole(tenantContext.role)) {
+    return redirectTo("/agency");
+  }
+
+  if (isOrgRoute) {
+    if (!user) {
+      return redirectTo("/merchant");
+    }
+
+    if (tenantContext.role && isAgencyRole(tenantContext.role)) {
+      return supabaseResponse;
+    }
+
+    const orgSlug = pathname.split("/")[2] || "";
+    const authOrgSlug = tenantContext.orgSlug || "";
+
+    if (!authOrgSlug || authOrgSlug !== orgSlug) {
+      return redirectTo("/merchant");
+    }
+
+    const tenant = await fetchTenantBySlug(supabase, orgSlug);
+    if (!tenant.org || !isTenantActive(tenant.org)) {
+      return redirectTo("/merchant");
+    }
+  }
+
+  return supabaseResponse;
 }

@@ -18,8 +18,8 @@ export async function login(formData: FormData) {
     redirect("/b2b/login?error=" + error.message)
   }
 
-  revalidatePath("/b2b/dashboard", "layout")
-  redirect("/b2b/dashboard")
+  revalidatePath("/merchant", "layout")
+  redirect("/merchant")
 }
 
 export async function signout() {
