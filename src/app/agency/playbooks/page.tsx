@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isAgencyRole, isMerchantRole, resolveTenantContext } from "@/lib/tenant/core";
 import { listAgencyOrgRows } from "@/lib/agency";
 import { normalizeAgencyTimeRange, type AgencyTimeRange } from "@/lib/agency/time-range";
+import { buildAgencyOrgDetailHref } from "@/lib/agency/navigation";
 import {
   getPlaybookQueueSummary,
   listPlaybookQueueItems,
@@ -48,10 +49,6 @@ function buildHref(pathname: string, params: Record<string, string | number | un
   }
   const query = searchParams.toString();
   return query ? `${pathname}?${query}` : pathname;
-}
-
-function detailHref(orgId: string, range: AgencyTimeRange) {
-  return buildHref(`/agency/orgs/${orgId}`, { range: range === "all" ? undefined : range });
 }
 
 function badge(kind: "recent" | "open" | "aging" | "neutral" | "plan" | "active" | "suspended" | "blocked") {
@@ -280,7 +277,7 @@ export default async function AgencyPlaybooksPage({
                     <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badge(item.status_light)}`}>
                       {item.status_light}
                     </span>
-                    <Link href={detailHref(item.org_id, range)}>
+                    <Link href={buildAgencyOrgDetailHref(item.org_id, { from: "playbooks", range, actionType: actionType || undefined, orgId: orgId || undefined, limit })}>
                       <VenusButton variant="glass" className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-white/10">
                         Ver org
                       </VenusButton>

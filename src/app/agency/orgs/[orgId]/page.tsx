@@ -14,6 +14,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isAgencyRole, isMerchantRole, resolveTenantContext } from "@/lib/tenant/core";
 import { getAgencyOrgDetail } from "@/lib/agency/org-details";
 import { normalizeAgencyTimeRange, type AgencyTimeRange } from "@/lib/agency/time-range";
+import { buildAgencyBackHref, normalizeAgencyOrigin } from "@/lib/agency/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -166,6 +167,10 @@ export default async function AgencyOrgDetailPage({
   const { orgId } = await params;
   const resolvedSearchParams = await searchParams;
   const range = normalizeAgencyTimeRange(firstValue(resolvedSearchParams.range), "all");
+  const origin = normalizeAgencyOrigin(firstValue(resolvedSearchParams.from));
+  const playbooksOrgId = firstValue(resolvedSearchParams.orgId);
+  const playbooksActionType = firstValue(resolvedSearchParams.actionType);
+  const playbooksLimit = Number(firstValue(resolvedSearchParams.limit)) || null;
   const supabase = await createClient();
   const {
     data: { user },
@@ -221,6 +226,14 @@ export default async function AgencyOrgDetailPage({
   const queueItems = detail.playbook_queue;
   const rangeText = range === "all" ? "todos os períodos" : `últimos ${rangeLabel(range)}`;
   const rangeHref = range === "all" ? undefined : range;
+  const backHref = buildAgencyBackHref({
+    from: origin,
+    range,
+    orgId: playbooksOrgId || undefined,
+    actionType: playbooksActionType || undefined,
+    limit: playbooksLimit,
+  });
+  const backLabel = origin === "billing" ? "Voltar para Billing" : origin === "playbooks" ? "Voltar para Fila" : "Voltar para Agency";
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -245,10 +258,10 @@ export default async function AgencyOrgDetailPage({
             </Text>
           </div>
           <div className="flex gap-3">
-            <Link href={buildHref("/agency", { range: rangeHref })}>
+            <Link href={backHref}>
               <VenusButton variant="outline" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold border-white/10">
                 <ArrowLeft className="w-3 h-3 mr-2" />
-                Agency
+                {backLabel}
               </VenusButton>
             </Link>
             <Link href={buildHref("/agency/billing", { range: rangeHref })}>
@@ -512,7 +525,17 @@ export default async function AgencyOrgDetailPage({
               {playbook.light_automations.map((automation) => (
                 <form key={`${org.id}-${automation.action_key}`} action={`/api/admin/orgs/${org.id}/playbook`} method="post">
                   <input type="hidden" name="action" value={automation.action_key} />
-                  <input type="hidden" name="redirect_to" value={buildHref(`/agency/orgs/${org.id}`, { range: rangeHref })} />
+                  <input
+                    type="hidden"
+                    name="redirect_to"
+                    value={buildHref(`/agency/orgs/${org.id}`, {
+                      from: origin || undefined,
+                      range: rangeHref,
+                      actionType: playbooksActionType || undefined,
+                      orgId: playbooksOrgId || undefined,
+                      limit: playbooksLimit || undefined,
+                    })}
+                  />
                   <VenusButton
                     type="submit"
                     variant="outline"

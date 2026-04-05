@@ -9,7 +9,8 @@ import { VenusButton } from "@/components/ui/VenusButton";
 import { createClient } from "@/lib/supabase/server";
 import { isAgencyRole, isMerchantRole, resolveTenantContext } from "@/lib/tenant/core";
 import { listAgencyPlaybookRows, type AgencyPlaybookRow } from "@/lib/billing/playbooks";
-import { normalizeAgencyTimeRange, type AgencyTimeRange } from "@/lib/agency/time-range";
+import { normalizeAgencyTimeRange } from "@/lib/agency/time-range";
+import { buildAgencyOrgDetailHref } from "@/lib/agency/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -94,10 +95,6 @@ function buildHref(pathname: string, params: Record<string, string | number | un
   }
   const query = searchParams.toString();
   return query ? `${pathname}?${query}` : pathname;
-}
-
-function detailHref(orgId: string, range: AgencyTimeRange) {
-  return buildHref(`/agency/orgs/${orgId}`, { range: range === "all" ? undefined : range });
 }
 
 export default async function AgencyDashboardPage({
@@ -368,7 +365,7 @@ export default async function AgencyDashboardPage({
                   </div>
 
                   <div className="flex flex-wrap gap-3">
-                        <Link href={detailHref(org.id, range)}>
+                        <Link href={buildAgencyOrgDetailHref(org.id, { from: "agency", range })}>
                           <VenusButton
                             variant="glass"
                             className="h-11 px-5 rounded-full uppercase tracking-[0.3em] text-[9px] font-bold border-white/10"

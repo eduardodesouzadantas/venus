@@ -17,6 +17,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isAgencyRole, isMerchantRole, resolveTenantContext } from "@/lib/tenant/core";
 import { listAgencyPlaybookRows, type AgencyPlaybookRow } from "@/lib/billing/playbooks";
 import { normalizeAgencyTimeRange, type AgencyTimeRange } from "@/lib/agency/time-range";
+import { buildAgencyOrgDetailHref } from "@/lib/agency/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -121,10 +122,6 @@ function buildHref(pathname: string, params: Record<string, string | number | un
   }
   const query = searchParams.toString();
   return query ? `${pathname}?${query}` : pathname;
-}
-
-function detailHref(orgId: string, range: AgencyTimeRange) {
-  return buildHref(`/agency/orgs/${orgId}`, { range: range === "all" ? undefined : range });
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
@@ -460,7 +457,7 @@ export default async function AgencyBillingPage({
                           </VenusButton>
                         </form>
                       ))}
-                      <Link href={detailHref(row.id, range)}>
+                      <Link href={buildAgencyOrgDetailHref(row.id, { from: "billing", range })}>
                         <VenusButton variant="glass" className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-white/10">
                           Ver playbook
                         </VenusButton>
@@ -499,7 +496,7 @@ export default async function AgencyBillingPage({
                     <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badge("neutral")}`}>
                       Usage source {row.usage_source}
                     </span>
-                    <Link href={detailHref(row.id, range)}>
+                    <Link href={buildAgencyOrgDetailHref(row.id, { from: "billing", range })}>
                       <VenusButton variant="glass" className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-white/10">
                         Ver detalhe
                       </VenusButton>
