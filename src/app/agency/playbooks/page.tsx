@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { VenusButton } from "@/components/ui/VenusButton";
+import { ExportActions } from "@/components/agency/ExportActions";
 import { createClient } from "@/lib/supabase/server";
 import { isAgencyRole, isMerchantRole, resolveTenantContext } from "@/lib/tenant/core";
 import { listAgencyOrgRows } from "@/lib/agency";
@@ -168,16 +169,10 @@ export default async function AgencyPlaybooksPage({
                 Billing
               </VenusButton>
             </Link>
-            <Link href={buildHref("/api/agency/playbooks/export", { ...exportParams, format: "csv" })}>
-              <VenusButton variant="outline" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold border-white/10">
-                CSV
-              </VenusButton>
-            </Link>
-            <Link href={buildHref("/api/agency/playbooks/export", { ...exportParams, format: "json" })}>
-              <VenusButton variant="outline" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold border-white/10">
-                JSON
-              </VenusButton>
-            </Link>
+            <ExportActions
+              csvHref={buildHref("/api/agency/playbooks/export", { ...exportParams, format: "csv" })}
+              jsonHref={buildHref("/api/agency/playbooks/export", { ...exportParams, format: "json" })}
+            />
           </div>
         </div>
       </div>

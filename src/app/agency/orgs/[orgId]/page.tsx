@@ -10,6 +10,7 @@ import {
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { VenusButton } from "@/components/ui/VenusButton";
+import { ExportActions } from "@/components/agency/ExportActions";
 import { createClient } from "@/lib/supabase/server";
 import { isAgencyRole, isMerchantRole, resolveTenantContext } from "@/lib/tenant/core";
 import { getAgencyOrgDetail } from "@/lib/agency/org-details";
@@ -269,16 +270,10 @@ export default async function AgencyOrgDetailPage({
                 Billing
               </VenusButton>
             </Link>
-            <Link href={buildHref(`/api/agency/orgs/${org.id}/export`, { format: "csv", range, from: origin || undefined })}>
-              <VenusButton variant="outline" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold border-white/10">
-                CSV
-              </VenusButton>
-            </Link>
-            <Link href={buildHref(`/api/agency/orgs/${org.id}/export`, { format: "json", range, from: origin || undefined })}>
-              <VenusButton variant="outline" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold border-white/10">
-                JSON
-              </VenusButton>
-            </Link>
+            <ExportActions
+              csvHref={buildHref(`/api/agency/orgs/${org.id}/export`, { format: "csv", range, from: origin || undefined })}
+              jsonHref={buildHref(`/api/agency/orgs/${org.id}/export`, { format: "json", range, from: origin || undefined })}
+            />
             <Link href={buildHref(`/agency/orgs/${org.id}`, { range: rangeHref })}>
               <VenusButton variant="solid" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold bg-white text-black">
                 <RefreshCw className="w-3 h-3 mr-2" />
