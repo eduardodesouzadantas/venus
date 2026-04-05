@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { enforceOrgHardCap } from "@/lib/billing/enforcement";
 import { extractLeadSignalsFromSavedResultPayload, findOrCreateLead } from "@/lib/leads";
 import { bumpTenantUsageDaily, resolveAppTenantOrg } from "@/lib/tenant/core";
+import { enforceTenantOperationalState } from "@/lib/tenant/enforcement";
 
 type WhatsAppHandoffBody = {
   resultId?: string;
@@ -37,6 +38,36 @@ export async function POST(request: Request) {
 
   if (!org) {
     return Response.json({ error: "Unable to resolve tenant for saved result" }, { status: 409 });
+  }
+
+  const operationalDecision = await enforceTenantOperationalState({
+    orgId: org.id,
+    operation: "whatsapp_handoff_sync",
+    actorUserId: null,
+    eventSource: "whatsapp",
+    org: {
+      id: org.id,
+      slug: org.slug,
+      status: org.status,
+      kill_switch: org.kill_switch,
+      plan_id: org.plan_id,
+    },
+    metadata: {
+      saved_result_id: body.resultId,
+      org_slug: org.slug,
+    },
+  });
+
+  if (!operationalDecision.allowed) {
+    return Response.json(
+      {
+        error: operationalDecision.message || "WhatsApp handoff blocked by tenant state",
+        tenant_blocked: true,
+        tenant_block_reason: operationalDecision.reason,
+        tenant_block_operation: operationalDecision.operation,
+      },
+      { status: 423 }
+    );
   }
 
   const hardCapDecision = await enforceOrgHardCap({

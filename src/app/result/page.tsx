@@ -26,6 +26,7 @@ function ResultDashboardContent() {
   const isSaved = searchParams.get("saved") === "true";
   const id = searchParams.get("id");
   const hardCapOperation = id?.startsWith("HARD_CAP_BLOCKED") ? id.split(":")[1] || "saved_result_generation" : null;
+  const tenantBlockReason = id?.startsWith("TENANT_BLOCKED") ? id.split(":")[1] || "tenant_not_found" : null;
   const { data: onboardingData } = useOnboarding();
 
   // State for AI Orchestration
@@ -244,6 +245,51 @@ function ResultDashboardContent() {
           <Text className="text-sm text-white/70">{description}</Text>
           <Text className="text-xs text-white/40">
             O bloqueio foi auditado no tenant core e a operação não foi executada.
+          </Text>
+          <div className="flex flex-col sm:flex-row gap-3 pt-2">
+            <Link href="/onboarding/body">
+              <VenusButton variant="solid" className="w-full sm:w-auto bg-white text-black">
+                Recomeçar consulta
+              </VenusButton>
+            </Link>
+            <Link href="/">
+              <VenusButton variant="outline" className="w-full sm:w-auto border-white/10">
+                Voltar ao início
+              </VenusButton>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (tenantBlockReason) {
+    const title =
+      tenantBlockReason === "kill_switch_on"
+        ? "Kill switch ativo"
+        : tenantBlockReason === "suspended"
+          ? "Org suspensa"
+          : tenantBlockReason === "blocked"
+            ? "Org bloqueada"
+            : "Tenant sem acesso";
+
+    const description =
+      tenantBlockReason === "kill_switch_on"
+        ? "A operação foi bloqueada porque o tenant está com kill switch ativo."
+        : tenantBlockReason === "suspended"
+          ? "A operação foi bloqueada porque a org está suspensa."
+          : tenantBlockReason === "blocked"
+            ? "A operação foi bloqueada porque a org está bloqueada."
+            : "A operação foi bloqueada porque o tenant não pôde ser validado.";
+
+    return (
+      <div className="flex flex-col min-h-screen items-center justify-center bg-black px-6 text-white">
+        <div className="w-full max-w-lg p-8 rounded-[32px] bg-red-500/10 border border-red-500/20 space-y-4">
+          <Text className="text-[10px] uppercase tracking-[0.35em] text-red-400 font-bold">Tenant operational block</Text>
+          <h1 className="text-2xl font-serif uppercase tracking-tighter">{title}</h1>
+          <Text className="text-sm text-white/70">{description}</Text>
+          <Text className="text-xs text-white/40">
+            O bloqueio foi auditado em tenant core e a operação não foi executada.
           </Text>
           <div className="flex flex-col sm:flex-row gap-3 pt-2">
             <Link href="/onboarding/body">

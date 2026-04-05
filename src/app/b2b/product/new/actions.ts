@@ -8,6 +8,7 @@ import {
   assertMerchantWritableOrgAccess,
   bumpTenantUsageDaily,
 } from "@/lib/tenant/core"
+import { enforceTenantOperationalState } from "@/lib/tenant/enforcement"
 import { enforceOrgHardCap } from "@/lib/billing/enforcement"
 
 export async function createProduct(formData: FormData) {
@@ -25,6 +26,22 @@ export async function createProduct(formData: FormData) {
   }
 
   const { user, org } = merchantOrg
+
+  const operationalDecision = await enforceTenantOperationalState({
+    orgId: org.id,
+    operation: "catalog_product_creation",
+    actorUserId: user.id,
+    eventSource: "catalog",
+    org,
+    metadata: {
+      user_id: user.id,
+      org_slug: org.slug,
+    },
+  })
+
+  if (!operationalDecision.allowed) {
+    redirect(`/b2b/product/new?error=${encodeURIComponent(`tenant_blocked:${operationalDecision.reason || "tenant_not_found"}`)}`)
+  }
 
   const hardCapDecision = await enforceOrgHardCap({
     orgId: org.id,

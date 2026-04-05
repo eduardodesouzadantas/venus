@@ -5,11 +5,13 @@ import { OnboardingData } from "@/types/onboarding";
 import { Product } from "@/lib/catalog";
 import { ResultPayload } from "@/types/result";
 import { enforceOrgHardCap } from "@/lib/billing/enforcement";
+import { enforceTenantOperationalState, type TenantOperationalOrgSnapshot } from "@/lib/tenant/enforcement";
 
 export interface OpenAIRecommendationHardCapContext {
   orgId?: string | null;
   orgSlug?: string | null;
   eventSource?: string | null;
+  org?: TenantOperationalOrgSnapshot | null;
 }
 
 export async function generateOpenAIRecommendation(
@@ -17,6 +19,22 @@ export async function generateOpenAIRecommendation(
   catalog: Product[],
   hardCapContext?: OpenAIRecommendationHardCapContext
 ): Promise<ResultPayload> {
+  if (hardCapContext?.orgId) {
+    const operationalDecision = await enforceTenantOperationalState({
+      orgId: hardCapContext.orgId,
+      operation: "ai_recommendation_generation",
+      eventSource: hardCapContext.eventSource || "ai",
+      org: hardCapContext.org || null,
+      metadata: {
+        org_slug: hardCapContext.orgSlug || null,
+      },
+    });
+
+    if (!operationalDecision.allowed) {
+      throw new Error(`TENANT_BLOCKED:${operationalDecision.reason || "tenant_not_found"}`);
+    }
+  }
+
   if (hardCapContext?.orgId) {
     const hardCapDecision = await enforceOrgHardCap({
       orgId: hardCapContext.orgId,

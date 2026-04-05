@@ -118,6 +118,13 @@ export async function generateEngineResult(
     orgId?: string | null;
     orgSlug?: string | null;
     eventSource?: string | null;
+    org?: {
+      id: string;
+      slug: string;
+      status: "active" | "suspended" | "blocked";
+      kill_switch: boolean;
+      plan_id: string | null;
+    } | null;
   }
 ): Promise<ResultPayload> {
   const products = await getB2BProducts();
@@ -126,7 +133,7 @@ export async function generateEngineResult(
     const aiPayload = await generateOpenAIRecommendation(userData, products, hardCapContext);
     return aiPayload;
   } catch (err) {
-    if (err instanceof Error && err.message.startsWith("HARD_CAP_BLOCKED:")) {
+    if (err instanceof Error && (err.message.startsWith("HARD_CAP_BLOCKED:") || err.message.startsWith("TENANT_BLOCKED:"))) {
       throw err;
     }
     console.error("OpenAI falhou. Usando Graceful Degradation Engine. Erro: ", err);
@@ -153,10 +160,17 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
         orgId: resolvedTenant.org.id,
         orgSlug: resolvedTenant.org.slug,
         eventSource: "app",
+        org: {
+          id: resolvedTenant.org.id,
+          slug: resolvedTenant.org.slug,
+          status: resolvedTenant.org.status,
+          kill_switch: resolvedTenant.org.kill_switch,
+          plan_id: resolvedTenant.org.plan_id,
+        },
       });
     } catch (err) {
-      if (err instanceof Error && err.message.startsWith("HARD_CAP_BLOCKED:")) {
-        console.warn("[BILLING] saved result generation blocked by hard cap", err.message);
+      if (err instanceof Error && (err.message.startsWith("HARD_CAP_BLOCKED:") || err.message.startsWith("TENANT_BLOCKED:"))) {
+        console.warn("[BILLING] saved result generation blocked by enforcement", err.message);
         return err.message;
       }
       throw err;
