@@ -26,6 +26,11 @@ export interface OnboardingData {
     bodyPhoto: string; // Base64 or ObjectURL string stub
     skipped: boolean;
   };
+  contact?: {
+    name: string;
+    phone: string;
+    email: string;
+  };
 }
 
 export const defaultOnboardingData: OnboardingData = {

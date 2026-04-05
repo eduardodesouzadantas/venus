@@ -1,8 +1,53 @@
 export interface LookItem {
   id: string;
   photoUrl: string;
+  images?: string[]; // Multiple images support
   brand: string;
   name: string;
+  price?: string;
+  
+  // High-conversion / AI-enriched fields
+  premiumTitle?: string;
+  baseDescription?: string;
+  persuasiveDescription?: string;
+  impactLine?: string;
+  functionalBenefit?: string;
+  socialEffect?: string;
+  contextOfUse?: string;
+  
+  // AI-ready / Enrichment metadata
+  styleTags?: string[];
+  categoryTags?: string[];
+  fitTags?: string[];
+  colorTags?: string[];
+  targetProfile?: string[];
+  useCases?: string[];
+  
+  category?: string;
+  useCase?: string;
+  relatedProducts?: string[]; // IDs of related products
+  tryOnUrl?: string; // AI generated try-on image
+  
+  imageRoles?: Record<string, "front" | "back" | "side" | "detail" | "texture">; // Map photoUrl or image array indices to roles
+  bundleCandidates?: string[];
+  authorityRationale?: string;
+  conversionCopy?: string;
+  
+  // Seller Helpers
+  sellerSuggestions?: {
+    pairsBestWith: string[];
+    idealFor: string;
+    buyerProfiles: string[];
+    bestContext: string;
+  };
+  
+  // OPTIMIZATION & SOCIAL PROOF
+  engagementScore?: number;
+  conversionRate?: number;
+  isTrending?: boolean;
+  isBestseller?: boolean;
+  timesViewed?: number;
+  timesAdded?: number;
 }
 
 export interface LookData {
@@ -14,6 +59,17 @@ export interface LookData {
   accessories: string[];
   explanation: string;
   whenToWear: string;
+  
+  // High Ticket Bundle
+  bundlePrice?: string;
+  bundleDescription?: string;
+  bundleSavings?: string;
+  tryOnUrl?: string; // AI generated try-on for the full look
+  
+  // OPTIMIZATION & SOCIAL PROOF
+  popularityRank?: number;
+  isDailyPick?: boolean;
+  engagementScore?: number;
 }
 
 export interface ResultPayload {
