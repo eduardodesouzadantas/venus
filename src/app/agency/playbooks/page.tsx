@@ -86,6 +86,12 @@ function labelForAction(value: PlaybookQueueActionType) {
   }
 }
 
+function statusLightLabel(value: "recent" | "open" | "aging") {
+  if (value === "recent") return "Recente";
+  if (value === "open") return "Em aberto";
+  return "Antigo";
+}
+
 export default async function AgencyPlaybooksPage({
   searchParams,
 }: {
@@ -179,10 +185,10 @@ export default async function AgencyPlaybooksPage({
 
       <div className="px-6 py-8 space-y-8">
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-          <SummaryCard label="Itens" value={summary.total_items.toString()} />
+          <SummaryCard label="Na janela" value={summary.total_items.toString()} />
           <SummaryCard label="Recentes" value={summary.recent_items.toString()} />
-          <SummaryCard label="Open" value={summary.open_items.toString()} />
-          <SummaryCard label="Aging" value={summary.aging_items.toString()} />
+          <SummaryCard label="Em aberto" value={summary.open_items.toString()} />
+          <SummaryCard label="Antigos" value={summary.aging_items.toString()} />
         </div>
 
     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -251,7 +257,7 @@ export default async function AgencyPlaybooksPage({
 
         <section className="space-y-4">
           <Heading as="h2" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">
-            Itens da fila
+            Itens na janela
           </Heading>
           {items.length > 0 ? (
             <div className="space-y-3">
@@ -270,7 +276,7 @@ export default async function AgencyPlaybooksPage({
                   </div>
                   <div className="flex flex-wrap gap-2 items-center">
                     <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badge(item.status_light)}`}>
-                      {item.status_light}
+                      {statusLightLabel(item.status_light)}
                     </span>
                     <Link href={buildAgencyOrgDetailHref(item.org_id, { from: "playbooks", range, actionType: actionType || undefined, orgId: orgId || undefined, limit })}>
                       <VenusButton variant="glass" className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-white/10">

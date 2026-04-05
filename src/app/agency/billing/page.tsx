@@ -287,8 +287,8 @@ export default async function AgencyBillingPage({
           <Metric label="Ativas" value={activeOrgs.toString()} />
           <Metric label="Alto risco" value={highRiskOrgs.toString()} />
           <Metric label="Uso estimado hoje" value={formatCurrency(estimatedToday)} />
-          <Metric label="Uso estimado total" value={formatCurrency(estimatedTotal)} />
-          <Metric label="Último uso" value={latestUsageDate || "Sem dados"} />
+          <Metric label="Uso estimado na janela" value={formatCurrency(estimatedTotal)} />
+          <Metric label="Ultima atividade na janela" value={latestUsageDate || "Sem dados"} />
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -307,7 +307,7 @@ export default async function AgencyBillingPage({
         <section className="space-y-4">
           <div className="space-y-1">
             <Heading as="h2" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">
-              Orgs com leitura real de uso e custo
+              Orgs com leitura real na janela
             </Heading>
             <Text className="text-sm text-white/40">
               Custo estimado é heurístico e explícito, para base de controle e limites futuros.
@@ -352,15 +352,15 @@ export default async function AgencyBillingPage({
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 min-w-[280px]">
                       <Metric label="Membros" value={row.total_members.toString()} />
-                      <Metric label="Produtos" value={row.total_products.toString()} />
-                      <Metric label="Leads" value={row.total_leads.toString()} />
-                      <Metric label="Saved" value={row.total_saved_results.toString()} />
+                      <Metric label="Produtos na janela" value={row.total_products.toString()} />
+                      <Metric label="Leads na janela" value={row.total_leads.toString()} />
+                      <Metric label="Saved results na janela" value={row.total_saved_results.toString()} />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
                     <div className="p-4 rounded-3xl bg-black/40 border border-white/5 space-y-1">
-                      <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Uso diário</Text>
+                      <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Uso do dia</Text>
                       <Heading as="h4" className="text-xl tracking-tighter">
                         {usage || "Sem dados"}
                       </Heading>
@@ -369,7 +369,7 @@ export default async function AgencyBillingPage({
                       </Text>
                     </div>
                     <div className="p-4 rounded-3xl bg-black/40 border border-white/5 space-y-1">
-                      <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">WhatsApp</Text>
+                      <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">WhatsApp na janela</Text>
                       <Heading as="h4" className="text-xl tracking-tighter">
                         {row.total_whatsapp_messages === null || row.total_whatsapp_conversations === null
                           ? "Sem dados"
@@ -389,7 +389,7 @@ export default async function AgencyBillingPage({
                       </Text>
                     </div>
                     <div className="p-4 rounded-3xl bg-black/40 border border-white/5 space-y-1">
-                      <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Custo total</Text>
+                      <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Custo acumulado na janela</Text>
                       <Heading as="h4" className="text-xl tracking-tighter">
                         {totalCost}
                       </Heading>

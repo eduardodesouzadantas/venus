@@ -210,7 +210,7 @@ export default async function AgencyDashboardPage({
           <StatCard icon={<ShieldCheck className="w-5 h-5 text-red-400" />} label="Bloqueadas / Suspensas" value={suspendedOrBlocked.toString()} />
           <StatCard icon={<Zap className="w-5 h-5 text-[#D4AF37]" />} label="Kill switch ON" value={killSwitchOn.toString()} />
           <StatCard icon={<DollarSign className="w-5 h-5 text-[#D4AF37]" />} label="Produtos" value={totalProducts.toString()} />
-          <StatCard icon={<MessageSquare className="w-5 h-5 text-[#D4AF37]" />} label="Leads / Saved" value={`${totalLeads} / ${totalSavedResults}`} />
+          <StatCard icon={<MessageSquare className="w-5 h-5 text-[#D4AF37]" />} label="Leads / Saved results" value={`${totalLeads} / ${totalSavedResults}`} />
         </div>
 
         <section className="space-y-4">
@@ -333,7 +333,7 @@ export default async function AgencyDashboardPage({
                       <Metric label="Membros" value={org.total_members} />
                       <Metric label="Produtos" value={org.total_products} />
                       <Metric label="Leads" value={org.total_leads} />
-                      <Metric label="Saved" value={org.total_saved_results} />
+                      <Metric label="Saved results" value={org.total_saved_results} />
                     </div>
                   </div>
 

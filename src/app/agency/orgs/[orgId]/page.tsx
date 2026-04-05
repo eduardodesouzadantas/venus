@@ -623,7 +623,7 @@ export default async function AgencyOrgDetailPage({
         </SectionShell>
 
         <SectionShell
-          title="Billing recente"
+          title="Billing na janela"
           description={`Últimos registros diários do ledger operacional da org na janela ${rangeText}.`}
         >
           {usageRows.length > 0 ? (
@@ -653,7 +653,7 @@ export default async function AgencyOrgDetailPage({
           )}
         </SectionShell>
 
-        <SectionShell title="Leads recentes" description={`Leads reais vinculados à org_id, filtrados em ${rangeText}, com status e intent score.`}>
+        <SectionShell title="Leads na janela" description={`Leads reais vinculados à org_id, filtrados em ${rangeText}, com status e intent score.`}>
           {detail.leads.length > 0 ? (
             <div className="space-y-3">
               {detail.leads.map((lead) => (
@@ -685,7 +685,7 @@ export default async function AgencyOrgDetailPage({
           )}
         </SectionShell>
 
-        <SectionShell title="Produtos recentes" description={`Catálogo canônico vinculado à org, filtrado em ${rangeText}. Totais consolidados permanecem no resumo acima.`}>
+        <SectionShell title="Produtos na janela" description={`Catálogo canônico vinculado à org, filtrado em ${rangeText}. Totais consolidados permanecem no resumo acima.`}>
           {detail.products.length > 0 ? (
             <div className="space-y-3">
               {detail.products.map((product) => (
@@ -711,7 +711,7 @@ export default async function AgencyOrgDetailPage({
           )}
         </SectionShell>
 
-        <SectionShell title="Saved results recentes" description={`Resultados persistidos da jornada com contexto canônico, filtrados em ${rangeText}.`}>
+        <SectionShell title="Saved results na janela" description={`Resultados persistidos da jornada com contexto canônico, filtrados em ${rangeText}.`}>
           {detail.saved_results.length > 0 ? (
             <div className="space-y-3">
               {detail.saved_results.map((result) => (
@@ -745,7 +745,7 @@ export default async function AgencyOrgDetailPage({
           )}
         </SectionShell>
 
-        <SectionShell title="WhatsApp" description={`Resumo operacional do inbox e das conversas tenant-aware. Quando disponível, a atividade recente respeita ${rangeText}.`}>
+        <SectionShell title="WhatsApp na janela" description={`Resumo operacional do inbox e das conversas tenant-aware. Quando disponível, a atividade recente respeita ${rangeText}.`}>
           {detail.whatsapp ? (
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -837,7 +837,7 @@ export default async function AgencyOrgDetailPage({
           )}
         </SectionShell>
 
-        <SectionShell title="Atividade recente" description={`Eventos da org filtrados em ${rangeText}, com metadata resumida quando útil.`}>
+        <SectionShell title="Atividade na janela" description={`Eventos da org filtrados em ${rangeText}, com metadata resumida quando útil.`}>
           {detail.events.length > 0 ? (
             <div className="space-y-3">
               {detail.events.map((event) => (
