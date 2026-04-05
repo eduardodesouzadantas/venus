@@ -104,6 +104,38 @@ export interface AgencyOrgDetail {
   playbook_queue: AgencyPlaybookQueueItem[];
 }
 
+export interface AgencyOrgExportSummary {
+  org_id: string;
+  org_name: string;
+  org_slug: string;
+  status: string;
+  plan_id: string | null;
+  kill_switch: boolean;
+  total_members: number;
+  total_products: number;
+  total_leads: number;
+  total_saved_results: number;
+  total_whatsapp_conversations: number | null;
+  total_whatsapp_messages: number | null;
+  usage_date: string | null;
+  last_activity_at: string | null;
+  estimated_cost_today_cents: number;
+  estimated_cost_total_cents: number;
+  usage_health: string | null;
+  billing_risk: string | null;
+  overall_status: string | null;
+  guidance_level: string | null;
+  recommended_action: string | null;
+  suggested_plan_if_any: string | null;
+  playbook_title: string | null;
+  playbook_summary: string | null;
+  recent_events_count: number;
+  recent_queue_count: number;
+  recent_leads_count: number;
+  recent_products_count: number;
+  recent_saved_results_count: number;
+}
+
 function normalize(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -430,5 +462,49 @@ export async function getAgencyOrgDetail(orgId: string, range: AgencyTimeRange =
     },
     events,
     playbook_queue: await getAgencyOrgPlaybookQueue(org.id, range),
+  };
+}
+
+export async function getAgencyOrgExportDetail(orgId: string, range: AgencyTimeRange = "all") {
+  const detail = await getAgencyOrgDetail(orgId, range);
+  if (!detail) {
+    return null;
+  }
+
+  const usageRow = detail.billing.recent_usage_rows[0] || null;
+
+  return {
+    detail,
+    summary: {
+      org_id: detail.org.id,
+      org_name: detail.org.name,
+      org_slug: detail.org.slug,
+      status: detail.org.status,
+      plan_id: detail.org.plan_id,
+      kill_switch: detail.org.kill_switch,
+      total_members: detail.org.total_members,
+      total_products: detail.org.total_products,
+      total_leads: detail.org.total_leads,
+      total_saved_results: detail.org.total_saved_results,
+      total_whatsapp_conversations: detail.whatsapp.total_conversations,
+      total_whatsapp_messages: detail.whatsapp.total_messages,
+      usage_date: usageRow?.usage_date || null,
+      last_activity_at: detail.org.last_activity_at,
+      estimated_cost_today_cents: detail.org.estimated_cost_today_cents,
+      estimated_cost_total_cents: detail.org.estimated_cost_total_cents,
+      usage_health: detail.billing.summary?.usage_health ?? null,
+      billing_risk: detail.billing.summary?.billing_risk ?? null,
+      overall_status: detail.billing.summary?.soft_cap_summary.overall_status ?? null,
+      guidance_level: detail.guidance.guidance_level,
+      recommended_action: detail.guidance.recommended_action,
+      suggested_plan_if_any: detail.playbook.suggested_plan_if_any,
+      playbook_title: detail.playbook.title,
+      playbook_summary: detail.playbook.summary,
+      recent_events_count: detail.events.length,
+      recent_queue_count: detail.playbook_queue.length,
+      recent_leads_count: detail.leads.length,
+      recent_products_count: detail.products.length,
+      recent_saved_results_count: detail.saved_results.length,
+    } satisfies AgencyOrgExportSummary,
   };
 }
