@@ -364,7 +364,7 @@ export async function getOrgUsageSummary(orgId: string): Promise<OrgUsageSummary
   };
 }
 
-export async function getOrgBillingSummary(orgId: string): Promise<OrgBillingSummary | null> {
+export async function getOrgBillingSummary(orgId: string): Promise<AgencyBillingRow | null> {
   const rows = await listAgencyBillingRows();
   return rows.find((item) => item.id === normalize(orgId)) || null;
 }

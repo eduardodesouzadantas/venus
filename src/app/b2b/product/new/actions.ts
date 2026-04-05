@@ -8,6 +8,7 @@ import {
   assertMerchantWritableOrgAccess,
   bumpTenantUsageDaily,
 } from "@/lib/tenant/core"
+import { enforceOrgHardCap } from "@/lib/billing/enforcement"
 
 export async function createProduct(formData: FormData) {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
@@ -24,6 +25,21 @@ export async function createProduct(formData: FormData) {
   }
 
   const { user, org } = merchantOrg
+
+  const hardCapDecision = await enforceOrgHardCap({
+    orgId: org.id,
+    operation: "catalog_product_creation",
+    actorUserId: user.id,
+    eventSource: "catalog",
+    metadata: {
+      user_id: user.id,
+      org_slug: org.slug,
+    },
+  })
+
+  if (!hardCapDecision.allowed) {
+    redirect(`/b2b/product/new?error=${encodeURIComponent(`hard_cap:${hardCapDecision.metric || "products"}`)}`)
+  }
 
   const payload = {
     name: formData.get("name"),

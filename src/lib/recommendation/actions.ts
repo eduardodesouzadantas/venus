@@ -6,6 +6,7 @@ import { getB2BProducts, Product } from "@/lib/catalog";
 import { generateOpenAIRecommendation } from "@/lib/ai";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { extractLeadSignalsFromSavedResultPayload, findOrCreateLead } from "@/lib/leads";
+import { enforceOrgHardCap } from "@/lib/billing/enforcement";
 import { bumpTenantUsageDaily, resolveAppTenantOrg } from "@/lib/tenant/core";
 
 function generateHeuristicFallback(userData: OnboardingData, products: Product[]): ResultPayload {
@@ -128,8 +129,6 @@ export async function generateEngineResult(userData: OnboardingData): Promise<Re
 // ACTION FIM-A-FIM: Gera o resultado e persite uma Sessão Anônima no DB retornando o ID
 // --------------------------------------------------------------------------------------
 export async function processAndPersistLead(userData: OnboardingData): Promise<string> {
-  const result = await generateEngineResult(userData);
-  
   try {
     const supabase = createAdminClient();
     const resolvedTenant = await resolveAppTenantOrg(supabase);
@@ -138,7 +137,24 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
       console.warn("[SAVED_RESULTS] unable to resolve canonical tenant for persisted result");
       return "MOCK_DB_FAIL";
     }
-    
+
+    const hardCapDecision = await enforceOrgHardCap({
+      orgId: resolvedTenant.org.id,
+      operation: "saved_result_generation",
+      actorUserId: null,
+      eventSource: "app",
+      metadata: {
+        source: resolvedTenant.source,
+      },
+    });
+
+    if (!hardCapDecision.allowed) {
+      console.warn("[BILLING] saved result generation blocked by hard cap", hardCapDecision);
+      return `HARD_CAP_BLOCKED:${hardCapDecision.metric || "saved_result_generation"}`;
+    }
+
+    const result = await generateEngineResult(userData);
+
     // Clone userData stripping massive base64 camera blobs to prevent Vercel limits and Supabase JSON overflow
     const safeUserData = { ...userData };
     safeUserData.scanner = {

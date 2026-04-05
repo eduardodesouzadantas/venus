@@ -4,7 +4,23 @@ import { GlassContainer } from "@/components/ui/GlassContainer";
 import { VenusButton } from "@/components/ui/VenusButton";
 import { createProduct } from "./actions";
 
+function formatErrorMessage(error?: string) {
+  if (!error) return null;
+
+  if (error.startsWith("hard_cap:")) {
+    const metric = error.split(":")[1] || "";
+    if (metric === "products") {
+      return "Limite server-side do plano atingido para produtos.";
+    }
+    return "Limite server-side do plano atingido.";
+  }
+
+  return error;
+}
+
 export default function ProductNewPage({ searchParams }: { searchParams: { error?: string } }) {
+  const errorMessage = formatErrorMessage(searchParams?.error);
+
   return (
     <div className="flex flex-col min-h-screen p-6 pb-20">
       <div className="flex items-center justify-between mb-8">
@@ -13,9 +29,9 @@ export default function ProductNewPage({ searchParams }: { searchParams: { error
       </div>
       
       <GlassContainer>
-        {searchParams?.error && (
+        {errorMessage && (
           <div className="p-3 mb-4 bg-red-500/10 text-red-500 text-xs rounded-md border border-red-500/20">
-            {searchParams.error}
+            {errorMessage}
           </div>
         )}
         

@@ -5,7 +5,6 @@ import Link from "next/link";
 import { Text } from "@/components/ui/Text";
 import { VenusButton } from "@/components/ui/VenusButton";
 import { LookCardSwipeable } from "@/components/ui/LookCardSwipeable";
-import { AccordionList } from "@/components/ui/AccordionList";
 import { SavedProfileToast } from "@/components/ui/SavedProfileToast";
 import { SaveResultsModal } from "@/components/onboarding/SaveResultsModal";
 import { SocialShareActions } from "@/components/ui/SocialShareActions";
@@ -17,7 +16,7 @@ import type { BehaviorStatsSummary } from "@/lib/analytics/tracker";
 import type { UserStats } from "@/lib/ai/orchestrator";
 import type { LookData, ResultPayload } from "@/types/result";
 
-import { CheckCircle2, UserCircle2, Watch, ArrowRight, ChevronRight, ShoppingBag, Sparkles, Target, Zap, LayoutGrid, Star, PackageCheck, History, BrainCircuit, Activity, Bookmark } from "lucide-react";
+import { Watch, ArrowRight, Sparkles, Target, LayoutGrid, Star, PackageCheck, History, BrainCircuit, Activity, Bookmark } from "lucide-react";
 import { getEngagedIds, getStatsSummary } from "@/lib/analytics/tracker";
 import { orchestrateExperience } from "@/lib/ai/orchestrator";
 import { useSearchParams } from "next/navigation";
@@ -26,6 +25,7 @@ function ResultDashboardContent() {
   const searchParams = useSearchParams();
   const isSaved = searchParams.get("saved") === "true";
   const id = searchParams.get("id");
+  const hardCapOperation = id?.startsWith("HARD_CAP_BLOCKED") ? id.split(":")[1] || "saved_result_generation" : null;
   const { data: onboardingData } = useOnboarding();
 
   // State for AI Orchestration
@@ -224,6 +224,43 @@ function ResultDashboardContent() {
     window.open(url, "_blank", "noopener,noreferrer");
     setTimeout(() => setIsHandoffLoading(false), 1200);
   };
+
+  if (hardCapOperation) {
+    const title =
+      hardCapOperation === "catalog_product_creation"
+        ? "Limite do catálogo atingido"
+        : "Limite de geração atingido";
+
+    const description =
+      hardCapOperation === "catalog_product_creation"
+        ? "A criação deste produto foi bloqueada porque a org atingiu o limite server-side do plano atual."
+        : "A geração deste dossiê foi bloqueada porque a org atingiu o limite server-side do plano atual.";
+
+    return (
+      <div className="flex flex-col min-h-screen items-center justify-center bg-black px-6 text-white">
+        <div className="w-full max-w-lg p-8 rounded-[32px] bg-red-500/10 border border-red-500/20 space-y-4">
+          <Text className="text-[10px] uppercase tracking-[0.35em] text-red-400 font-bold">Hard cap server-side</Text>
+          <h1 className="text-2xl font-serif uppercase tracking-tighter">{title}</h1>
+          <Text className="text-sm text-white/70">{description}</Text>
+          <Text className="text-xs text-white/40">
+            O bloqueio foi auditado no tenant core e a operação não foi executada.
+          </Text>
+          <div className="flex flex-col sm:flex-row gap-3 pt-2">
+            <Link href="/onboarding/body">
+              <VenusButton variant="solid" className="w-full sm:w-auto bg-white text-black">
+                Recomeçar consulta
+              </VenusButton>
+            </Link>
+            <Link href="/">
+              <VenusButton variant="outline" className="w-full sm:w-auto border-white/10">
+                Voltar ao início
+              </VenusButton>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!id) {
      return (
