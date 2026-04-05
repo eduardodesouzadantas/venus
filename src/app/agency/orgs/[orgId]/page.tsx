@@ -796,6 +796,41 @@ export default async function AgencyOrgDetailPage({
               ) : (
                 <EmptyState title="Sem conversas recentes" description="Não há conversas recentes para exibir nessa org." />
               )}
+
+              {detail.whatsapp.historical ? (
+                <div className="p-4 rounded-[24px] bg-white/[0.02] border border-white/5 space-y-3">
+                  <div className="space-y-1">
+                    <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">
+                      Histórico total de WhatsApp
+                    </Text>
+                    <Text className="text-sm text-white/45">
+                      Acumulado histórico desde o início, separado da janela operacional ativa.
+                    </Text>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <SimpleCard
+                      label="Conversas históricas"
+                      value={formatNumber(detail.whatsapp.historical.total_conversations_count)}
+                      subvalue="acumulado histórico"
+                    />
+                    <SimpleCard
+                      label="Mensagens históricas"
+                      value={formatNumber(detail.whatsapp.historical.total_messages_count)}
+                      subvalue="acumulado histórico"
+                    />
+                    <SimpleCard
+                      label="Primeira atividade"
+                      value={formatDate(detail.whatsapp.historical.first_activity_at)}
+                      subvalue="desde o início"
+                    />
+                    <SimpleCard
+                      label="Última atividade histórica"
+                      value={formatDate(detail.whatsapp.historical.last_activity_at)}
+                      subvalue="acumulado histórico"
+                    />
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : (
             <EmptyState title="Sem dados de WhatsApp" description="Não foi possível carregar o resumo do WhatsApp para esta org." />

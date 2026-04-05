@@ -89,6 +89,14 @@ export interface AgencyOrgWhatsAppSummary {
   latest_whatsapp_activity_at: string | null;
   available: boolean;
   recent_conversations: AgencyOrgWhatsAppConversationRow[];
+  historical: AgencyOrgWhatsAppHistoricalSummary | null;
+}
+
+export interface AgencyOrgWhatsAppHistoricalSummary {
+  total_conversations_count: number | null;
+  total_messages_count: number | null;
+  first_activity_at: string | null;
+  last_activity_at: string | null;
 }
 
 export interface AgencyOrgDetail {
@@ -117,6 +125,10 @@ export interface AgencyOrgExportSummary {
   total_saved_results: number;
   recent_whatsapp_conversations_count: number | null;
   recent_whatsapp_messages_count: number | null;
+  historical_whatsapp_conversations_count: number | null;
+  historical_whatsapp_messages_count: number | null;
+  historical_whatsapp_first_activity_at: string | null;
+  historical_whatsapp_last_activity_at: string | null;
   usage_date: string | null;
   last_activity_at: string | null;
   estimated_cost_today_cents: number;
@@ -396,6 +408,20 @@ export async function getAgencyOrgWhatsAppSummary(orgId: string, range: AgencyTi
     .order("created_at", { ascending: false })
     .limit(1);
 
+  const earliestConversationQuery = admin
+    .from("whatsapp_conversations")
+    .select("created_at")
+    .eq("org_slug", org.slug)
+    .order("created_at", { ascending: true })
+    .limit(1);
+
+  const earliestMessageQuery = admin
+    .from("whatsapp_messages")
+    .select("created_at")
+    .eq("org_slug", org.slug)
+    .order("created_at", { ascending: true })
+    .limit(1);
+
   if (window.dateFrom) {
     conversationQuery.gte("created_at", `${window.dateFrom}T00:00:00`);
     conversationCountQuery.gte("created_at", `${window.dateFrom}T00:00:00`);
@@ -403,11 +429,13 @@ export async function getAgencyOrgWhatsAppSummary(orgId: string, range: AgencyTi
     latestMessageQuery.gte("created_at", `${window.dateFrom}T00:00:00`);
   }
 
-  const [conversationResult, conversationCountResult, messageCountResult, latestMessageResult] = await Promise.all([
+  const [conversationResult, conversationCountResult, messageCountResult, latestMessageResult, earliestConversationResult, earliestMessageResult] = await Promise.all([
     conversationQuery,
     conversationCountQuery,
     messageCountQuery,
     latestMessageQuery,
+    earliestConversationQuery,
+    earliestMessageQuery,
   ]);
 
   const recentConversations = conversationResult.error
@@ -441,12 +469,35 @@ export async function getAgencyOrgWhatsAppSummary(orgId: string, range: AgencyTi
       return current;
     }, null);
 
+  const earliestConversationActivity = earliestConversationResult.error ? null : earliestConversationResult.data?.[0]?.created_at || null;
+  const earliestMessageActivity = earliestMessageResult.error ? null : earliestMessageResult.data?.[0]?.created_at || null;
+  const historicalFirstActivityAt = [earliestConversationActivity, earliestMessageActivity]
+    .filter((value): value is string => Boolean(value))
+    .reduce<string | null>((current, candidate) => {
+      if (!current || candidate < current) return candidate;
+      return current;
+    }, null);
+
+  const historical = {
+    total_conversations_count: org.total_whatsapp_conversations,
+    total_messages_count: org.total_whatsapp_messages,
+    first_activity_at: historicalFirstActivityAt,
+    last_activity_at: org.last_activity_at,
+  };
+
+  const hasHistoricalData =
+    historical.total_conversations_count !== null ||
+    historical.total_messages_count !== null ||
+    historical.first_activity_at !== null ||
+    historical.last_activity_at !== null;
+
   return {
     recent_conversations_count: recentConversationsCount,
     recent_messages_count: recentMessagesCount,
     latest_whatsapp_activity_at: latestWhatsAppActivityAt,
     available: !conversationResult.error && !conversationCountResult.error && !messageCountResult.error && !latestMessageResult.error,
     recent_conversations: recentConversations,
+    historical: hasHistoricalData ? historical : null,
   };
 }
 
@@ -487,6 +538,7 @@ export async function getAgencyOrgDetail(orgId: string, range: AgencyTimeRange =
       latest_whatsapp_activity_at: null,
       available: false,
       recent_conversations: [],
+      historical: null,
     },
     events,
     playbook_queue: await getAgencyOrgPlaybookQueue(org.id, range),
@@ -516,6 +568,10 @@ export async function getAgencyOrgExportDetail(orgId: string, range: AgencyTimeR
       total_saved_results: detail.org.total_saved_results,
       recent_whatsapp_conversations_count: detail.whatsapp.recent_conversations_count,
       recent_whatsapp_messages_count: detail.whatsapp.recent_messages_count,
+      historical_whatsapp_conversations_count: detail.whatsapp.historical?.total_conversations_count ?? null,
+      historical_whatsapp_messages_count: detail.whatsapp.historical?.total_messages_count ?? null,
+      historical_whatsapp_first_activity_at: detail.whatsapp.historical?.first_activity_at ?? null,
+      historical_whatsapp_last_activity_at: detail.whatsapp.historical?.last_activity_at ?? null,
       usage_date: usageRow?.usage_date || null,
       last_activity_at: detail.org.last_activity_at,
       estimated_cost_today_cents: detail.org.estimated_cost_today_cents,
