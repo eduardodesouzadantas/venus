@@ -59,6 +59,40 @@ function parseLeadFollowUpFilter(value: string): "all" | "overdue" | "today" | "
   return "all";
 }
 
+function leadStatusLabel(value: string) {
+  switch (value) {
+    case "new":
+      return "Novo";
+    case "engaged":
+      return "Engajado";
+    case "qualified":
+      return "Qualificado";
+    case "offer_sent":
+      return "Oferta enviada";
+    case "won":
+      return "Ganho";
+    case "lost":
+      return "Perdido";
+    default:
+      return "Todos os estágios";
+  }
+}
+
+function leadFollowUpLabel(value: string) {
+  switch (value) {
+    case "overdue":
+      return "Vencidos";
+    case "today":
+      return "Hoje";
+    case "with_follow_up":
+      return "Com follow-up";
+    case "without_follow_up":
+      return "Sem follow-up";
+    default:
+      return "Todos os follow-ups";
+  }
+}
+
 function classifyLeadFollowUp(value: string | null | undefined, now: Date) {
   if (!value) {
     return "without_follow_up" as const;
@@ -323,6 +357,10 @@ export default async function AgencyOrgDetailPage({
     return rightInteraction - leftInteraction;
   });
   const leadSummary = detail.lead_summary;
+  const activeLeadFilterParts = [
+    leadStatusFilter !== "all" ? `estágio ${leadStatusLabel(leadStatusFilter)}` : null,
+    leadFollowUpFilter !== "all" ? `follow-up ${leadFollowUpLabel(leadFollowUpFilter)}` : null,
+  ].filter((value): value is string => Boolean(value));
   const rangeText = range === "all" ? "todos os períodos" : `últimos ${rangeLabel(range)}`;
   const rangeHref = range === "all" ? undefined : range;
   const backHref = buildAgencyBackHref({
@@ -792,6 +830,18 @@ export default async function AgencyOrgDetailPage({
                   </span>
                 ))}
               </div>
+              {activeLeadFilterParts.length > 0 ? (
+                <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.3em] text-white/40">
+                  <span className="px-3 py-1 rounded-full border bg-white/5 text-white/70 border-white/10">
+                    Filtro ativo
+                  </span>
+                  {activeLeadFilterParts.map((part) => (
+                    <span key={part} className="px-3 py-1 rounded-full border bg-white/5 text-white/70 border-white/10">
+                      {part}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
               <form method="get" className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
                 <input type="hidden" name="range" value={range === "all" ? "all" : range} />
                 <input type="hidden" name="from" value={origin || "agency"} />

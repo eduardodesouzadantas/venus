@@ -8,6 +8,8 @@ export interface AgencyNavigationContext {
   actionType?: string | null;
   orgId?: string | null;
   limit?: number | null;
+  leadStatus?: string | null;
+  followUp?: string | null;
 }
 
 function appendIfPresent(searchParams: URLSearchParams, key: string, value: string | number | null | undefined) {
@@ -32,6 +34,8 @@ export function buildAgencyOrgDetailHref(orgId: string, context: AgencyNavigatio
   appendIfPresent(searchParams, "actionType", context.actionType);
   appendIfPresent(searchParams, "orgId", context.orgId);
   appendIfPresent(searchParams, "limit", context.limit);
+  appendIfPresent(searchParams, "lead_status", context.leadStatus);
+  appendIfPresent(searchParams, "follow_up", context.followUp);
 
   const query = searchParams.toString();
   return query ? `/agency/orgs/${orgId}?${query}` : `/agency/orgs/${orgId}`;

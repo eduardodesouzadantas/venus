@@ -285,6 +285,7 @@ export default async function AgencyDashboardPage({
             {leadRiskOrgs.length > 0 ? (
               leadRiskOrgs.map((org) => {
                 const riskKind = leadRiskKind(org.lead_summary.followup_overdue, org.lead_summary.followup_without);
+                const engagedCount = org.lead_summary.by_status.engaged;
                 return (
                   <div key={`lead-risk-${org.id}`} className="p-5 rounded-[28px] bg-white/[0.03] border border-white/5 space-y-4">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -306,6 +307,38 @@ export default async function AgencyDashboardPage({
                         <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
                           Pipeline: {formatPipelineCounts(org as AgencyOrgLeadRowLike)}
                         </Text>
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          {org.lead_summary.followup_overdue > 0 ? (
+                            <Link href={buildAgencyOrgDetailHref(org.id, { from: "agency", range, followUp: "overdue" })}>
+                              <VenusButton
+                                variant="outline"
+                                className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-red-500/20 text-red-300"
+                              >
+                                Ver vencidos ({org.lead_summary.followup_overdue})
+                              </VenusButton>
+                            </Link>
+                          ) : null}
+                          {org.lead_summary.followup_without > 0 ? (
+                            <Link href={buildAgencyOrgDetailHref(org.id, { from: "agency", range, followUp: "without_follow_up" })}>
+                              <VenusButton
+                                variant="outline"
+                                className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-yellow-500/20 text-yellow-200"
+                              >
+                                Sem follow-up ({org.lead_summary.followup_without})
+                              </VenusButton>
+                            </Link>
+                          ) : null}
+                          {engagedCount > 0 ? (
+                            <Link href={buildAgencyOrgDetailHref(org.id, { from: "agency", range, leadStatus: "engaged" })}>
+                              <VenusButton
+                                variant="outline"
+                                className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-green-500/20 text-green-300"
+                              >
+                                Engajados ({engagedCount})
+                              </VenusButton>
+                            </Link>
+                          ) : null}
+                        </div>
                       </div>
                       <Link href={buildAgencyOrgDetailHref(org.id, { from: "agency", range })}>
                         <VenusButton variant="glass" className="h-11 px-5 rounded-full uppercase tracking-[0.3em] text-[9px] font-bold border-white/10">
