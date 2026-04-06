@@ -2,24 +2,24 @@
 
 import React, { Suspense, useMemo } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { ArrowRight, Activity, Bookmark, BrainCircuit, History, LayoutGrid, PackageCheck, Sparkles, Star, Target, Watch } from "lucide-react";
 import { Text } from "@/components/ui/Text";
 import { VenusButton } from "@/components/ui/VenusButton";
 import { LookCardSwipeable } from "@/components/ui/LookCardSwipeable";
 import { SavedProfileToast } from "@/components/ui/SavedProfileToast";
 import { SaveResultsModal } from "@/components/onboarding/SaveResultsModal";
 import { SocialShareActions } from "@/components/ui/SocialShareActions";
-import { registerSocialAction } from "@/lib/social/economy";
-import { trackPotentialAbandonment } from "@/lib/whatsapp/AutomationEngine";
-import { buildWhatsAppHandoffMessage, buildWhatsAppHandoffPayload, buildWhatsAppHandoffUrl } from "@/lib/whatsapp/handoff";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
+import { getEngagedIds, getStatsSummary } from "@/lib/analytics/tracker";
 import type { BehaviorStatsSummary } from "@/lib/analytics/tracker";
 import type { UserStats } from "@/lib/ai/orchestrator";
-import type { LookData, ResultPayload } from "@/types/result";
-
-import { Watch, ArrowRight, Sparkles, Target, LayoutGrid, Star, PackageCheck, History, BrainCircuit, Activity, Bookmark } from "lucide-react";
-import { getEngagedIds, getStatsSummary } from "@/lib/analytics/tracker";
+import type { LookData } from "@/types/result";
 import { orchestrateExperience } from "@/lib/ai/orchestrator";
-import { useSearchParams } from "next/navigation";
+import { buildResultSurface } from "@/lib/result/surface";
+import { buildWhatsAppHandoffMessage, buildWhatsAppHandoffPayload, buildWhatsAppHandoffUrl } from "@/lib/whatsapp/handoff";
+import { registerSocialAction } from "@/lib/social/economy";
+import { trackPotentialAbandonment } from "@/lib/whatsapp/AutomationEngine";
 
 function ResultDashboardContent() {
   const searchParams = useSearchParams();
@@ -29,176 +29,62 @@ function ResultDashboardContent() {
   const tenantBlockReason = id?.startsWith("TENANT_BLOCKED") ? id.split(":")[1] || "tenant_not_found" : null;
   const { data: onboardingData } = useOnboarding();
 
-  // State for AI Orchestration
   const [engagedLookIds, setEngagedLookIds] = React.useState<string[]>([]);
   const [statsSummary, setStatsSummary] = React.useState<BehaviorStatsSummary | null>(null);
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [isHandoffLoading, setIsHandoffLoading] = React.useState(false);
 
   React.useEffect(() => {
-    setEngagedLookIds(getEngagedIds('look'));
+    setEngagedLookIds(getEngagedIds("look"));
     setStatsSummary(getStatsSummary());
   }, []);
 
-  // AI Abandonment Tracking
   React.useEffect(() => {
     if (statsSummary && onboardingData.contact?.phone) {
-       trackPotentialAbandonment(statsSummary, onboardingData.contact);
+      trackPotentialAbandonment(statsSummary, onboardingData.contact);
     }
   }, [statsSummary, onboardingData.contact]);
 
-  // Auto-open modal for unsaved users after a delay
   React.useEffect(() => {
     if (!isSaved && !onboardingData.contact?.phone) {
-      const timer = setTimeout(() => setIsModalOpen(true), 15000); // 15s delay
+      const timer = setTimeout(() => setIsModalOpen(true), 15000);
       return () => clearTimeout(timer);
     }
   }, [isSaved, onboardingData.contact]);
 
-  // Fallback mock data
-  const mockResult: ResultPayload = {
-    hero: { 
-      dominantStyle: "Minimalismo de Elite",
-      subtitle: "Uma estética baseada em linhas puras, contraste absoluto e autoridade silenciosa.",
-      coverImageUrl: ""
-    },
-    palette: { 
-      family: "Inverno Profundo",
-      description: "Paleta usada para reforcar contraste, limpeza e presenca.",
-      contrast: "Alto",
-      colors: [
-        { hex: "#000000", name: "Preto Absoluto" },
-        { hex: "#FFFFFF", name: "Branco Óptico" },
-        { hex: "#2C3E50", name: "Azul Meia-Noite" }
-      ],
-      metal: "Prata"
-    },
-    diagnostic: {
-      currentPerception: "Ruido visual e falta de verticalidade na leitura geral.",
-      desiredGoal: "Projetar liderança e clareza mental.",
-      gapSolution: "Remover ruídos visuais e focar em tecidos estruturados."
-    },
-    bodyVisagism: {
-      shoulders: "Ombros estruturados para ampliar a base de confiança.",
-      face: "Linhas retas para reforçar o foco e determinação.",
-      generalFit: "Slim fit arquitetural."
-    },
-    accessories: {
-      scale: "Grande & Minimalista",
-      focalPoint: "Punhos e Pescoço",
-      advice: "Evite excessos; um único ponto de luz é o suficiente."
-    },
-    looks: [
-      {
-        id: "1",
-        name: "O Arquiteto do Amanhã",
-        intention: "Ideal para reuniões de alta cúpula ou negociações decisivas.",
-        type: "Híbrido Premium",
-        explanation: "Este look utiliza a geometria do blazer italiano para criar uma silhueta inabalável.",
-        isDailyPick: true,
-        items: [
-          { 
-            id: "1", 
-            brand: "Bespoke Lab", 
-            name: "Blazer Estruturado em Lã", 
-            photoUrl: "https://images.unsplash.com/photo-1594932224491-bb24dcafe277?q=80&w=600&auto=format",
-            isBestseller: true,
-            images: [
-              "https://images.unsplash.com/photo-1594932224491-bb24dcafe277?q=80&w=600&auto=format",
-              "https://images.unsplash.com/photo-1593032465175-481ac7f401a0?q=80&w=600&auto=format",
-              "https://images.unsplash.com/photo-1598808503494-3f1910243265?q=80&w=600&auto=format"
-            ],
-            impactLine: "Essa peça redefine sua presença imediatamente.",
-            functionalBenefit: "Estrutura seus ombros e cria uma silhueta dominante.",
-            socialEffect: "Transmite autoridade sem esforço.",
-            contextOfUse: "Perfeito para reuniões estratégicas ou eventos onde presença importa."
-          },
-          { 
-            id: "2", 
-            brand: "Venus Essential", 
-            name: "Camisa Algodão Egípcio", 
-            photoUrl: "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?q=80&w=600&auto=format",
-            impactLine: "A base impecável para qualquer negociação de alto nível.",
-            functionalBenefit: "Toque acetinado que mantém o frescor e a elegância o dia todo.",
-            socialEffect: "Indica atenção aos detalhes e padrão de excelência.",
-            contextOfUse: "A camada fundamental sob o blazer de autoridade."
-          }
-        ],
-        accessories: ["Relógio Slim Prata", "Anel de Assinatura"],
-        whenToWear: "Eventos Executivos"
-      },
-      {
-        id: "2",
-        name: "Sombra Contemporânea",
-        intention: "Impacto visual máximo com esforço mínimo.",
-        type: "Expansão Direcionada",
-        popularityRank: 1,
-        explanation: "O all-black com diferentes texturas comunica profundidade e mistério sob controle.",
-        items: [
-          { 
-            id: "3", 
-            brand: "Noir Concept", 
-            name: "Turtleneck em Cashmere", 
-            photoUrl: "https://images.unsplash.com/photo-1614676466623-f1f9e0d1213d?q=80&w=600&auto=format",
-            impactLine: "O ápice do luxo silencioso e sofisticação intelectual.",
-            functionalBenefit: "O cashmere isola e estrutura sem pesar, mantendo a verticalidade.",
-            socialEffect: "Cria um ar de mistério e competência inquestionável.",
-            contextOfUse: "Jantares decisivos ou apresentações criativas de alto impacto."
-          },
-          { 
-            id: "4", 
-            brand: "Tailor Dark", 
-            name: "Calça de Alfaiataria Moderna", 
-            photoUrl: "https://images.unsplash.com/photo-1594633312681-425c7b97ccd1?q=80&w=600&auto=format",
-            impactLine: "Corte cirúrgico para uma movimentação de autoridade.",
-            functionalBenefit: "Ajuste preciso que alonga as pernas e reforça a postura ereta.",
-            socialEffect: "Transmite estabilidade e rigor estético.",
-            contextOfUse: "O par perfeito para peças de topo estruturadas."
-          }
-        ],
-        accessories: ["Óculos de Sol Estruturado"],
-        whenToWear: "Jantares Exclusivos"
-      }
-    ],
-    toAvoid: [
-      "Estampas orgânicas ou florais",
-      "Roupas excessivamente largas (oversized casual)",
-      "Cores pastéis que apagam seu contraste facial"
-    ]
-  };
+  const surface = useMemo(() => buildResultSurface(onboardingData), [onboardingData]);
 
-  // STEP 1 & 3: AI ORCHESTRATION RECO (REORDERING & INSIGHT)
   const { rankedLooks, aiInsight } = useMemo(() => {
     const rawStats = statsSummary || { looks: {}, products: {} };
     const looksEntries = Object.entries(rawStats.looks) as Array<[string, Record<string, number>]>;
     const normalized = {
-      views: Object.fromEntries(looksEntries.map(([id, data]) => [id, data.view || 0])),
-      clicks: Object.fromEntries(looksEntries.map(([id, data]) => [id, data.click || 0])),
+      views: Object.fromEntries(looksEntries.map(([lookId, data]) => [lookId, data.view || 0])),
+      clicks: Object.fromEntries(looksEntries.map(([lookId, data]) => [lookId, data.click || 0])),
       shares: {},
-      bundles: Object.fromEntries(looksEntries.map(([id, data]) => [id, data.complete_look || 0])),
-      timeSpent: 130, // Mocked
-      tryOnUsed: engagedLookIds.length > 0
+      bundles: Object.fromEntries(looksEntries.map(([lookId, data]) => [lookId, data.complete_look || 0])),
+      timeSpent: 130,
+      tryOnUsed: engagedLookIds.length > 0,
     } satisfies UserStats;
 
-    return orchestrateExperience(normalized, mockResult.looks || []);
-  }, [mockResult.looks, statsSummary, engagedLookIds]);
+    return orchestrateExperience(normalized, surface.looks || []);
+  }, [surface.looks, statsSummary, engagedLookIds]);
 
-  const featuredShareLook = rankedLooks?.[0] || mockResult.looks?.[0];
+  const featuredShareLook = rankedLooks?.[0] || surface.looks?.[0];
 
   const handleWhatsAppHandoff = async () => {
-    const topLooks = (rankedLooks?.length ? rankedLooks : mockResult.looks).slice(0, 2);
+    const topLooks = (rankedLooks?.length ? rankedLooks : surface.looks).slice(0, 2);
     const handoffInput = {
       resultId: id,
       contactName: onboardingData.contact?.name || "",
       contactPhone: onboardingData.contact?.phone || "",
-      styleIdentity: mockResult.hero.dominantStyle,
-      dominantStyle: mockResult.hero.dominantStyle,
-      imageGoal: onboardingData.intent.imageGoal || mockResult.diagnostic.desiredGoal,
-      paletteFamily: mockResult.palette.family,
+      styleIdentity: surface.hero.dominantStyle,
+      dominantStyle: surface.hero.dominantStyle,
+      imageGoal: onboardingData.intent.imageGoal || surface.diagnostic.desiredGoal,
+      paletteFamily: surface.palette.family,
       lookSummary: topLooks,
       intentScore: aiInsight.intentScore,
       fit: onboardingData.body.fit || "",
-      metal: onboardingData.colors.metal || mockResult.palette.metal,
+      metal: onboardingData.colors.metal || surface.palette.metal,
     };
 
     const message = buildWhatsAppHandoffMessage(handoffInput);
@@ -226,6 +112,11 @@ function ResultDashboardContent() {
     setTimeout(() => setIsHandoffLoading(false), 1200);
   };
 
+  const handleRestartConsultation = () => {
+    sessionStorage.removeItem("venus_onboarding");
+    localStorage.removeItem("venus_user_photo");
+  };
+
   if (hardCapOperation) {
     const title =
       hardCapOperation === "catalog_product_creation"
@@ -238,22 +129,20 @@ function ResultDashboardContent() {
         : "A geração deste dossiê foi bloqueada porque a org atingiu o limite server-side do plano atual.";
 
     return (
-      <div className="flex flex-col min-h-screen items-center justify-center bg-black px-6 text-white">
-        <div className="w-full max-w-lg p-8 rounded-[32px] bg-red-500/10 border border-red-500/20 space-y-4">
-          <Text className="text-[10px] uppercase tracking-[0.35em] text-red-400 font-bold">Hard cap server-side</Text>
+      <div className="flex min-h-screen flex-col items-center justify-center bg-black px-6 text-white">
+        <div className="w-full max-w-lg space-y-4 rounded-[32px] border border-red-500/20 bg-red-500/10 p-8">
+          <Text className="text-[10px] font-bold uppercase tracking-[0.35em] text-red-400">Hard cap server-side</Text>
           <h1 className="text-2xl font-serif uppercase tracking-tighter">{title}</h1>
           <Text className="text-sm text-white/70">{description}</Text>
-          <Text className="text-xs text-white/40">
-            O bloqueio foi auditado no tenant core e a operação não foi executada.
-          </Text>
-          <div className="flex flex-col sm:flex-row gap-3 pt-2">
-            <Link href="/onboarding/body">
-              <VenusButton variant="solid" className="w-full sm:w-auto bg-white text-black">
+          <Text className="text-xs text-white/40">O bloqueio foi auditado no tenant core e a operação não foi executada.</Text>
+          <div className="flex flex-col gap-3 pt-2 sm:flex-row">
+            <Link href="/onboarding/intent" onClick={handleRestartConsultation}>
+              <VenusButton variant="solid" className="w-full bg-white text-black sm:w-auto">
                 Recomeçar consulta
               </VenusButton>
             </Link>
             <Link href="/">
-              <VenusButton variant="outline" className="w-full sm:w-auto border-white/10">
+              <VenusButton variant="outline" className="w-full border-white/10 sm:w-auto">
                 Voltar ao início
               </VenusButton>
             </Link>
@@ -283,22 +172,20 @@ function ResultDashboardContent() {
             : "A operação foi bloqueada porque o tenant não pôde ser validado.";
 
     return (
-      <div className="flex flex-col min-h-screen items-center justify-center bg-black px-6 text-white">
-        <div className="w-full max-w-lg p-8 rounded-[32px] bg-red-500/10 border border-red-500/20 space-y-4">
-          <Text className="text-[10px] uppercase tracking-[0.35em] text-red-400 font-bold">Tenant operational block</Text>
+      <div className="flex min-h-screen flex-col items-center justify-center bg-black px-6 text-white">
+        <div className="w-full max-w-lg space-y-4 rounded-[32px] border border-red-500/20 bg-red-500/10 p-8">
+          <Text className="text-[10px] font-bold uppercase tracking-[0.35em] text-red-400">Tenant operational block</Text>
           <h1 className="text-2xl font-serif uppercase tracking-tighter">{title}</h1>
           <Text className="text-sm text-white/70">{description}</Text>
-          <Text className="text-xs text-white/40">
-            O bloqueio foi auditado em tenant core e a operação não foi executada.
-          </Text>
-          <div className="flex flex-col sm:flex-row gap-3 pt-2">
-            <Link href="/onboarding/body">
-              <VenusButton variant="solid" className="w-full sm:w-auto bg-white text-black">
+          <Text className="text-xs text-white/40">O bloqueio foi auditado em tenant core e a operação não foi executada.</Text>
+          <div className="flex flex-col gap-3 pt-2 sm:flex-row">
+            <Link href="/onboarding/intent" onClick={handleRestartConsultation}>
+              <VenusButton variant="solid" className="w-full bg-white text-black sm:w-auto">
                 Recomeçar consulta
               </VenusButton>
             </Link>
             <Link href="/">
-              <VenusButton variant="outline" className="w-full sm:w-auto border-white/10">
+              <VenusButton variant="outline" className="w-full border-white/10 sm:w-auto">
                 Voltar ao início
               </VenusButton>
             </Link>
@@ -309,254 +196,258 @@ function ResultDashboardContent() {
   }
 
   if (!id) {
-     return (
-       <div className="flex flex-col h-screen items-center justify-center bg-black">
-         <Text className="text-red-500 mb-4">Dossiê não encontrado ou inspirado.</Text>
-         <Link href="/"><VenusButton variant="solid">Recomeçar Consulta</VenusButton></Link>
-       </div>
-     )
+    return (
+      <div className="flex h-screen flex-col items-center justify-center bg-black">
+        <Text className="mb-4 text-red-500">Dossiê não encontrado ou expirado.</Text>
+        <Link href="/onboarding/intent" onClick={handleRestartConsultation}>
+          <VenusButton variant="solid">Recomeçar consulta</VenusButton>
+        </Link>
+      </div>
+    );
   }
 
   return (
-    <div className={`flex flex-col min-h-screen ${aiInsight.intensity === 'HIGH' ? "bg-black" : "bg-[#0A0A0A]"} overflow-x-hidden pb-48 transition-colors duration-1000`}>
-      
+    <div className={`flex min-h-screen flex-col overflow-x-hidden pb-48 transition-colors duration-1000 ${aiInsight.intensity === "HIGH" ? "bg-black" : "bg-[#0A0A0A]"}`}>
       {isSaved && <SavedProfileToast />}
 
-      {/* AI Orchestration Overlay - Insight (Part 1) */}
-      <div className="fixed top-8 left-1/2 -translate-x-1/2 z-[300] px-4 py-2 rounded-full backdrop-blur-3xl bg-black/40 border border-[#D4AF37]/30 flex items-center gap-3 animate-in fade-in slide-in-from-top-4">
-         <div className="relative">
-            <Activity className="w-3 h-3 text-[#D4AF37] animate-pulse" />
-            <div className="absolute inset-0 bg-[#D4AF37]/20 blur-md rounded-full" />
-         </div>
-         <span className="text-[9px] uppercase font-bold tracking-widest text-[#D4AF37]">Intent Predictor: {aiInsight.intentScore}%</span>
-         <div className="w-[1px] h-3 bg-white/10" />
-         <BrainCircuit className="w-3 h-3 text-white/40" />
-         <span className="text-[9px] uppercase font-bold tracking-widest text-white/40">Mode: {aiInsight.strategy.mode}</span>
+      <div className="fixed left-1/2 top-8 z-[300] flex -translate-x-1/2 items-center gap-3 rounded-full border border-[#D4AF37]/30 bg-black/40 px-4 py-2 backdrop-blur-3xl animate-in fade-in slide-in-from-top-4">
+        <div className="relative">
+          <Activity className="h-3 w-3 animate-pulse text-[#D4AF37]" />
+          <div className="absolute inset-0 rounded-full bg-[#D4AF37]/20 blur-md" />
+        </div>
+        <span className="text-[9px] font-bold uppercase tracking-widest text-[#D4AF37]">
+          Leitura de intenção: {aiInsight.intentScore}%
+        </span>
+        <div className="h-3 w-[1px] bg-white/10" />
+        <BrainCircuit className="h-3 w-3 text-white/40" />
+        <span className="text-[9px] font-bold uppercase tracking-widest text-white/40">Modo: {aiInsight.strategy.mode}</span>
       </div>
 
-      {/* Hero Section (Part 8: Friction Removal for High Intent) */}
-      <div className={`relative px-6 pt-24 pb-12 overflow-hidden transition-all ${aiInsight.intensity === 'HIGH' ? "opacity-80 scale-95" : ""}`}>
-         <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-[#D4AF37]/10 to-transparent pointer-events-none" />
-         
-         <div className="flex flex-col space-y-4">
-            <div className="flex items-center gap-2">
-               <div className="w-px h-6 bg-[#D4AF37]" />
-               <span className="text-[10px] uppercase font-bold tracking-[0.4em] text-[#D4AF37]">
-                  {aiInsight.intensity === 'HIGH' ? "Oferta Exclusiva Ativa" : "Seu Dossiê Exclusivo"}
-               </span>
-            </div>
-            <h1 className="text-4xl font-serif tracking-tighter uppercase leading-none">
-                {aiInsight.intensity === 'HIGH' ? "Transformação Imediata" : mockResult.hero.dominantStyle}
-            </h1>
-            <Text className="text-sm text-white/60 leading-relaxed max-w-[280px]">
-               {aiInsight.strategy.trigger}
-            </Text>
-            <div className="flex flex-col sm:flex-row gap-3 pt-2">
-               <VenusButton
-                 onClick={handleWhatsAppHandoff}
-                 disabled={isHandoffLoading}
-                 className="w-full sm:w-auto bg-[#D4AF37] text-black hover:bg-[#D4AF37]/90 uppercase tracking-[0.35em] text-[9px] font-bold h-12 px-6"
-               >
-                 {isHandoffLoading ? "Abrindo WhatsApp..." : "Quero ver isso no WhatsApp"}
-               </VenusButton>
-               <Link href="#looks" className="w-full sm:w-auto">
-                 <VenusButton variant="outline" className="w-full sm:w-auto border-white/10 uppercase tracking-[0.35em] text-[9px] font-bold h-12 px-6">
-                    Ver meus looks
-                 </VenusButton>
-               </Link>
-            </div>
-            {featuredShareLook && (
-              <div className="pt-4">
-                <SocialShareActions
-                  look={featuredShareLook}
-                  styleIdentity={mockResult.hero.dominantStyle}
-                  imageGoal={onboardingData.intent.imageGoal || mockResult.diagnostic.desiredGoal}
-                  intentScore={aiInsight.intentScore}
-                  brandName="Maison Elite"
-                  appName="Venus Engine"
-                />
-              </div>
-            )}
-         </div>
+      <div className="relative overflow-hidden px-6 pb-12 pt-24 transition-all">
+        <div className="pointer-events-none absolute left-0 top-0 h-full w-full bg-gradient-to-b from-[#D4AF37]/10 to-transparent" />
 
-         {/* Visual Stats Bar */}
-         <div className="mt-10 flex gap-6 overflow-x-auto no-scrollbar pb-2">
-            <div className="flex-shrink-0 flex flex-col gap-1">
-               <span className="text-[8px] uppercase tracking-widest text-white/30 font-bold">Paleta</span>
-               <span className="text-[10px] uppercase font-bold">{mockResult.palette.family}</span>
-            </div>
-            <div className="flex-shrink-0 flex flex-col gap-1">
-               <span className="text-[8px] uppercase tracking-widest text-white/30 font-bold">Contraste</span>
-               <span className="text-[10px] uppercase font-bold">{mockResult.palette.contrast}</span>
-            </div>
-            <div className="flex-shrink-0 flex flex-col gap-1">
-               <span className="text-[8px] uppercase tracking-widest text-white/30 font-bold">Metal Ideal</span>
-               <span className="text-[10px] uppercase font-bold">{mockResult.palette.metal}</span>
-            </div>
-         </div>
-      </div>
+        <div className="flex flex-col space-y-4">
+          <div className="flex items-center gap-2">
+            <div className="h-6 w-px bg-[#D4AF37]" />
+            <span className="text-[10px] font-bold uppercase tracking-[0.4em] text-[#D4AF37]">Sua leitura pessoal</span>
+          </div>
 
-      <div className="px-6 space-y-16">
-        {/* Diagnostic Section */}
-        <section className="space-y-6">
-           <div className="flex items-center gap-3">
-              <Target className="w-4 h-4 text-[#D4AF37]" />
-              <span className="text-[10px] uppercase font-bold tracking-widest">Diretrizes de Poder</span>
-           </div>
-           <div className="grid grid-cols-1 gap-4">
-              <div className="p-6 rounded-[32px] bg-white/[0.03] border border-white/5 space-y-3">
-                 <span className="text-[9px] uppercase font-bold tracking-widest text-white/30">Meta Desejada</span>
-                 <Text className="text-sm text-white/90 italic">&quot;{mockResult.diagnostic.desiredGoal}&quot;</Text>
-              </div>
-              <div className="p-6 rounded-[32px] bg-[#D4AF37]/5 border border-[#D4AF37]/10 space-y-3">
-                 <span className="text-[9px] uppercase font-bold tracking-widest text-[#D4AF37]">Solução de Gap Visual</span>
-                 <Text className="text-sm text-white/90">{mockResult.diagnostic.gapSolution}</Text>
-              </div>
-           </div>
-        </section>
+          <h1 className="text-4xl font-serif uppercase leading-none tracking-tighter">
+            {surface.headline}
+          </h1>
 
-        {/* Part 8: Friction Removal for High Intent */}
-        {aiInsight.intensity !== 'HIGH' && (
-           <div className="relative group animate-in fade-in duration-1000">
-              <div className="absolute left-6 top-1/2 -translate-y-1/2 text-white/20 group-focus-within:text-[#D4AF37] transition-colors"><LayoutGrid size={16} /></div>
-              <input 
-                type="text" 
-                placeholder="Explorar outras categorias de estilo..." 
-                className="w-full h-16 bg-white/[0.03] border border-white/10 rounded-full px-16 text-[10px] uppercase tracking-widest text-white focus:border-[#D4AF37]/40 outline-none transition-all placeholder:text-white/20" 
+          <Text className="max-w-[280px] text-sm leading-relaxed text-white/60">
+            {surface.subheadline}
+          </Text>
+
+          <div className="flex flex-col gap-3 pt-2 sm:flex-row">
+            <VenusButton
+              onClick={handleWhatsAppHandoff}
+              disabled={isHandoffLoading}
+              className="h-12 w-full bg-[#D4AF37] px-6 text-[9px] font-bold uppercase tracking-[0.35em] text-black hover:bg-[#D4AF37]/90 sm:w-auto"
+            >
+              {isHandoffLoading ? "Abrindo WhatsApp..." : surface.primaryCtaLabel}
+            </VenusButton>
+            <Link href="#looks" className="w-full sm:w-auto">
+              <VenusButton variant="outline" className="h-12 w-full border-white/10 px-6 text-[9px] font-bold uppercase tracking-[0.35em] sm:w-auto">
+                {surface.secondaryCtaLabel}
+              </VenusButton>
+            </Link>
+          </div>
+
+          {featuredShareLook && (
+            <div className="pt-4">
+              <SocialShareActions
+                look={featuredShareLook}
+                styleIdentity={surface.hero.dominantStyle}
+                imageGoal={onboardingData.intent.imageGoal || surface.diagnostic.desiredGoal}
+                intentScore={aiInsight.intentScore}
+                brandName="Maison Elite"
+                appName="Venus Engine"
               />
-           </div>
-        )}
-
-        {/* Color Palette Display */}
-        <section className="space-y-6">
-           <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                 <LayoutGrid className="w-4 h-4 text-white/40" />
-                 <span className="text-[10px] uppercase font-bold tracking-widest text-white/40">Suas Cores de Autoridade</span>
-              </div>
-              <span className="text-[9px] uppercase font-bold tracking-widest text-[#D4AF37]">Inverno Profundo</span>
-           </div>
-           
-           <div className="flex gap-3 h-20 overflow-hidden rounded-[32px]">
-              {mockResult.palette.colors.map((color, i: number) => (
-                <div key={i} className="flex-1 transition-all hover:flex-[2] relative group" style={{ backgroundColor: color.hex }}>
-                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <span className="text-[8px] uppercase font-bold tracking-widest text-white">{color.name}</span>
-                   </div>
-                </div>
-              ))}
-           </div>
-        </section>
-
-        {/* The Recommender AI Ranked Looks (Step 10: Behavior-driven reordering) */}
-        <section id="looks" className="space-y-8">
-           <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                 <div className="flex items-center gap-3">
-                    <Sparkles className="w-4 h-4 text-[#D4AF37]" />
-                    <span className="text-[10px] uppercase font-bold tracking-widest px-2">Sua Curadoria Inteligente</span>
-                 </div>
-                 {aiInsight.intentScore > 60 && (
-                   <span className="px-3 py-1 rounded-full bg-red-500/10 text-red-500 text-[8px] font-bold uppercase tracking-widest animate-pulse">Intenção Máxima: Reserva Prioritária</span>
-                 )}
-              </div>
-           </div>
-           
-           <div className="space-y-16">
-              {rankedLooks.map((look: LookData, i: number) => (
-                <div key={look.id} className="relative">
-                   {/* Step 9: Micro Social Proof */}
-                   {(i === 0 || aiInsight.intensity === 'HIGH') && (
-                     <div className="absolute -top-6 left-2 flex items-center gap-2">
-                        <Star size={10} className="text-[#D4AF37]" />
-                        <span className="text-[8px] uppercase font-bold tracking-widest text-white/40">Perfis semelhantes ao seu escolhem este estilo · Recomendado</span>
-                     </div>
-                   )}
-                   <LookCardSwipeable 
-                      look={look} 
-                      strategy={aiInsight.strategy}
-                      intensity={aiInsight.intensity}
-                   />
-                </div>
-              ))}
-           </div>
-        </section>
-
-        {/* Visagism / Structure Section */}
-        <section className="space-y-8">
-           <div className="flex items-center gap-3">
-              <PackageCheck className="w-4 h-4 text-white/40" />
-              <span className="text-[10px] uppercase font-bold tracking-widest text-white/40">Arquitetura de Silhueta</span>
-           </div>
-           <div className="space-y-4">
-              <div className="p-6 rounded-[32px] bg-white/[0.02] border border-white/5 group">
-                <Text className="text-[9px] uppercase tracking-widest text-white/30 font-bold mb-2">Construção de Ombros</Text>
-                <Text className="text-sm leading-relaxed text-white/80">{mockResult.bodyVisagism.shoulders}</Text>
-              </div>
-              <div className="p-6 rounded-[32px] bg-white/[0.02] border border-white/5 group">
-                <Text className="text-[9px] uppercase tracking-widest text-white/30 font-bold mb-2">Estrutura Facial</Text>
-                <Text className="text-sm leading-relaxed text-white/80">{mockResult.bodyVisagism.face}</Text>
-              </div>
-           </div>
-        </section>
-
-        {/* Avoid List */}
-        <section className="space-y-6">
-           <div className="flex items-center gap-3">
-              <History className="w-4 h-4 text-red-500/40" />
-              <span className="text-[10px] uppercase font-bold tracking-widest text-white/40">O que evitar (Gap Killers)</span>
-           </div>
-           <div className="space-y-3">
-              {mockResult.toAvoid.map((item: string, i: number) => (
-                <div key={i} className="flex items-center gap-4 py-4 border-b border-white/5 group">
-                   <div className="w-1.5 h-1.5 rounded-full bg-red-500/20 group-hover:bg-red-500 transition-colors" />
-                   <Text className="text-xs text-white/40 group-hover:text-white/80 transition-colors">{item}</Text>
-                </div>
-              ))}
-           </div>
-        </section>
-
-        {/* Final CTA / Social Proof Ref */}
-        <div className="pt-20 pb-10 flex flex-col items-center text-center space-y-6">
-           <Text className="text-[9px] uppercase tracking-[0.5em] text-white/20 font-bold">Venus Engine v2.0 AI</Text>
-           <Link href="/admin/proof" className="group">
-              <div className="flex items-center gap-2 text-[#D4AF37] opacity-40 group-hover:opacity-100 transition-opacity">
-                 <Star size={12} fill="currentColor" />
-                 <span className="text-[10px] uppercase font-bold tracking-widest underline underline-offset-4">Ver Prova de Faturamento</span>
-              </div>
-           </Link>
+            </div>
+          )}
         </div>
 
+        <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div className="rounded-[24px] border border-white/5 bg-white/[0.03] p-4">
+            <span className="text-[8px] font-bold uppercase tracking-widest text-white/30">Paleta</span>
+            <span className="mt-2 block text-[10px] font-bold uppercase">{surface.palette.family}</span>
+          </div>
+          <div className="rounded-[24px] border border-white/5 bg-white/[0.03] p-4">
+            <span className="text-[8px] font-bold uppercase tracking-widest text-white/30">Contraste</span>
+            <span className="mt-2 block text-[10px] font-bold uppercase">{surface.palette.contrast}</span>
+          </div>
+          <div className="rounded-[24px] border border-white/5 bg-white/[0.03] p-4">
+            <span className="text-[8px] font-bold uppercase tracking-widest text-white/30">Metal</span>
+            <span className="mt-2 block text-[10px] font-bold uppercase">{surface.palette.metal}</span>
+          </div>
+          <div className="rounded-[24px] border border-white/5 bg-white/[0.03] p-4">
+            <span className="text-[8px] font-bold uppercase tracking-widest text-white/30">Fit</span>
+            <span className="mt-2 block text-[10px] font-bold uppercase">{onboardingData.body.fit || "Slim"}</span>
+          </div>
+        </div>
       </div>
 
-      {/* Floating Accessory Hint */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex flex-col items-center gap-4 w-[calc(100%-48px)] max-w-sm">
-         {!onboardingData.contact?.phone && (
-            <button 
-              onClick={() => setIsModalOpen(true)}
-              className="p-4 rounded-full bg-[#D4AF37] text-black flex items-center justify-center gap-2 shadow-2xl active:scale-95 transition-all w-full mb-2"
-            >
-               <Bookmark size={16} />
-               <span className="text-[10px] font-bold uppercase tracking-widest">Salvar Meus Resultados</span>
-            </button>
-         )}
-         <div className="p-4 rounded-full bg-white text-black flex items-center justify-center gap-3 shadow-2xl active:scale-[0.98] transition-transform cursor-pointer overflow-hidden relative group w-full">
-            <div className="absolute inset-0 bg-[#D4AF37] translate-x-full group-hover:translate-x-0 transition-transform duration-500" />
-            <div className="flex items-center gap-3 relative z-10">
-               <div className="w-8 h-8 rounded-full bg-black/5 flex items-center justify-center">
-                  <Watch size={16} />
-               </div>
-               <span className="text-[10px] font-bold uppercase tracking-widest">Ver Acessórios Recomendados</span>
+      <div className="px-6 space-y-14">
+        <section className="space-y-6">
+          <div className="flex items-center gap-3">
+            <Target className="h-4 w-4 text-[#D4AF37]" />
+            <span className="text-[10px] font-bold uppercase tracking-widest">Leitura pessoal</span>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4">
+            <div className="space-y-3 rounded-[32px] border border-white/5 bg-white/[0.03] p-6">
+              <span className="text-[9px] font-bold uppercase tracking-widest text-white/30">O que o perfil pede</span>
+              <Text className="text-sm italic text-white/90">&quot;{surface.diagnostic.desiredGoal}&quot;</Text>
             </div>
-            <ArrowRight size={16} className="relative z-10" />
-         </div>
+            <div className="space-y-3 rounded-[32px] border border-[#D4AF37]/10 bg-[#D4AF37]/5 p-6">
+              <span className="text-[9px] font-bold uppercase tracking-widest text-[#D4AF37]">Como o resultado fecha o gap</span>
+              <Text className="text-sm text-white/90">{surface.diagnostic.gapSolution}</Text>
+            </div>
+          </div>
+        </section>
+
+        <section className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <LayoutGrid className="h-4 w-4 text-white/40" />
+              <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Sua paleta pessoal</span>
+            </div>
+            <span className="text-[9px] font-bold uppercase tracking-widest text-[#D4AF37]">{surface.palette.family}</span>
+          </div>
+
+          <div className="flex h-20 gap-3 overflow-hidden rounded-[32px]">
+            {surface.palette.colors.map((color, index) => (
+              <div key={index} className="group relative flex-1 transition-all hover:flex-[2]" style={{ backgroundColor: color.hex }}>
+                <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+                  <span className="text-[8px] font-bold uppercase tracking-widest text-white">{color.name}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="rounded-[32px] border border-white/5 bg-white/[0.03] p-6">
+            <Text className="text-[9px] font-bold uppercase tracking-widest text-white/30">Por que isso combina com você</Text>
+            <Text className="mt-2 text-sm leading-relaxed text-white/80">
+              {surface.palette.description}
+            </Text>
+          </div>
+        </section>
+
+        <section id="looks" className="space-y-8">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Sparkles className="h-4 w-4 text-[#D4AF37]" />
+                <span className="px-2 text-[10px] font-bold uppercase tracking-widest">Looks sugeridos</span>
+              </div>
+              {aiInsight.intentScore > 60 && (
+                <span className="animate-pulse rounded-full bg-red-500/10 px-3 py-1 text-[8px] font-bold uppercase tracking-widest text-red-500">
+                  Intenção alta: prioridade de contato
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {surface.lookHierarchy.map((item) => (
+              <div key={item.label} className="rounded-[24px] border border-white/5 bg-white/[0.03] p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-[#D4AF37]">{item.label}</span>
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-white/30">{item.title}</span>
+                </div>
+                <Text className="mt-2 text-xs leading-relaxed text-white/70">{item.description}</Text>
+              </div>
+            ))}
+          </div>
+
+          <div className="space-y-16">
+            {rankedLooks.map((look: LookData, index: number) => (
+              <div key={look.id} className="relative">
+                {(index === 0 || aiInsight.intensity === "HIGH") && (
+                  <div className="absolute -top-6 left-2 flex items-center gap-2">
+                    <Star size={10} className="text-[#D4AF37]" />
+                    <span className="text-[8px] font-bold uppercase tracking-widest text-white/40">
+                      Este é o look mais coerente com o seu perfil
+                    </span>
+                  </div>
+                )}
+                <LookCardSwipeable look={look} strategy={aiInsight.strategy} intensity={aiInsight.intensity} />
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="space-y-8">
+          <div className="flex items-center gap-3">
+            <PackageCheck className="h-4 w-4 text-white/40" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Como o look te favorece</span>
+          </div>
+          <div className="space-y-4">
+            <div className="group rounded-[32px] border border-white/5 bg-white/[0.02] p-6">
+              <Text className="mb-2 text-[9px] font-bold uppercase tracking-widest text-white/30">Ombros</Text>
+              <Text className="text-sm leading-relaxed text-white/80">{surface.bodyVisagism.shoulders}</Text>
+            </div>
+            <div className="group rounded-[32px] border border-white/5 bg-white/[0.02] p-6">
+              <Text className="mb-2 text-[9px] font-bold uppercase tracking-widest text-white/30">Rosto</Text>
+              <Text className="text-sm leading-relaxed text-white/80">{surface.bodyVisagism.face}</Text>
+            </div>
+            <div className="group rounded-[32px] border border-white/5 bg-white/[0.02] p-6">
+              <Text className="mb-2 text-[9px] font-bold uppercase tracking-widest text-white/30">Caimento</Text>
+              <Text className="text-sm leading-relaxed text-white/80">{surface.bodyVisagism.generalFit}</Text>
+            </div>
+          </div>
+        </section>
+
+        <section className="space-y-6">
+          <div className="flex items-center gap-3">
+            <History className="h-4 w-4 text-red-500/40" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">O que evitar</span>
+          </div>
+          <div className="space-y-3">
+            {surface.toAvoid.map((item, index) => (
+              <div key={index} className="group flex items-center gap-4 border-b border-white/5 py-4">
+                <div className="h-1.5 w-1.5 rounded-full bg-red-500/20 transition-colors group-hover:bg-red-500" />
+                <Text className="text-xs text-white/40 transition-colors group-hover:text-white/80">{item}</Text>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <div className="flex flex-col items-center space-y-4 pb-10 pt-20 text-center">
+          <Text className="text-[9px] font-bold uppercase tracking-[0.5em] text-white/20">{surface.footerLabel}</Text>
+          <Text className="text-[10px] font-bold uppercase tracking-[0.35em] text-white/40">
+            Seu próximo passo já está acima: WhatsApp, salvar ou revisar os looks.
+          </Text>
+        </div>
       </div>
 
-      <SaveResultsModal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        stats={statsSummary}
-      />
+      <div className="fixed bottom-6 left-1/2 z-[200] flex w-[calc(100%-48px)] max-w-sm -translate-x-1/2 flex-col items-center gap-4">
+        {!onboardingData.contact?.phone && (
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="mb-2 flex w-full items-center justify-center gap-2 rounded-full bg-[#D4AF37] p-4 text-black shadow-2xl transition-all active:scale-95"
+          >
+            <Bookmark size={16} />
+            <span className="text-[10px] font-bold uppercase tracking-widest">Salvar meus resultados</span>
+          </button>
+        )}
+        <Link href="#looks" className="group relative flex w-full cursor-pointer items-center justify-center gap-3 overflow-hidden rounded-full bg-white p-4 text-black shadow-2xl transition-transform active:scale-[0.98]">
+          <div className="absolute inset-0 translate-x-full bg-[#D4AF37] transition-transform duration-500 group-hover:translate-x-0" />
+          <div className="relative z-10 flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-black/5">
+              <Watch size={16} />
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-widest">Ir para os looks</span>
+          </div>
+          <ArrowRight size={16} className="relative z-10" />
+        </Link>
+      </div>
+
+      <SaveResultsModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} stats={statsSummary} />
     </div>
   );
 }
