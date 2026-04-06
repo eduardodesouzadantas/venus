@@ -13,6 +13,7 @@ export interface LeadRecord {
   saved_result_id: string | null;
   intent_score: number | null;
   whatsapp_key: string | null;
+  next_follow_up_at: string | null;
   created_at?: string | null;
   updated_at?: string | null;
   last_interaction_at?: string | null;
@@ -29,6 +30,7 @@ export interface LeadUpsertInput {
   intentScore?: number | null;
   whatsappKey?: string | null;
   lastInteractionAt?: string | null;
+  nextFollowUpAt?: string | null;
 }
 
 export interface LeadSignals {
@@ -300,26 +302,42 @@ export async function listLeadsByOrg(supabase: SupabaseClient, orgId: string) {
 export interface LeadStatusUpdateInput {
   orgId: string;
   leadId: string;
-  status: LeadStatus;
+  status?: LeadStatus;
+  nextFollowUpAt?: string | null;
   lastInteractionAt?: string | null;
 }
 
-export async function updateLeadStatus(supabase: SupabaseClient, input: LeadStatusUpdateInput) {
+export async function updateLeadOperationalState(supabase: SupabaseClient, input: LeadStatusUpdateInput) {
   const orgId = normalizeString(input.orgId);
   const leadId = normalizeString(input.leadId);
   if (!orgId || !leadId) {
     throw new Error("Missing lead identifiers");
   }
 
+  const hasStatus = typeof input.status === "string" && input.status.length > 0;
+  const hasFollowUp = Object.prototype.hasOwnProperty.call(input, "nextFollowUpAt");
+
+  if (!hasStatus && !hasFollowUp) {
+    throw new Error("Missing lead updates");
+  }
+
   const nextTimestamp = input.lastInteractionAt || new Date().toISOString();
+  const updatePayload: Record<string, unknown> = {
+    last_interaction_at: nextTimestamp,
+    updated_at: nextTimestamp,
+  };
+
+  if (hasStatus) {
+    updatePayload.status = input.status;
+  }
+
+  if (hasFollowUp) {
+    updatePayload.next_follow_up_at = input.nextFollowUpAt || null;
+  }
 
   const { data, error } = await supabase
     .from("leads")
-    .update({
-      status: input.status,
-      last_interaction_at: nextTimestamp,
-      updated_at: nextTimestamp,
-    })
+    .update(updatePayload)
     .eq("org_id", orgId)
     .eq("id", leadId)
     .select("*")
@@ -330,4 +348,12 @@ export async function updateLeadStatus(supabase: SupabaseClient, input: LeadStat
   }
 
   return { lead: data as LeadRecord };
+}
+
+export async function updateLeadStatus(supabase: SupabaseClient, input: LeadStatusUpdateInput) {
+  if (!input.status) {
+    throw new Error("Missing lead status");
+  }
+
+  return updateLeadOperationalState(supabase, input);
 }

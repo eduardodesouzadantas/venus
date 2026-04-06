@@ -27,6 +27,18 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
+function formatDateTimeLocal(value: string | null | undefined) {
+  if (!value) return "";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const pad = (input: number) => String(input).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 function formatCurrency(cents: number | null) {
   if (cents === null) return "Sem dados";
   return new Intl.NumberFormat("pt-BR", {
@@ -690,54 +702,66 @@ export default async function AgencyOrgDetailPage({
                 ))}
               </div>
               <div className="space-y-3">
-              {detail.leads.map((lead) => (
-                <div key={lead.id} className="p-4 rounded-[24px] bg-white/[0.03] border border-white/5">
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="space-y-1">
-                      <Heading as="h3" className="text-lg tracking-tighter">
-                        {lead.name || "Sem nome"}
-                      </Heading>
-                      <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
-                        {lead.email || "Sem email"} · {lead.phone || "Sem telefone"} · source {lead.source || "sem dados"}
-                      </Text>
-                    </div>
-                    <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.3em]">
-                      <span className={`px-3 py-1 rounded-full border ${badge("plan")}`}>{lead.status}</span>
-                      <span className={`px-3 py-1 rounded-full border ${badge("neutral")}`}>
-                        intent {lead.intent_score === null ? "Sem dados" : lead.intent_score.toFixed(0)}
-                      </span>
-                      <span className={`px-3 py-1 rounded-full border ${badge("neutral")}`}>
-                        {formatDate(lead.last_interaction_at || lead.updated_at || lead.created_at)}
-                      </span>
-                    </div>
-                    <form action={`/api/admin/orgs/${org.id}/leads/${lead.id}`} method="post" className="flex flex-wrap items-end gap-2">
-                      <input type="hidden" name="redirect_to" value={detailHref} />
-                      <label className="space-y-1">
-                        <span className="block text-[8px] uppercase tracking-[0.3em] text-white/30 font-bold">Estágio</span>
-                        <select
-                          name="status"
-                          defaultValue={lead.status}
-                          className="h-10 rounded-full bg-black/40 border border-white/10 px-4 text-[10px] uppercase tracking-[0.3em] font-bold text-white outline-none"
+                {detail.leads.map((lead) => (
+                  <div key={lead.id} className="p-4 rounded-[24px] bg-white/[0.03] border border-white/5">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="space-y-1">
+                        <Heading as="h3" className="text-lg tracking-tighter">
+                          {lead.name || "Sem nome"}
+                        </Heading>
+                        <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
+                          {lead.email || "Sem email"} · {lead.phone || "Sem telefone"} · source {lead.source || "sem dados"}
+                        </Text>
+                      </div>
+                      <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.3em]">
+                        <span className={`px-3 py-1 rounded-full border ${badge("plan")}`}>{lead.status}</span>
+                        <span className={`px-3 py-1 rounded-full border ${badge("neutral")}`}>
+                          intent {lead.intent_score === null ? "Sem dados" : lead.intent_score.toFixed(0)}
+                        </span>
+                        <span className={`px-3 py-1 rounded-full border ${badge("neutral")}`}>
+                          follow-up {lead.next_follow_up_at ? formatDate(lead.next_follow_up_at) : "Sem follow-up"}
+                        </span>
+                        <span className={`px-3 py-1 rounded-full border ${badge("neutral")}`}>
+                          {formatDate(lead.last_interaction_at || lead.updated_at || lead.created_at)}
+                        </span>
+                      </div>
+                      <form action={`/api/admin/orgs/${org.id}/leads/${lead.id}`} method="post" className="flex flex-wrap items-end gap-2">
+                        <input type="hidden" name="redirect_to" value={detailHref} />
+                        <label className="space-y-1">
+                          <span className="block text-[8px] uppercase tracking-[0.3em] text-white/30 font-bold">Estágio</span>
+                          <select
+                            name="status"
+                            defaultValue={lead.status}
+                            className="h-10 rounded-full bg-black/40 border border-white/10 px-4 text-[10px] uppercase tracking-[0.3em] font-bold text-white outline-none"
+                          >
+                            <option value="new">Novo</option>
+                            <option value="engaged">Engajado</option>
+                            <option value="qualified">Qualificado</option>
+                            <option value="offer_sent">Oferta enviada</option>
+                            <option value="won">Ganho</option>
+                            <option value="lost">Perdido</option>
+                          </select>
+                        </label>
+                        <label className="space-y-1">
+                          <span className="block text-[8px] uppercase tracking-[0.3em] text-white/30 font-bold">Próximo follow-up</span>
+                          <input
+                            type="datetime-local"
+                            name="next_follow_up_at"
+                            defaultValue={formatDateTimeLocal(lead.next_follow_up_at)}
+                            className="h-10 rounded-full bg-black/40 border border-white/10 px-4 text-[10px] uppercase tracking-[0.3em] font-bold text-white outline-none"
+                          />
+                        </label>
+                        <VenusButton
+                          type="submit"
+                          variant="outline"
+                          className="h-10 px-4 rounded-full uppercase tracking-[0.3em] text-[8px] font-bold border-white/10"
                         >
-                          <option value="new">Novo</option>
-                          <option value="engaged">Engajado</option>
-                          <option value="qualified">Qualificado</option>
-                          <option value="offer_sent">Oferta enviada</option>
-                          <option value="won">Ganho</option>
-                          <option value="lost">Perdido</option>
-                        </select>
-                      </label>
-                      <VenusButton
-                        type="submit"
-                        variant="outline"
-                        className="h-10 px-4 rounded-full uppercase tracking-[0.3em] text-[8px] font-bold border-white/10"
-                      >
-                        Salvar estágio
-                      </VenusButton>
-                    </form>
+                          Salvar lead
+                        </VenusButton>
+                      </form>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
               </div>
             </div>
           ) : (

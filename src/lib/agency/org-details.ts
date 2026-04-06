@@ -17,6 +17,7 @@ export interface AgencyOrgLeadRow {
   status: string;
   intent_score: number | null;
   whatsapp_key: string | null;
+  next_follow_up_at: string | null;
   created_at: string | null;
   updated_at: string | null;
   last_interaction_at: string | null;
@@ -245,7 +246,7 @@ export async function getAgencyOrgLeadRows(orgId: string, range: AgencyTimeRange
   const window = rangeWindow(range);
   const query = admin
     .from("leads")
-    .select("id, name, email, phone, source, status, intent_score, whatsapp_key, created_at, updated_at, last_interaction_at")
+    .select("id, name, email, phone, source, status, intent_score, whatsapp_key, next_follow_up_at, created_at, updated_at, last_interaction_at")
     .eq("org_id", normalize(orgId))
     .order("last_interaction_at", { ascending: false, nullsFirst: false })
     .limit(20);
@@ -269,6 +270,7 @@ export async function getAgencyOrgLeadRows(orgId: string, range: AgencyTimeRange
     status: normalize(row.status) || "new",
     intent_score: typeof row.intent_score === "number" ? row.intent_score : row.intent_score === null ? null : Number(row.intent_score) || null,
     whatsapp_key: toNullableString(row.whatsapp_key),
+    next_follow_up_at: toNullableDate(row.next_follow_up_at),
     created_at: toNullableDate(row.created_at),
     updated_at: toNullableDate(row.updated_at),
     last_interaction_at: toNullableDate(row.last_interaction_at),

@@ -9,10 +9,14 @@ CREATE TABLE IF NOT EXISTS leads (
   saved_result_id UUID UNIQUE REFERENCES saved_results(id) ON DELETE SET NULL,
   intent_score NUMERIC,
   whatsapp_key TEXT,
+  next_follow_up_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   last_interaction_at TIMESTAMPTZ
 );
+
+ALTER TABLE leads
+  ADD COLUMN IF NOT EXISTS next_follow_up_at TIMESTAMPTZ;
 
 ALTER TABLE org_usage_daily
   ADD COLUMN IF NOT EXISTS leads BIGINT NOT NULL DEFAULT 0;
@@ -23,6 +27,7 @@ CREATE INDEX IF NOT EXISTS idx_leads_email ON leads (email);
 CREATE INDEX IF NOT EXISTS idx_leads_status ON leads (status);
 CREATE INDEX IF NOT EXISTS idx_leads_saved_result_id ON leads (saved_result_id);
 CREATE INDEX IF NOT EXISTS idx_leads_whatsapp_key ON leads (whatsapp_key);
+CREATE INDEX IF NOT EXISTS idx_leads_next_follow_up_at ON leads (next_follow_up_at);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_org_phone_unique ON leads (org_id, phone) WHERE phone IS NOT NULL AND phone <> '';
 CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_org_email_unique ON leads (org_id, email) WHERE email IS NOT NULL AND email <> '';
 
