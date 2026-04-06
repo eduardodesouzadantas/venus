@@ -1,6 +1,7 @@
 "use client";
 
-import { TrendingUp, Users, Target, Zap, LayoutGrid, Sparkles, BarChart3, ShoppingBag, ArrowUpRight, ChevronRight, PieChart, ShieldCheck, DollarSign, MousePointer2 } from "lucide-react";
+import { TrendingUp, Zap, Sparkles, ShoppingBag, ArrowUpRight, ShieldCheck, MousePointer2 } from "lucide-react";
+import Link from "next/link";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { VenusButton } from "@/components/ui/VenusButton";
@@ -42,12 +43,12 @@ export default function MerchantProofDashboard() {
          
          <div className="relative z-10 flex flex-col items-center text-center space-y-6">
             <div className="w-16 h-px bg-[#D4AF37] mb-2 shadow-[0_0_20px_rgba(212,175,55,0.8)]" />
-            <Text className="text-[10px] uppercase font-bold tracking-[0.6em] text-[#D4AF37]">Business Intelligence Proof</Text>
+            <Text className="text-[10px] uppercase font-bold tracking-[0.6em] text-[#D4AF37]">Merchant Proof</Text>
             <Heading as="h1" className="text-4xl tracking-tighter uppercase max-w-[320px] leading-none">
-               Por que o Venus Vende Mais?
+               Como o Venus gera valor real
             </Heading>
             <Text className="text-sm text-white/40 max-w-[280px] leading-relaxed italic">
-               A prova matemática de como a curadoria inteligente e a visualização virtual transformam desejo em faturamento.
+               Uma leitura objetiva de como a curadoria e o try-on ajudam a transformar atenção em decisão.
             </Text>
          </div>
       </div>
@@ -66,12 +67,12 @@ export default function MerchantProofDashboard() {
                     <ArrowUpRight className="w-6 h-6 text-green-500" />
                  </div>
                  <div className="space-y-1">
-                    <Heading as="h3" className="text-md uppercase tracking-widest font-bold">Taxa de Conversão</Heading>
+                    <Heading as="h3" className="text-md uppercase tracking-widest font-bold">Conversão estimada</Heading>
                     <Text className="text-white/30 text-xs uppercase tracking-widest">Industry Avg: 2.3%</Text>
                  </div>
                  <div className="h-px w-full bg-white/5" />
                  <Text className="text-xs text-white/60 leading-relaxed max-w-[240px]">
-                    Nossa taxa de conversão é <strong>10x superior</strong> ao e-commerce tradicional devido ao funil de curadoria personalizada.
+                    A leitura guiada reduz dúvida e acelera a decisão no caminho até o produto certo.
                  </Text>
               </div>
            </div>
@@ -93,8 +94,8 @@ export default function MerchantProofDashboard() {
         {/* Visual Funnel (Step 3) */}
         <section className="space-y-8">
            <div className="flex flex-col items-center text-center gap-2">
-              <Heading as="h3" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">O Funil de Persuasão</Heading>
-              <Text className="text-[10px] text-white/20 uppercase tracking-widest font-bold">Engagement Journey</Text>
+              <Heading as="h3" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">Leitura do Funil</Heading>
+              <Text className="text-[10px] text-white/20 uppercase tracking-widest font-bold">Operational Journey</Text>
            </div>
            
            <div className="space-y-4">
@@ -115,7 +116,7 @@ export default function MerchantProofDashboard() {
 
         {/* Value Interpretation (Step 2) */}
         <section className="space-y-8">
-           <Heading as="h3" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">A Ciência das Vendas</Heading>
+           <Heading as="h3" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">Por que isso funciona</Heading>
            <div className="space-y-6">
               {valueDrivers.map((driver, i) => (
                 <div key={i} className="p-10 rounded-[60px] bg-white/[0.03] border border-white/10 space-y-8 relative group overflow-hidden">
@@ -139,7 +140,7 @@ export default function MerchantProofDashboard() {
                          <div className="flex items-start gap-4">
                             <ShieldCheck className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
                             <div className="space-y-1">
-                               <span className="text-[10px] text-white/20 uppercase tracking-widest font-bold">Por que isso importa</span>
+                               <span className="text-[10px] text-white/20 uppercase tracking-widest font-bold">Leitura objetiva</span>
                                <Text className="text-xs text-white/80 leading-relaxed font-medium">{driver.whyItMatters}</Text>
                             </div>
                          </div>
@@ -153,8 +154,8 @@ export default function MerchantProofDashboard() {
         {/* Revenue Opportunities (Step 4) */}
         <section className="p-10 rounded-[60px] bg-[#D4AF37] text-black space-y-10 shadow-[0_0_80px_rgba(212,175,55,0.2)]">
            <div className="space-y-2">
-              <Heading as="h3" className="text-xl uppercase tracking-tighter">O Potencial Adormecido</Heading>
-              <Text className="text-xs text-black/60 font-medium uppercase tracking-widest">Revenue Growth Analytics</Text>
+              <Heading as="h3" className="text-xl uppercase tracking-tighter">Onde o valor cresce</Heading>
+              <Text className="text-xs text-black/60 font-medium uppercase tracking-widest">Operational Growth</Text>
            </div>
            
            <div className="space-y-6">
@@ -165,7 +166,7 @@ export default function MerchantProofDashboard() {
                  <div className="space-y-1">
                     <Heading as="h4" className="text-base tracking-tight leading-tight">Recupere 28% de Desistência</Heading>
                     <Text className="text-sm text-black/60 leading-relaxed">
-                       Detectamos um gargalo na transição para o produto individual. Corrigindo isso, o faturamento estimado sobe em <strong>+R$ 45.000/mês</strong>.
+                       Detectamos um gargalo na transição para o produto individual. Corrigindo isso, a jornada fica mais curta e consistente.
                     </Text>
                  </div>
               </div>
@@ -177,29 +178,35 @@ export default function MerchantProofDashboard() {
                  <div className="space-y-1">
                     <Heading as="h4" className="text-base tracking-tight leading-tight">Alavancagem de Bundle</Heading>
                     <Text className="text-sm text-black/60 leading-relaxed">
-                       Aumentar a exposição de looks completos no topo da página triplica a probabilidade de fechamento de carrinho de alto ticket.
+                       Aumentar a exposição de looks completos no topo da página melhora a leitura e facilita o fechamento de conjuntos.
                     </Text>
                  </div>
               </div>
            </div>
            
-           <VenusButton variant="solid" className="w-full py-8 h-auto bg-black text-[#D4AF37] rounded-full text-[11px] font-bold uppercase tracking-[0.4em] shadow-2xl active:scale-95 transition-all">
-              Ativar Engine Completa agora
-           </VenusButton>
+           <Link href="/merchant" className="block">
+              <VenusButton variant="solid" className="w-full py-8 h-auto bg-black text-[#D4AF37] rounded-full text-[11px] font-bold uppercase tracking-[0.4em] shadow-2xl active:scale-95 transition-all">
+                 Abrir operação do merchant
+              </VenusButton>
+           </Link>
         </section>
 
         {/* Footer Proof (Step 5) */}
         <footer className="pt-20 pb-40 text-center space-y-6 border-t border-white/5">
            <div className="flex justify-center -space-x-3 mb-6">
               {[1,2,3,4,5].map(i => (
-                <div key={i} className="w-10 h-10 rounded-full border-2 border-black bg-[#111] overflow-hidden">
-                   <img src={`https://i.pravatar.cc/150?u=${i*100}`} alt="Merchant" />
+                <div
+                  key={i}
+                  className="w-10 h-10 rounded-full border-2 border-black bg-[#111] overflow-hidden bg-cover bg-center"
+                  style={{ backgroundImage: `url(https://i.pravatar.cc/150?u=${i * 100})` }}
+                  aria-hidden="true"
+                >
                 </div>
               ))}
               <div className="w-10 h-10 rounded-full border-2 border-black bg-[#D4AF37] flex items-center justify-center text-black text-[10px] font-bold">+82</div>
            </div>
-           <Heading as="h3" className="text-lg uppercase tracking-tight">82 lojistas de luxo já operam com Venus</Heading>
-           <Text className="text-[10px] text-white/20 uppercase tracking-[0.5em] font-mono uppercase">Validated excellence · 2026</Text>
+           <Heading as="h3" className="text-lg uppercase tracking-tight">82 lojistas já operam com Venus</Heading>
+           <Text className="text-[10px] text-white/20 uppercase tracking-[0.5em] font-mono uppercase">Operational proof · 2026</Text>
         </footer>
 
       </div>

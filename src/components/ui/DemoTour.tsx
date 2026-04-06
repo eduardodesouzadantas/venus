@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Sparkles, ArrowRight, X, ShieldCheck, Zap, TrendingUp, ShoppingBag, MousePointer2 } from "lucide-react";
 import { Heading } from "./Heading";
@@ -20,42 +20,42 @@ interface DemoStep {
 const DEMO_STEPS: DemoStep[] = [
   {
     id: "onboarding",
-    path: "/onboarding",
-    title: "Mapeamento de Desejo",
-    description: "Nossa IA identifica o biotipo e a intenção do cliente antes mesmo de mostrar o produto.",
-    value: "Reduz a indecisão na entrada do funil.",
+    path: "/onboarding/intent",
+    title: "Leitura Inicial",
+    description: "A experiência se ajusta ao perfil e à intenção antes da exibição dos looks.",
+    value: "Reduz indecisão logo na entrada.",
     icon: <Zap className="w-5 h-5 text-[#D4AF37]" />
   },
   {
     id: "result",
     path: "/result",
-    title: "Dossiê de Autoridade",
-    description: "Transformamos o catálogo em uma curadoria personalizada de alto valor.",
-    value: "Gera desejo imediato e percepção de exclusividade.",
+    title: "Resultado Personalizado",
+    description: "O catálogo vira uma curadoria coerente com o perfil e a intenção da pessoa.",
+    value: "Gera leitura clara e sensação de acerto.",
     icon: <Sparkles className="w-5 h-5 text-[#D4AF37]" />
   },
   {
     id: "bundle",
     path: "/result",
-    title: "Conversão de Bundle",
-    description: "Destaque looks completos para aumentar o valor da venda automaticamente.",
-    value: "Aumenta o ticket médio em até 3.2x.",
+    title: "Look Completo",
+    description: "Mostre combinações que fazem sentido para facilitar a decisão.",
+    value: "Aumenta a leitura do conjunto.",
     icon: <ShoppingBag className="w-5 h-5 text-[#D4AF37]" />
   },
   {
     id: "tryon",
     path: "/result",
-    title: "Efeito de Posse Virtual",
-    description: "O cliente se vê usando o look, removendo a barreira final de dúvida.",
-    value: "Aumenta a conversão em 45% via Try-On.",
+    title: "Prova Visual",
+    description: "O cliente vê o look no próprio contexto e reduz a última dúvida.",
+    value: "Acelera a confiança na escolha.",
     icon: <MousePointer2 className="w-5 h-5 text-[#D4AF37]" />
   },
   {
     id: "dashboard",
     path: "/admin/performance",
-    title: "Inteligência Merchant",
-    description: "Acompanhe exatamente o que gera desejo e onde estão suas oportunidades de lucro.",
-    value: "Decisões baseadas em dados reais de comportamento.",
+    title: "Painel do Lojista",
+    description: "Acompanhe o que gera desejo e onde estão as melhores oportunidades de ação.",
+    value: "Decisões guiadas por sinais reais.",
     icon: <TrendingUp className="w-5 h-5 text-[#D4AF37]" />
   }
 ];
@@ -66,30 +66,22 @@ export function DemoTour() {
   const pathname = usePathname();
   const router = useRouter();
   
-  const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [isVisible, setIsVisible] = useState(false);
-
-  useEffect(() => {
-    if (isDemo) {
-      setIsVisible(true);
-      // Auto-match step to current path
-      const stepIndex = DEMO_STEPS.findIndex(s => s.path === pathname);
-      if (stepIndex !== -1) setCurrentStepIndex(stepIndex);
-    }
-  }, [isDemo, pathname]);
+  const [isDismissed, setIsDismissed] = useState(false);
+  const currentStepIndex = DEMO_STEPS.findIndex((s) => s.path === pathname);
+  const visibleStepIndex = currentStepIndex === -1 ? 0 : currentStepIndex;
+  const isVisible = isDemo && !isDismissed;
 
   if (!isDemo || !isVisible) return null;
 
-  const step = DEMO_STEPS[currentStepIndex];
-  const isLast = currentStepIndex === DEMO_STEPS.length - 1;
+  const step = DEMO_STEPS[visibleStepIndex];
+  const isLast = visibleStepIndex === DEMO_STEPS.length - 1;
 
   const handleNext = () => {
     if (isLast) {
       router.push("/admin/proof?demo=true");
       return;
     }
-    const nextStep = DEMO_STEPS[currentStepIndex + 1];
-    setCurrentStepIndex(currentStepIndex + 1);
+    const nextStep = DEMO_STEPS[visibleStepIndex + 1];
     router.push(`${nextStep.path}?demo=true&id=MOCK_ID`);
   };
 
@@ -104,9 +96,9 @@ export function DemoTour() {
             <div className="flex items-center justify-between">
                <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-[#D4AF37] shadow-[0_0_10px_rgba(212,175,55,1)]" />
-                  <span className="text-[10px] uppercase font-bold tracking-[0.4em] text-[#D4AF37]">Demo Guided Tour</span>
+                  <span className="text-[10px] uppercase font-bold tracking-[0.4em] text-[#D4AF37]">Tour Operacional</span>
                </div>
-               <button onClick={() => setIsVisible(false)} className="text-white/20 hover:text-white transition-colors">
+               <button onClick={() => setIsDismissed(true)} className="text-white/20 hover:text-white transition-colors">
                   <X size={16} />
                </button>
             </div>
@@ -129,7 +121,7 @@ export function DemoTour() {
             </div>
 
             <VenusButton onClick={handleNext} variant="solid" className="w-full py-6 h-auto bg-white text-black text-[11px] font-bold uppercase tracking-[0.4em] rounded-full shadow-2xl active:scale-95 transition-all">
-               {isLast ? "Ver Prova de Faturamento" : "Explorar Próximo Recurso"}
+               {isLast ? "Abrir prova" : "Continuar tour"}
                <ArrowRight className="w-4 h-4 ml-2 group-active:translate-x-1 transition-transform" />
             </VenusButton>
 
