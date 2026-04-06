@@ -55,15 +55,27 @@ export const orchestrateExperience = (stats: UserStats, looks: LookData[]): {
     intentScore > 75 ? 'HIGH' : 
     intentScore > 40 ? 'MEDIUM' : 'LOW';
 
-  const nextAction: AIRecommendation['nextBestAction'] = 
-    intentScore > 75 ? 'aggressive_cta' : 
+  const nextAction: AIRecommendation['nextBestAction'] =
+    intentScore > 75 ? 'show_bundle' :
     intentScore > 40 ? 'offer_tryon' : 'discovery';
 
   // 3. Recommender AI (Dynamic Ranking)
   const rankedLooks = [...looks].sort((a, b) => {
-    const aScore = (stats.clicks[a.id] || 0) * 5 + (stats.bundles[a.id] || 0) * 20 + (stats.shares[a.id] || 0) * 10;
-    const bScore = (stats.clicks[b.id] || 0) * 5 + (stats.bundles[b.id] || 0) * 20 + (stats.shares[b.id] || 0) * 10;
-    return bScore - aScore;
+    const aScore =
+      (stats.views[a.id] || 0) * 2 +
+      (stats.clicks[a.id] || 0) * 5 +
+      (stats.bundles[a.id] || 0) * 20 +
+      (stats.shares[a.id] || 0) * 10;
+    const bScore =
+      (stats.views[b.id] || 0) * 2 +
+      (stats.clicks[b.id] || 0) * 5 +
+      (stats.bundles[b.id] || 0) * 20 +
+      (stats.shares[b.id] || 0) * 10;
+    const scoreDiff = bScore - aScore;
+    if (scoreDiff !== 0) return scoreDiff;
+    const nameDiff = a.name.localeCompare(b.name, "pt-BR");
+    if (nameDiff !== 0) return nameDiff;
+    return a.id.localeCompare(b.id, "pt-BR");
   });
 
   return {
@@ -74,32 +86,38 @@ export const orchestrateExperience = (stats: UserStats, looks: LookData[]): {
       priceSensitivity: 'medium',
       nextBestAction: nextAction,
       intensity,
-      strategy: getConversionStrategy(intensity, stats)
+      strategy: getConversionStrategy(intensity)
     }
   };
 };
 
-function getConversionStrategy(level: 'LOW' | 'MEDIUM' | 'HIGH', stats: UserStats) {
-  const strategies: Record<string, any> = {
+function getConversionStrategy(level: 'LOW' | 'MEDIUM' | 'HIGH') {
+  const strategies: Record<string, {
+    title: string;
+    cta: string;
+    mode: 'discovery' | 'persuasion' | 'aggressive';
+    urgency?: string | null;
+    trigger?: string | null;
+  }> = {
     LOW: {
-      title: "Exploração Estética",
-      cta: "Explorar mais possibilidades",
+      title: "Leitura Inicial",
+      cta: "Ver combinações reais",
       mode: 'discovery',
-      trigger: "Sua imagem é seu maior ativo. Comece a investir nela hoje."
+      trigger: "Ainda faltam sinais fortes; mostre opções claras e seguras."
     },
     MEDIUM: {
-      title: "Identidade & Presença",
+      title: "Presença Guiada",
       cta: "Ver como isso funciona em você",
       mode: 'persuasion',
-      urgency: "Esse estilo está em alta esta semana",
-      trigger: "Isso resolve exatamente o desalinhamento da sua imagem percebida."
+      urgency: "Há sinais de interesse, mas ainda falta confirmação prática.",
+      trigger: "Mostre o look mais coerente e explique o motivo sem exagero."
     },
     HIGH: {
-      title: "Transformação Imediata",
-      cta: "APLICAR ESSA TRANSFORMAÇÃO AGORA",
+      title: "Decisão Pronta",
+      cta: "Ver o conjunto mais forte",
       mode: 'aggressive',
-      urgency: "Últimas combinações disponíveis para seu perfil de elite.",
-      trigger: "Esse é o ponto que separa presença de anonimato. Faça sua escolha."
+      urgency: "O sinal é forte; vale reduzir opções e avançar com clareza.",
+      trigger: "Entregue o conjunto mais convincente sem soar promocional."
     }
   };
   return strategies[level];
@@ -108,20 +126,29 @@ function getConversionStrategy(level: 'LOW' | 'MEDIUM' | 'HIGH', stats: UserStat
 /**
  * Step 4: Merchant Optimization AI
  */
-export const getMerchantOptimization = (allStats: any) => {
+type MerchantLookStats = {
+  view?: number;
+  complete_look?: boolean;
+};
+
+type MerchantStats = {
+  looks?: Record<string, MerchantLookStats>;
+};
+
+export const getMerchantOptimization = (allStats: MerchantStats) => {
   const lowPerforming: string[] = [];
   
   // Logic to identify gaps (e.g. high views but zero bundles)
-  Object.entries(allStats.looks || {}).forEach(([id, data]: [string, any]) => {
-    if (data.view > 10 && !data.complete_look) {
+  Object.entries(allStats.looks || {}).forEach(([id, data]) => {
+    if ((data.view || 0) > 10 && !data.complete_look) {
       lowPerforming.push(id);
     }
   });
 
   return lowPerforming.map(id => ({
     id,
-    issue: "High Visibility, Low Conversion",
-    suggestion: "O 'Try-On' para este look está sendo ignorado. Tente uma imagem de capa com mais contraste ou mude a descrição premium.",
-    impact: "Potential +15% revenue lift"
+    issue: "Alta visibilidade, baixa conversão",
+    suggestion: "O look recebe atenção, mas ainda não vira decisão. Revise a capa, a explicação e a coerência das peças.",
+    impact: "Oportunidade de conversão não capturada"
   }));
 };

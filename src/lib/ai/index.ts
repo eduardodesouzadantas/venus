@@ -6,6 +6,11 @@ import { Product } from "@/lib/catalog";
 import { ResultPayload } from "@/types/result";
 import { enforceOrgHardCap } from "@/lib/billing/enforcement";
 import { enforceTenantOperationalState, type TenantOperationalOrgSnapshot } from "@/lib/tenant/enforcement";
+import {
+  buildCatalogPromptSections,
+  normalizeOpenAIRecommendationPayload,
+  summarizeOnboardingProfile,
+} from "./result-normalizer";
 
 export interface OpenAIRecommendationHardCapContext {
   orgId?: string | null;
@@ -56,125 +61,53 @@ export async function generateOpenAIRecommendation(
   }
 
   const openai = new OpenAI({ apiKey });
-
-  // Prepara os dados para o prompt
-  const userProfileInfo = JSON.stringify({
-    intent: userData.intent,
-    lifestyle: userData.lifestyle,
-    colors: userData.colors,
-    body: userData.body
-  }, null, 2);
-
-  const catalogInfo = JSON.stringify(
-    catalog.map(p => ({
-      id: p.id,
-      name: p.name,
-      category: p.category,
-      type: p.type,
-      primaryColor: p.primary_color,
-      style: p.style,
-      imageUrl: p.image_url
-    })),
-    null,
-    2
-  );
+  const profileSummary = summarizeOnboardingProfile(userData);
+  const catalogSummary = buildCatalogPromptSections(catalog, userData);
 
   const systemPrompt = `
-Você é a Vênus Engine, uma Inteligência Artificial experta em Consultoria de Imagem, Visagismo Masculino e Feminino, e Styling Pessoal Híbrido.
-Sua missão é analisar o perfil do usuário B2C (que pode ser homem ou mulher, identifique isso implicitamente através do caimento e preferências, ou cruze com peças unissex/masculinas/femininas apropriadas) e recomendar os melhores "Looks" baseando-se RIGOROSAMENTE nos Catálogos (B2B) providenciados.
-Você vai mesclar o acervo do usuário com o catálogo. 
+Você é a Venus Engine. Sua função é gerar uma leitura pessoal, precisa e comercialmente útil.
 
-Você deve retornar APENAS UM JSON VÁLIDO obedecendo ESPECIFICAMENTE a seguinte estrutura (Typescript):
-
-{
-  "hero": {
-    "dominantStyle": "String, Ex: 'Alfaiataria Imponente'",
-    "subtitle": "String persuasiva curta"
-  },
-  "palette": {
-    "family": "String da cartela de cores sazonal. Ex: 'Inverno Frio'",
-    "description": "String justificando",
-    "colors": [ { "hex": "#1A2530", "name": "Navy Noturno" } ], // MÁXIMO 3
-    "metal": "Dourado ou Prateado",
-    "contrast": "Baixo, Médio ou Alto"
-  },
-  "diagnostic": {
-    "currentPerception": "String descritiva baseada nos gap reportados",
-    "desiredGoal": "O que a roupa resolverá",
-    "gapSolution": "A chave técnica da solução"
-  },
-  "bodyVisagism": {
-    "shoulders": "Instrução exata",
-    "face": "Instrução de decote baseada pro rosto",
-    "generalFit": "Corte recomendado"
-  },
-  "accessories": {
-    "scale": "Minimalista, Marcante, Moderada",
-    "focalPoint": "Onde deve chamar a atenção",
-    "advice": "Regra geral"
-  },
-  "looks": [
-    {
-      "id": "1",
-      "name": "Upgrade Diário",
-      "intention": "Motivação do look",
-      "type": "Híbrido Seguro", // Pode ser 'Híbrido Seguro', 'Híbrido Premium' ou 'Expansão Direcionada'
-      "items": [
-        { "id": "produto_id_ou_mock", "brand": "Marca B2B ou Seu Acervo", "name": "Nome da Peça", "photoUrl": "URL_AQUI" }
-      ],
-      "accessories": ["Acessório 1", "Acessório 2"],
-      "explanation": "Pq funciona pro corpo dela",
-      "whenToWear": "Ocasião adequada"
-    }
-  ],
-  "toAvoid": ["Aviso de risco 1", "Aviso de risco 2"]
-}
-
-Instruções Extras:
-1. Monte 3 Looks EXATAMENTE. Tente sempre incluir ao menos 1 peça do Catálogo B2B fornecido. Se não houver, crie nomes de peças fakes com a marca "Recomendação Genérica".
-2. Preencha "photoUrl" com a imagem do catátolo se for o caso. O acervo da pessoa pode vir vazio.
-3. Não insira markdown envolvendo o JSON. Responda APENAS o JSON puro.
+Regras:
+- Use apenas os dados do perfil e o catálogo real fornecidos.
+- Não invente produtos, marcas, atributos ou promessas.
+- Prefira looks reais e coerentes em vez de respostas criativas demais.
+- Explique de forma curta e clara por que cada escolha combina com o perfil.
+- Mostre a hierarquia do look com base, apoio e destaque sem escrever demais.
+- Justifique a paleta com o objetivo de imagem, o corpo e o metal informado.
+- Se a confiança for baixa, seja conservador e mantenha a coerência.
+- Retorne apenas JSON válido, exatamente no schema solicitado.
+- Monte 3 looks.
 `;
 
-  // Montagem da mensagem. No futuro, "facePhoto" entra como message content tipo 'image_url'
-  // Por enquanto, cruzamos o descritivo de "body photo" apenas como metadado textual
   const userPrompt = `
-DADOS DO USUÁRIO OBTIDOS:
-${userProfileInfo}
+PERFIL CANÔNICO:
+${profileSummary}
 
-DADOS DA CAPTURA E SCANNER FÍSICO:
-Rosto Capturado: ${userData.scanner.facePhoto ? "Foto Enviada (Processar Traços e Contraste)" : "Não Enviado"}
-Corpo Capturado: ${userData.scanner.bodyPhoto ? "Foto Enviada (Processar Geometria Arquitetônica)" : "Não Enviado"}
+CAPTURA FÍSICA:
+face_photo=${userData.scanner.facePhoto ? "yes" : "no"}
+body_photo=${userData.scanner.bodyPhoto ? "yes" : "no"}
 
-CATÁLOGO APROVADO B2B DA LOJA:
-${catalogInfo}
+CATÁLOGO REAL RELEVANTE:
+${catalogSummary}
 
-Por favor, gere o Dossiê Visual JSON seguindo as regras e cruze a sua heurística de Visagismo com as opções limitadas da loja de cima.
+Gere a saída final com foco em aderência ao perfil, explicação curta, hierarquia clara do look e peças reais do catálogo quando existirem.
 `;
 
   const response = await openai.chat.completions.create({
     model: "gpt-4o",
     messages: [
       { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt }
+      { role: "user", content: userPrompt },
     ],
     response_format: { type: "json_object" },
-    temperature: 0.5,
+    temperature: 0.15,
   });
 
   const responseText = response.choices[0].message.content;
-
   if (!responseText) {
     throw new Error("OpenAI devolveu vazio.");
   }
 
-  // O parse validará o retorno conforme o formato de ResultPayload
-  const payloadData = JSON.parse(responseText) as ResultPayload;
-
-  // Garante injetar fallbacks básicos de coverImage que não vem da LLM
-  if (payloadData.hero && !payloadData.hero.coverImageUrl) {
-    payloadData.hero.coverImageUrl = ""; 
-  }
-
-  return payloadData;
+  const payloadData = JSON.parse(responseText) as Partial<ResultPayload>;
+  return normalizeOpenAIRecommendationPayload(payloadData, userData, catalog);
 }

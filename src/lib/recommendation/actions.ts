@@ -1,115 +1,32 @@
 "use server"
 
 import { OnboardingData } from "@/types/onboarding";
-import { ResultPayload, LookData, LookItem } from "@/types/result";
+import { ResultPayload } from "@/types/result";
 import { getB2BProducts, Product } from "@/lib/catalog";
 import { generateOpenAIRecommendation } from "@/lib/ai";
+import { buildCatalogAwareFallbackResult } from "@/lib/ai/result-normalizer";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { extractLeadSignalsFromSavedResultPayload, findOrCreateLead } from "@/lib/leads";
-import { bumpTenantUsageDaily, resolveAppTenantOrg } from "@/lib/tenant/core";
+import { extractLeadSignalsFromSavedResultPayload, persistSavedResultAndLead } from "@/lib/leads";
+import { resolveAppTenantOrg } from "@/lib/tenant/core";
+import {
+  createProcessAndPersistLeadIdempotencyKey,
+  stripOnboardingBinaryArtifacts,
+} from "@/lib/reliability/idempotency";
+import {
+  captureOperationalTiming,
+  formatOperationalReason,
+  recordOperationalTenantEvent,
+} from "@/lib/reliability/observability";
+import {
+  completeProcessingReservation,
+  createProcessingOwnerToken,
+  failProcessingReservation,
+  reserveProcessingReservation,
+  waitForProcessingReservation,
+} from "@/lib/reliability/processing";
 
 function generateHeuristicFallback(userData: OnboardingData, products: Product[]): ResultPayload {
-  const goal = userData.intent.imageGoal || "Elegância";
-  const metal = userData.colors.metal || "Prateado";
-  const fit = userData.body.fit || "Slim";
-
-  const clothes = products.filter(p => p.type === "roupa");
-  const accessoriesList = products.filter(p => p.type === "acessorio");
-
-  const getB2BPiece = (index: number, fallbackName: string): LookItem => {
-    const piece = clothes[index];
-    if (piece) return { id: piece.id, brand: piece.name, name: piece.category, photoUrl: piece.image_url || "" };
-    return { id: `blank-${index}`, brand: "Peça Base", name: fallbackName, photoUrl: "" };
-  };
-
-  const getB2BAccessory = (index: number, fallbackName: string): string => {
-    const acc = accessoriesList[index];
-    if (acc) return acc.name;
-    return `${fallbackName} ${metal}`;
-  };
-
-  const dominantStyle = goal === "Autoridade" ? "Alfaiataria Imponente" 
-                      : goal === "Criatividade" ? "Vanguarda Urbana"
-                      : "Clássico Contemporâneo";
-
-  const looks: LookData[] = [
-    {
-      id: "1",
-      name: "Upgrade Diário",
-      intention: "Elevar base diária usando heurística.",
-      type: "Híbrido Seguro",
-      items: [
-        { id: "i1", brand: "Seu Acervo", name: "Peça Neutra (Sua foto)", photoUrl: userData.scanner.bodyPhoto || "" },
-        getB2BPiece(0, "Blazer Estruturado Premium")
-      ],
-      accessories: [getB2BAccessory(0, "Relógio Clássico")],
-      explanation: `Mantemos a essência da foto. O Fit ${fit} amarra a proposta. (Fallback Ativado)`,
-      whenToWear: "Dias casuais ou escritório."
-    },
-    {
-      id: "2",
-      name: "Assinatura Magnética",
-      intention: `Projetar alta ${goal} num relance.`,
-      type: "Híbrido Premium",
-      items: [
-        { id: "i3", brand: "Seu Acervo", name: "Bottom Base", photoUrl: "" },
-        getB2BPiece(1, "Camisa Tecnológica Gola Alta"),
-        getB2BPiece(2, "Sneaker Monochrome/Oxford")
-      ],
-      accessories: [getB2BAccessory(1, "Bolsa Minimalista"), `Metal ${metal}`],
-      explanation: "A Peça B2B foca luz no rosto elevando a margem de percepção de imediato.",
-      whenToWear: "Reuniões críticas."
-    },
-    {
-      id: "3",
-      name: "Ruptura Segura",
-      intention: "Expansão Direcionada 100% Loja.",
-      type: "Expansão Direcionada",
-      items: [
-        getB2BPiece(0, "Capa Fria Estruturada"),
-        getB2BPiece(3, "Calça Tecido Nobre")
-      ],
-      accessories: [getB2BAccessory(2, "Óculos Geométrico")],
-      explanation: "Expansão orientada pelas zonas de segurança do app.",
-      whenToWear: "Eventos sociais rigor."
-    }
-  ];
-
-  return {
-    hero: {
-      dominantStyle,
-      subtitle: `Sua marca decodificada (Local Heuristics).`,
-      coverImageUrl: "" 
-    },
-    palette: {
-      family: "Inverno Frio Local",
-      description: `Paleta usando ancoragem B2B.`,
-      colors: [
-        { hex: "#1A2530", name: "Navy Noturno" },
-        { hex: "#F5F5DC", name: "Greige Kuro" },
-        { hex: "#631A2B", name: "Bordô Imperial" },
-      ],
-      metal: metal,
-      contrast: "Médio Alto"
-    },
-    diagnostic: {
-      currentPerception: "Ruído visual por falta de padronagem central.",
-      desiredGoal: `Projeção impecável de ${goal}.`,
-      gapSolution: `Cortaremos texturas erráticas focando em Caimento ${fit}.`
-    },
-    bodyVisagism: {
-      shoulders: `Estruture fisicamente a base dos ombros.`,
-      face: userData.body.faceLines === "Marcantes" ? "Decotes V recomendados." : "Golas redondas.",
-      generalFit: `Ruído necessita descompressão do tecido.`
-    },
-    accessories: {
-      scale: accessoriesList.length > 0 ? "Marcante Híbrida" : "Minimalista Base",
-      focalPoint: "Pulsos e Terço superior da clavícula.",
-      advice: "Os acessórios absolutos quebram o visual básico."
-    },
-    looks,
-    toAvoid: ["Ruídos textuais.", "Modelagens genéricas."]
-  };
+  return buildCatalogAwareFallbackResult(userData, products);
 }
 
 export async function generateEngineResult(
@@ -142,11 +59,12 @@ export async function generateEngineResult(
 }
 
 // --------------------------------------------------------------------------------------
-// ACTION FIM-A-FIM: Gera o resultado e persite uma Sessão Anônima no DB retornando o ID
+// ACTION FIM-A-FIM: Gera o resultado e persite uma SessÃ£o AnÃ´nima no DB retornando o ID
 // --------------------------------------------------------------------------------------
 export async function processAndPersistLead(userData: OnboardingData): Promise<string> {
   try {
     const supabase = createAdminClient();
+    const startedAtMs = Date.now();
     const resolvedTenant = await resolveAppTenantOrg(supabase);
 
     if (!resolvedTenant.org) {
@@ -154,6 +72,250 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
       return "MOCK_DB_FAIL";
     }
 
+    const safeUserData = stripOnboardingBinaryArtifacts(userData);
+    const idempotencyKey = createProcessAndPersistLeadIdempotencyKey({
+      orgId: resolvedTenant.org.id,
+      source: resolvedTenant.source,
+      userData: safeUserData,
+    });
+
+    const { data: existingSavedResult, error: existingSavedResultError } = await supabase
+      .from("saved_results")
+      .select("id")
+      .eq("org_id", resolvedTenant.org.id)
+      .eq("idempotency_key", idempotencyKey)
+      .maybeSingle();
+
+    if (existingSavedResultError) {
+      console.warn("[SAVED_RESULTS] failed to check idempotency state", existingSavedResultError);
+    }
+
+    if (existingSavedResult?.id) {
+      await recordOperationalTenantEvent(supabase, {
+        orgId: resolvedTenant.org.id,
+        eventSource: "app",
+        eventType: "saved_result.process_and_persist_succeeded",
+        dedupeKeyParts: [
+          resolvedTenant.org.id,
+          idempotencyKey,
+          "existing_saved_result",
+          existingSavedResult.id,
+        ],
+        payload: {
+          org_id: resolvedTenant.org.id,
+          saved_result_id: existingSavedResult.id,
+          result_source: "existing_saved_result",
+          idempotency_key: idempotencyKey,
+          reason_code: formatOperationalReason("persist_result", "success"),
+          ...captureOperationalTiming(startedAtMs),
+        },
+      });
+      return existingSavedResult.id;
+    }
+
+    const processingOwnerToken = createProcessingOwnerToken();
+    const reservedProcessing = await reserveProcessingReservation(supabase, {
+      orgId: resolvedTenant.org.id,
+      reservationKey: idempotencyKey,
+      ownerToken: processingOwnerToken,
+      ttlSeconds: 900,
+    });
+
+    if (reservedProcessing.acquired) {
+      await recordOperationalTenantEvent(supabase, {
+        orgId: resolvedTenant.org.id,
+        eventSource: "app",
+        eventType: "saved_result.processing_reservation_acquired",
+        dedupeKeyParts: [
+          resolvedTenant.org.id,
+          idempotencyKey,
+          processingOwnerToken,
+          reservedProcessing.status,
+        ],
+        payload: {
+          org_id: resolvedTenant.org.id,
+          reservation_key: idempotencyKey,
+          owner_token: processingOwnerToken,
+          reservation_status: reservedProcessing.status,
+          acquired: reservedProcessing.acquired,
+          should_wait: reservedProcessing.should_wait,
+          saved_result_id: reservedProcessing.saved_result_id,
+          reason_code: formatOperationalReason("single_flight", "acquired"),
+          ...captureOperationalTiming(startedAtMs),
+        },
+      });
+    }
+
+    if (reservedProcessing.status === "completed" && reservedProcessing.saved_result_id) {
+      await recordOperationalTenantEvent(supabase, {
+        orgId: resolvedTenant.org.id,
+        eventSource: "app",
+        eventType: "saved_result.processing_reservation_completed",
+        dedupeKeyParts: [
+          resolvedTenant.org.id,
+          idempotencyKey,
+          reservedProcessing.saved_result_id,
+          "already_completed",
+        ],
+        payload: {
+          org_id: resolvedTenant.org.id,
+          reservation_key: idempotencyKey,
+          owner_token: processingOwnerToken,
+          saved_result_id: reservedProcessing.saved_result_id,
+          result_source: "already_completed",
+          reason_code: formatOperationalReason("single_flight", "completed"),
+          ...captureOperationalTiming(startedAtMs),
+        },
+      });
+      await recordOperationalTenantEvent(supabase, {
+        orgId: resolvedTenant.org.id,
+        eventSource: "app",
+        eventType: "saved_result.process_and_persist_succeeded",
+        dedupeKeyParts: [
+          resolvedTenant.org.id,
+          idempotencyKey,
+          reservedProcessing.saved_result_id,
+          "already_completed",
+        ],
+        payload: {
+          org_id: resolvedTenant.org.id,
+          saved_result_id: reservedProcessing.saved_result_id,
+          result_source: "already_completed",
+          idempotency_key: idempotencyKey,
+          reason_code: formatOperationalReason("persist_result", "success"),
+          ...captureOperationalTiming(startedAtMs),
+        },
+      });
+      return reservedProcessing.saved_result_id;
+    }
+
+    if (!reservedProcessing.acquired) {
+      const waitStartedAtMs = Date.now();
+      const waitedProcessing = await waitForProcessingReservation(supabase, {
+        orgId: resolvedTenant.org.id,
+        reservationKey: idempotencyKey,
+        ownerToken: processingOwnerToken,
+        ttlSeconds: 900,
+        maxWaitMs: 45_000,
+        pollIntervalMs: 1_000,
+      });
+
+      await recordOperationalTenantEvent(supabase, {
+        orgId: resolvedTenant.org.id,
+        eventSource: "app",
+        eventType: "saved_result.processing_reservation_wait",
+        dedupeKeyParts: [
+          resolvedTenant.org.id,
+          idempotencyKey,
+          processingOwnerToken,
+          waitedProcessing?.status || "unknown",
+        ],
+        payload: {
+          org_id: resolvedTenant.org.id,
+          reservation_key: idempotencyKey,
+          owner_token: processingOwnerToken,
+          reservation_status: waitedProcessing?.status || null,
+          acquired: waitedProcessing?.acquired || false,
+          should_wait: waitedProcessing?.should_wait || false,
+          saved_result_id: waitedProcessing?.saved_result_id || null,
+          wait_duration_ms: captureOperationalTiming(waitStartedAtMs).duration_ms,
+          reason_code: formatOperationalReason("single_flight", "busy"),
+        },
+      });
+
+      if (waitedProcessing?.acquired && waitedProcessing.status === "in_progress") {
+        await recordOperationalTenantEvent(supabase, {
+          orgId: resolvedTenant.org.id,
+          eventSource: "app",
+          eventType: "saved_result.processing_reservation_expired_reclaimed",
+          dedupeKeyParts: [
+            resolvedTenant.org.id,
+            idempotencyKey,
+            processingOwnerToken,
+            "expired_reclaimed",
+          ],
+          payload: {
+            org_id: resolvedTenant.org.id,
+            reservation_key: idempotencyKey,
+            owner_token: processingOwnerToken,
+            reason_code: formatOperationalReason("single_flight", "expired_reclaimed"),
+            ...captureOperationalTiming(startedAtMs),
+          },
+        });
+      }
+
+      if (waitedProcessing?.status === "completed" && waitedProcessing.saved_result_id) {
+        await recordOperationalTenantEvent(supabase, {
+          orgId: resolvedTenant.org.id,
+          eventSource: "app",
+          eventType: "saved_result.processing_reservation_completed",
+          dedupeKeyParts: [
+            resolvedTenant.org.id,
+            idempotencyKey,
+            waitedProcessing.saved_result_id,
+            "wait_completed",
+          ],
+          payload: {
+            org_id: resolvedTenant.org.id,
+            reservation_key: idempotencyKey,
+            owner_token: processingOwnerToken,
+            saved_result_id: waitedProcessing.saved_result_id,
+            result_source: "wait_completed",
+            reason_code: formatOperationalReason("single_flight", "completed"),
+            ...captureOperationalTiming(startedAtMs),
+          },
+        });
+        await recordOperationalTenantEvent(supabase, {
+          orgId: resolvedTenant.org.id,
+          eventSource: "app",
+          eventType: "saved_result.process_and_persist_succeeded",
+          dedupeKeyParts: [
+            resolvedTenant.org.id,
+            idempotencyKey,
+            waitedProcessing.saved_result_id,
+            "wait_completed",
+          ],
+          payload: {
+            org_id: resolvedTenant.org.id,
+            saved_result_id: waitedProcessing.saved_result_id,
+            result_source: "single_flight_completed",
+            idempotency_key: idempotencyKey,
+            reason_code: formatOperationalReason("persist_result", "success"),
+            ...captureOperationalTiming(startedAtMs),
+          },
+        });
+        return waitedProcessing.saved_result_id;
+      }
+
+      if (!waitedProcessing?.acquired) {
+        console.warn("[SAVED_RESULTS] processing reservation still busy", {
+          orgId: resolvedTenant.org.id,
+          reservationKey: idempotencyKey,
+        });
+        await recordOperationalTenantEvent(supabase, {
+          orgId: resolvedTenant.org.id,
+          eventSource: "app",
+          eventType: "saved_result.process_and_persist_failed",
+          dedupeKeyParts: [
+            resolvedTenant.org.id,
+            idempotencyKey,
+            processingOwnerToken,
+            "busy_timeout",
+          ],
+          payload: {
+            org_id: resolvedTenant.org.id,
+            reservation_key: idempotencyKey,
+            owner_token: processingOwnerToken,
+            reason_code: formatOperationalReason("single_flight", "busy"),
+            failure_stage: "reservation_wait_timeout",
+            ...captureOperationalTiming(startedAtMs),
+          },
+        });
+        return "MOCK_DB_FAIL";
+      }
+    }
+
+    const generationStartedAtMs = Date.now();
     let result: ResultPayload;
     try {
       result = await generateEngineResult(userData, {
@@ -169,46 +331,55 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
         },
       });
     } catch (err) {
+      const reasonCode = err instanceof Error && err.message.startsWith("HARD_CAP_BLOCKED:")
+        ? formatOperationalReason("hard_cap", "blocked")
+        : err instanceof Error && err.message.startsWith("TENANT_BLOCKED:")
+          ? formatOperationalReason("tenant_blocked", "blocked")
+          : formatOperationalReason("single_flight", "generation_failed");
+
+      await recordOperationalTenantEvent(supabase, {
+        orgId: resolvedTenant.org.id,
+        eventSource: "app",
+        eventType: "saved_result.processing_reservation_failed",
+        dedupeKeyParts: [
+          resolvedTenant.org.id,
+          idempotencyKey,
+          processingOwnerToken,
+          "generation_failed",
+        ],
+        payload: {
+          org_id: resolvedTenant.org.id,
+          reservation_key: idempotencyKey,
+          owner_token: processingOwnerToken,
+          reason_code: reasonCode,
+          failure_stage: "generation",
+          error_message: err instanceof Error ? err.message : "unknown_failure",
+          generation_duration_ms: captureOperationalTiming(generationStartedAtMs).duration_ms,
+          ...captureOperationalTiming(startedAtMs),
+        },
+      });
+
       if (err instanceof Error && (err.message.startsWith("HARD_CAP_BLOCKED:") || err.message.startsWith("TENANT_BLOCKED:"))) {
         console.warn("[BILLING] saved result generation blocked by enforcement", err.message);
+        await failProcessingReservation(supabase, {
+          orgId: resolvedTenant.org.id,
+          reservationKey: idempotencyKey,
+          ownerToken: processingOwnerToken,
+          errorMessage: err.message,
+        }).catch((reservationError) => {
+          console.warn("[SAVED_RESULTS] failed to mark processing reservation as failed", reservationError);
+        });
         return err.message;
       }
+      await failProcessingReservation(supabase, {
+        orgId: resolvedTenant.org.id,
+        reservationKey: idempotencyKey,
+        ownerToken: processingOwnerToken,
+        errorMessage: err instanceof Error ? err.message : "unknown_failure",
+      }).catch((reservationError) => {
+        console.warn("[SAVED_RESULTS] failed to mark processing reservation as failed", reservationError);
+      });
       throw err;
-    }
-
-    // Clone userData stripping massive base64 camera blobs to prevent Vercel limits and Supabase JSON overflow
-    const safeUserData = { ...userData };
-    safeUserData.scanner = {
-      ...userData.scanner,
-      facePhoto: userData.scanner.facePhoto ? "[BASE64_IMAGE_STRIPPED_FOR_STORAGE]" : "",
-      bodyPhoto: userData.scanner.bodyPhoto ? "[BASE64_IMAGE_STRIPPED_FOR_STORAGE]" : "",
-    };
-
-    // Insere um registro cego (anônimo) no Supabase contendo o resultado da inteligência
-    const { data, error } = await supabase
-      .from("saved_results")
-      .insert([
-        {
-          org_id: resolvedTenant.org.id,
-          user_email: safeUserData.contact?.email || null,
-          user_name: safeUserData.contact?.name || null,
-          payload: {
-            tenant: {
-              orgId: resolvedTenant.org.id,
-              orgSlug: resolvedTenant.org.slug,
-              source: resolvedTenant.source,
-            },
-            onboardingContext: safeUserData,
-            finalResult: result,
-          },
-        },
-      ])
-      .select("id")
-      .single();
-
-    if (error || !data) {
-      console.error("Erro ao salvar Dossiê Anônimo", error);
-      return "MOCK_DB_FAIL"; 
     }
 
     const leadSignals = extractLeadSignalsFromSavedResultPayload({
@@ -218,54 +389,126 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
       user_name: safeUserData.contact?.name || null,
     });
 
-    await supabase.from("tenant_events").insert({
-      org_id: resolvedTenant.org.id,
-      actor_user_id: null,
-      event_type: "app.saved_result_created",
-      event_source: "app",
-      dedupe_key: `saved_result_created:${resolvedTenant.org.id}:${data.id}`,
-      payload: {
-        saved_result_id: data.id,
-        org_slug: resolvedTenant.org.slug,
-        org_source: resolvedTenant.source,
-      },
-    });
-
     try {
-      const { lead, created } = await findOrCreateLead(supabase, {
+      const persistStartedAtMs = Date.now();
+      const persisted = await persistSavedResultAndLead(supabase, {
         orgId: resolvedTenant.org.id,
-        name: leadSignals.name || safeUserData.contact?.name || null,
-        email: leadSignals.email || safeUserData.contact?.email || null,
-        phone: leadSignals.phone || safeUserData.contact?.phone || null,
-        source: "app",
-        status: "new",
-        savedResultId: data.id,
+        idempotencyKey,
+        userEmail: safeUserData.contact?.email || null,
+        userName: safeUserData.contact?.name || null,
+        payload: {
+          tenant: {
+            orgId: resolvedTenant.org.id,
+            orgSlug: resolvedTenant.org.slug,
+            source: resolvedTenant.source,
+            idempotencyKey,
+          },
+          onboardingContext: safeUserData,
+          finalResult: result,
+        },
+        leadName: leadSignals.name || safeUserData.contact?.name || null,
+        leadEmail: leadSignals.email || safeUserData.contact?.email || null,
+        leadPhone: leadSignals.phone || safeUserData.contact?.phone || null,
+        leadSource: "app",
+        leadStatus: "new",
         intentScore: leadSignals.intentScore ?? Math.round(Number(safeUserData.intent.satisfaction || 0) * 10),
         whatsappKey: leadSignals.whatsappKey || safeUserData.contact?.phone || null,
         lastInteractionAt: leadSignals.lastInteractionAt || undefined,
+        eventSource: "app",
       });
 
-      await supabase.from("tenant_events").insert({
-        org_id: resolvedTenant.org.id,
-        actor_user_id: null,
-        event_type: created ? "lead.created_from_app" : "lead.updated_from_app",
-        event_source: "app",
-        dedupe_key: `lead_from_app:${resolvedTenant.org.id}:${lead.id}:${data.id}`,
+      await recordOperationalTenantEvent(supabase, {
+        orgId: resolvedTenant.org.id,
+        eventSource: "app",
+        eventType: "saved_result.processing_reservation_completed",
+        dedupeKeyParts: [
+          resolvedTenant.org.id,
+          idempotencyKey,
+          processingOwnerToken,
+          persisted.savedResultId,
+          "generated_and_persisted",
+        ],
         payload: {
-          lead_id: lead.id,
-          saved_result_id: data.id,
-          org_slug: resolvedTenant.org.slug,
-          created,
+          org_id: resolvedTenant.org.id,
+          reservation_key: idempotencyKey,
+          owner_token: processingOwnerToken,
+          saved_result_id: persisted.savedResultId,
+          lead_id: persisted.leadId,
+          result_source: "generated_and_persisted",
+          reason_code: formatOperationalReason("single_flight", "completed"),
+          generation_duration_ms: captureOperationalTiming(generationStartedAtMs).duration_ms,
+          persist_duration_ms: captureOperationalTiming(persistStartedAtMs).duration_ms,
+          ...captureOperationalTiming(startedAtMs),
         },
       });
 
-      await bumpTenantUsageDaily(supabase, resolvedTenant.org.id, { events_count: 1, leads: created ? 1 : 0 });
-    } catch (leadError) {
-      console.warn("[LEADS] failed to sync lead from saved result creation", leadError);
-      await bumpTenantUsageDaily(supabase, resolvedTenant.org.id, { events_count: 1 });
-    }
+      await recordOperationalTenantEvent(supabase, {
+        orgId: resolvedTenant.org.id,
+        eventSource: "app",
+        eventType: "saved_result.process_and_persist_succeeded",
+        dedupeKeyParts: [
+          resolvedTenant.org.id,
+          idempotencyKey,
+          processingOwnerToken,
+          persisted.savedResultId,
+        ],
+        payload: {
+          org_id: resolvedTenant.org.id,
+          reservation_key: idempotencyKey,
+          owner_token: processingOwnerToken,
+          saved_result_id: persisted.savedResultId,
+          lead_id: persisted.leadId,
+          result_source: "generated_and_persisted",
+          idempotency_key: idempotencyKey,
+          reason_code: formatOperationalReason("persist_result", "success"),
+          generation_duration_ms: captureOperationalTiming(generationStartedAtMs).duration_ms,
+          persist_duration_ms: captureOperationalTiming(persistStartedAtMs).duration_ms,
+          ...captureOperationalTiming(startedAtMs),
+        },
+      });
 
-    return data.id;
+      await completeProcessingReservation(supabase, {
+        orgId: resolvedTenant.org.id,
+        reservationKey: idempotencyKey,
+        ownerToken: processingOwnerToken,
+        savedResultId: persisted.savedResultId,
+      }).catch((reservationError) => {
+        console.warn("[SAVED_RESULTS] failed to finalize processing reservation", reservationError);
+      });
+
+      return persisted.savedResultId;
+    } catch (leadError) {
+      await failProcessingReservation(supabase, {
+        orgId: resolvedTenant.org.id,
+        reservationKey: idempotencyKey,
+        ownerToken: processingOwnerToken,
+        errorMessage: leadError instanceof Error ? leadError.message : "persist_failure",
+      }).catch((reservationError) => {
+        console.warn("[SAVED_RESULTS] failed to mark processing reservation as failed", reservationError);
+      });
+      console.warn("[LEADS] failed to sync lead from saved result creation", leadError);
+      await recordOperationalTenantEvent(supabase, {
+        orgId: resolvedTenant.org.id,
+        eventSource: "app",
+        eventType: "saved_result.process_and_persist_failed",
+        dedupeKeyParts: [
+          resolvedTenant.org.id,
+          idempotencyKey,
+          processingOwnerToken,
+          "persist_failure",
+        ],
+        payload: {
+          org_id: resolvedTenant.org.id,
+          reservation_key: idempotencyKey,
+          owner_token: processingOwnerToken,
+          reason_code: formatOperationalReason("single_flight", "persist_failed"),
+          failure_stage: "persist",
+          error_message: leadError instanceof Error ? leadError.message : "persist_failure",
+          ...captureOperationalTiming(startedAtMs),
+        },
+      });
+      return "MOCK_DB_FAIL";
+    }
   } catch (err) {
     console.error("Critical Exception in DB or Client creation (ENVS might be missing):", err);
     return "MOCK_DB_FAIL";
