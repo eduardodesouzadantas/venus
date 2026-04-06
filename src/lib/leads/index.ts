@@ -2,6 +2,19 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type LeadStatus = "new" | "engaged" | "qualified" | "offer_sent" | "won" | "lost";
 
+export function getLeadStatusEventType(status: LeadStatus) {
+  switch (status) {
+    case "offer_sent":
+      return "lead.offer_sent";
+    case "won":
+      return "lead.closed_won";
+    case "lost":
+      return "lead.closed_lost";
+    default:
+      return "lead.status_updated";
+  }
+}
+
 export interface LeadRecord {
   id: string;
   org_id: string;
@@ -70,6 +83,17 @@ function resolveLeadStatus(existingStatus: LeadStatus | null | undefined, nextSt
 
   if (!existingStatus) {
     return nextStatus;
+  }
+
+  const existingIsClosed = existingStatus === "won" || existingStatus === "lost";
+  const nextIsClosed = nextStatus === "won" || nextStatus === "lost";
+
+  if (existingIsClosed && existingStatus !== nextStatus) {
+    return existingStatus;
+  }
+
+  if (existingIsClosed && nextIsClosed) {
+    return existingStatus;
   }
 
   return LEAD_STATUS_RANK[nextStatus] >= LEAD_STATUS_RANK[existingStatus] ? nextStatus : existingStatus;

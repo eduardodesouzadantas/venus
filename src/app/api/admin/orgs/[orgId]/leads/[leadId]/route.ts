@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 
 import { resolveAgencySession } from "@/lib/agency";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { type LeadStatus, updateLeadOperationalState } from "@/lib/leads";
+import { getLeadStatusEventType, type LeadStatus, updateLeadOperationalState } from "@/lib/leads";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +49,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const supabase = createAdminClient();
     const formData = await request.formData();
     const status = readStatus(formData.get("status"));
+    const hasFollowUpField = formData.has("next_follow_up_at");
     const { timestamp: nextFollowUpAt, error: followUpError } = readOptionalTimestamp(formData.get("next_follow_up_at"));
     const redirectTo = normalizePath(formData.get("redirect_to"), `/agency/orgs/${orgId}`);
 
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: followUpError }, { status: 400 });
     }
 
-    if (!status && nextFollowUpAt === null) {
+    if (!status && !hasFollowUpField) {
       return NextResponse.json({ error: "Invalid lead status" }, { status: 400 });
     }
 
@@ -95,17 +96,19 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: `Failed to load org: ${orgError.message}` }, { status: 400 });
     }
 
-    const { lead } = await updateLeadOperationalState(supabase, {
+    const updateInput: Parameters<typeof updateLeadOperationalState>[1] = {
       orgId,
       leadId,
-      status: status || undefined,
-      nextFollowUpAt,
-    });
+      ...(status ? { status } : {}),
+      ...(hasFollowUpField ? { nextFollowUpAt } : {}),
+    };
+
+    const { lead } = await updateLeadOperationalState(supabase, updateInput);
 
     const { error: eventError } = await supabase.from("tenant_events").insert({
       org_id: orgId,
       actor_user_id: agencySession.user.id,
-      event_type: statusChanged ? "lead.status_updated" : "lead.follow_up_updated",
+      event_type: statusChanged && status ? getLeadStatusEventType(status) : "lead.follow_up_updated",
       event_source: "agency",
       dedupe_key: `lead:state:${orgId}:${leadId}:${status || "noop"}:${nextFollowUpAt || "clear"}:${Date.now()}`,
       payload: {

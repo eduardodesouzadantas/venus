@@ -59,6 +59,33 @@ function parseLeadFollowUpFilter(value: string): "all" | "overdue" | "today" | "
   return "all";
 }
 
+function leadStatusDisplayLabel(value: string) {
+  switch (value) {
+    case "new":
+      return "Novo";
+    case "engaged":
+      return "Engajado";
+    case "qualified":
+      return "Qualificado";
+    case "offer_sent":
+      return "Oferta enviada";
+    case "won":
+      return "Ganho";
+    case "lost":
+      return "Perdido";
+    default:
+      return value;
+  }
+}
+
+function leadStatusChipKind(value: string): "active" | "blocked" | "plan" | "neutral" | "risk-low" | "risk-medium" | "risk-high" {
+  if (value === "won") return "active";
+  if (value === "lost") return "blocked";
+  if (value === "offer_sent") return "risk-medium";
+  if (value === "qualified" || value === "engaged") return "plan";
+  return "neutral";
+}
+
 function leadStatusLabel(value: string) {
   switch (value) {
     case "new":
@@ -920,7 +947,9 @@ export default async function AgencyOrgDetailPage({
                         </Text>
                       </div>
                       <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.3em]">
-                        <span className={`px-3 py-1 rounded-full border ${badge("plan")}`}>{lead.status}</span>
+                        <span className={`px-3 py-1 rounded-full border ${badge(leadStatusChipKind(lead.status))}`}>
+                          {leadStatusDisplayLabel(lead.status)}
+                        </span>
                         <span className={`px-3 py-1 rounded-full border ${badge("neutral")}`}>
                           intent {lead.intent_score === null ? "Sem dados" : lead.intent_score.toFixed(0)}
                         </span>
@@ -932,6 +961,49 @@ export default async function AgencyOrgDetailPage({
                           {formatDate(lead.last_interaction_at || lead.updated_at || lead.created_at)}
                         </span>
                       </div>
+                      {lead.status !== "won" && lead.status !== "lost" ? (
+                        <div className="flex flex-wrap gap-2">
+                          <form action={`/api/admin/orgs/${org.id}/leads/${lead.id}`} method="post">
+                            <input type="hidden" name="status" value="offer_sent" />
+                            <input type="hidden" name="redirect_to" value={detailHref} />
+                            <VenusButton
+                              type="submit"
+                              variant="outline"
+                              className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-yellow-500/20 text-yellow-200"
+                            >
+                              Oferta enviada
+                            </VenusButton>
+                          </form>
+                          <form action={`/api/admin/orgs/${org.id}/leads/${lead.id}`} method="post">
+                            <input type="hidden" name="status" value="won" />
+                            <input type="hidden" name="redirect_to" value={detailHref} />
+                            <VenusButton
+                              type="submit"
+                              variant="outline"
+                              className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-green-500/20 text-green-300"
+                            >
+                              Ganho
+                            </VenusButton>
+                          </form>
+                          <form action={`/api/admin/orgs/${org.id}/leads/${lead.id}`} method="post">
+                            <input type="hidden" name="status" value="lost" />
+                            <input type="hidden" name="redirect_to" value={detailHref} />
+                            <VenusButton
+                              type="submit"
+                              variant="outline"
+                              className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-red-500/20 text-red-300"
+                            >
+                              Perdido
+                            </VenusButton>
+                          </form>
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.3em] text-white/40">
+                          <span className={`px-3 py-1 rounded-full border ${badge(lead.status === "won" ? "active" : "blocked")}`}>
+                            Fechamento comercial
+                          </span>
+                        </div>
+                      )}
                       <form action={`/api/admin/orgs/${org.id}/leads/${lead.id}`} method="post" className="flex flex-wrap items-end gap-2">
                         <input type="hidden" name="redirect_to" value={detailHref} />
                         <label className="space-y-1">
