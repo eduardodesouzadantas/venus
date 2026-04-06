@@ -208,6 +208,21 @@ export default async function AgencyDashboardPage({
       return right.lead_summary.total - left.lead_summary.total;
     })
     .slice(0, 4);
+  const withoutFollowUpUrgentOrgs = [...orgs]
+    .filter((org) => org.lead_summary.followup_overdue === 0 && org.lead_summary.followup_without > 0)
+    .sort((left, right) => {
+      const byWithout = right.lead_summary.followup_without - left.lead_summary.followup_without;
+      if (byWithout !== 0) return byWithout;
+      const byTotal = right.lead_summary.total - left.lead_summary.total;
+      if (byTotal !== 0) return byTotal;
+      return (
+        right.lead_summary.by_status.engaged +
+        right.lead_summary.by_status.qualified +
+        right.lead_summary.by_status.offer_sent -
+        (left.lead_summary.by_status.engaged + left.lead_summary.by_status.qualified + left.lead_summary.by_status.offer_sent)
+      );
+    })
+    .slice(0, 4);
   const leadRiskOrgs = [...orgs]
     .sort((left, right) => {
       const byOverdue = right.lead_summary.followup_overdue - left.lead_summary.followup_overdue;
@@ -323,6 +338,60 @@ export default async function AgencyDashboardPage({
           ) : (
             <div className="p-6 rounded-[28px] bg-white/[0.03] border border-white/5">
               <Text className="text-sm text-white/40">Nenhuma org com follow-up vencido agora. A fila imediata está limpa.</Text>
+            </div>
+          )}
+
+          <div className="space-y-1">
+            <Heading as="h2" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">
+              Sem follow-up urgente
+            </Heading>
+            <Text className="text-sm text-white/40">
+              Orgs sem vencidos, mas já frouxas por acumular leads sem follow-up. Isso tende a virar problema.
+            </Text>
+          </div>
+
+          {withoutFollowUpUrgentOrgs.length > 0 ? (
+            <div className="space-y-3">
+              {withoutFollowUpUrgentOrgs.map((org) => {
+                const activePipelineCount = org.lead_summary.by_status.engaged + org.lead_summary.by_status.qualified + org.lead_summary.by_status.offer_sent;
+                return (
+                  <div key={`without-follow-up-${org.id}`} className="p-5 rounded-[28px] bg-yellow-500/5 border border-yellow-500/15 space-y-4">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Heading as="h3" className="text-xl uppercase tracking-tighter">
+                            {org.name}
+                          </Heading>
+                          <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badgeClasses("warning")}`}>
+                            Atenção operacional
+                          </span>
+                          <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badgeClasses("plan")}`}>
+                            Leads {formatCount(org.lead_summary.total)}
+                          </span>
+                        </div>
+                        <Text className="text-sm text-white/45">
+                          {org.slug} · sem follow-up {formatCount(org.lead_summary.followup_without)} · pipeline ativo {formatCount(activePipelineCount)}
+                        </Text>
+                      </div>
+                      <Link href={buildAgencyOrgDetailHref(org.id, { from: "agency", range, followUp: "without_follow_up" })}>
+                        <VenusButton variant="outline" className="h-11 px-5 rounded-full uppercase tracking-[0.3em] text-[9px] font-bold border-yellow-500/20 text-yellow-200">
+                          Abrir sem follow-up
+                        </VenusButton>
+                      </Link>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <Metric label="Sem follow-up" value={org.lead_summary.followup_without} />
+                      <Metric label="Engajados" value={org.lead_summary.by_status.engaged} />
+                      <Metric label="Qualificados" value={org.lead_summary.by_status.qualified} />
+                      <Metric label="Oferta enviada" value={org.lead_summary.by_status.offer_sent} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="p-6 rounded-[28px] bg-white/[0.03] border border-white/5">
+              <Text className="text-sm text-white/40">Nenhuma org frouxa sem vencidos agora. Essa camada está limpa.</Text>
             </div>
           )}
 
