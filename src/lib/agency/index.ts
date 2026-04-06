@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient, User } from "@supabase/supabase-js";
+import type { LeadStatus } from "@/lib/leads";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -28,6 +29,7 @@ export interface AgencyOrgMetrics {
   total_products: number;
   total_leads: number;
   total_saved_results: number;
+  lead_summary: AgencyOrgLeadSummary;
   total_whatsapp_conversations: number | null;
   total_whatsapp_messages: number | null;
   usage_today: AgencyUsageSnapshot | null;
@@ -36,6 +38,15 @@ export interface AgencyOrgMetrics {
 }
 
 export interface AgencyOrgRow extends TenantRecord, AgencyOrgMetrics {}
+
+export interface AgencyOrgLeadSummary {
+  total: number;
+  by_status: Record<LeadStatus, number>;
+  followup_overdue: number;
+  followup_today: number;
+  followup_upcoming: number;
+  followup_without: number;
+}
 
 export interface AgencySession {
   supabase: SupabaseClient;
@@ -78,6 +89,68 @@ function updateLatestDate(map: Map<string, string | null>, key: string, value?: 
   }
 }
 
+function dateKey(value: Date) {
+  const pad = (input: number) => String(input).padStart(2, "0");
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+}
+
+function emptyLeadSummary(): AgencyOrgLeadSummary {
+  return {
+    total: 0,
+    by_status: {
+      new: 0,
+      engaged: 0,
+      qualified: 0,
+      offer_sent: 0,
+      won: 0,
+      lost: 0,
+    },
+    followup_overdue: 0,
+    followup_today: 0,
+    followup_upcoming: 0,
+    followup_without: 0,
+  };
+}
+
+function buildLeadSummary(leads: Array<{ status: string | null; next_follow_up_at: string | null }>): AgencyOrgLeadSummary {
+  const summary = emptyLeadSummary();
+  const now = new Date();
+  const todayKey = dateKey(now);
+
+  for (const lead of leads) {
+    summary.total += 1;
+
+    if (lead.status === "new" || lead.status === "engaged" || lead.status === "qualified" || lead.status === "offer_sent" || lead.status === "won" || lead.status === "lost") {
+      summary.by_status[lead.status] += 1;
+    }
+
+    if (!lead.next_follow_up_at) {
+      summary.followup_without += 1;
+      continue;
+    }
+
+    const followUpAt = new Date(lead.next_follow_up_at);
+    if (Number.isNaN(followUpAt.getTime())) {
+      summary.followup_without += 1;
+      continue;
+    }
+
+    if (followUpAt.getTime() < now.getTime()) {
+      summary.followup_overdue += 1;
+      continue;
+    }
+
+    if (dateKey(followUpAt) === todayKey) {
+      summary.followup_today += 1;
+      continue;
+    }
+
+    summary.followup_upcoming += 1;
+  }
+
+  return summary;
+}
+
 function buildUsageSnapshot(row: Record<string, unknown>): AgencyUsageSnapshot {
   return {
     usage_date: normalize(row.usage_date),
@@ -110,7 +183,7 @@ async function loadAgencySnapshot() {
     admin.from("orgs").select(ORG_SELECT_COLUMNS).order("created_at", { ascending: false }),
     admin.from("org_members").select("org_id, user_id, role, status, created_at, updated_at"),
     admin.from("products").select("org_id, created_at"),
-    admin.from("leads").select("org_id, last_interaction_at, created_at, updated_at"),
+    admin.from("leads").select("org_id, status, next_follow_up_at, last_interaction_at, created_at, updated_at"),
     admin.from("saved_results").select("org_id, created_at, updated_at"),
     admin
       .from("org_usage_daily")
@@ -133,6 +206,7 @@ async function loadAgencySnapshot() {
   const memberCountByOrgId = new Map<string, number>();
   const productCountByOrgId = new Map<string, number>();
   const leadCountByOrgId = new Map<string, number>();
+  const leadSummaryByOrgId = new Map<string, AgencyOrgLeadSummary>();
   const savedResultCountByOrgId = new Map<string, number>();
   const whatsappConversationCountByOrgId = new Map<string, number>();
   const whatsappMessageCountByOrgId = new Map<string, number>();
@@ -152,10 +226,19 @@ async function loadAgencySnapshot() {
     updateLatestDate(lastActivityByOrgId, row.org_id, row.created_at);
   }
 
-  for (const row of (leadsResult.data || []) as Array<{ org_id: string | null; last_interaction_at: string | null; created_at: string | null; updated_at: string | null }>) {
+  const leadRowsByOrgId = new Map<string, Array<{ status: string | null; next_follow_up_at: string | null }>>();
+
+  for (const row of (leadsResult.data || []) as Array<{ org_id: string | null; status: string | null; next_follow_up_at: string | null; last_interaction_at: string | null; created_at: string | null; updated_at: string | null }>) {
     if (!row.org_id) continue;
     ensureMapValue(leadCountByOrgId, row.org_id);
     updateLatestDate(lastActivityByOrgId, row.org_id, row.last_interaction_at || row.updated_at || row.created_at || null);
+    const bucket = leadRowsByOrgId.get(row.org_id) || [];
+    bucket.push({ status: row.status, next_follow_up_at: row.next_follow_up_at });
+    leadRowsByOrgId.set(row.org_id, bucket);
+  }
+
+  for (const [orgId, rows] of leadRowsByOrgId.entries()) {
+    leadSummaryByOrgId.set(orgId, buildLeadSummary(rows));
   }
 
   for (const row of (savedResultsResult.data || []) as Array<{ org_id: string | null; created_at: string | null; updated_at: string | null }>) {
@@ -208,6 +291,7 @@ async function loadAgencySnapshot() {
     memberCountByOrgId,
     productCountByOrgId,
     leadCountByOrgId,
+    leadSummaryByOrgId,
     savedResultCountByOrgId,
     whatsappConversationCountByOrgId,
     whatsappMessageCountByOrgId,
@@ -237,6 +321,7 @@ function buildAgencyRow(
     total_products: snapshot.productCountByOrgId.get(org.id) || 0,
     total_leads: snapshot.leadCountByOrgId.get(org.id) || 0,
     total_saved_results: snapshot.savedResultCountByOrgId.get(org.id) || 0,
+    lead_summary: snapshot.leadSummaryByOrgId.get(org.id) || emptyLeadSummary(),
     total_whatsapp_conversations: snapshot.whatsappConversationsAvailable
       ? (snapshot.whatsappConversationCountByOrgId.get(org.id) ?? 0)
       : null,

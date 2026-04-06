@@ -6,6 +6,7 @@ import { ShieldCheck, Users, DollarSign, Zap, HeartPulse, MessageSquare, AlertCi
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { VenusButton } from "@/components/ui/VenusButton";
+import { listAgencyOrgRows, type AgencyOrgRow } from "@/lib/agency";
 import { createClient } from "@/lib/supabase/server";
 import { isAgencyRole, isMerchantRole, resolveTenantContext } from "@/lib/tenant/core";
 import { listAgencyPlaybookRows, type AgencyPlaybookRow } from "@/lib/billing/playbooks";
@@ -82,6 +83,35 @@ function softCapChipText(label: string, usage: number | null, cap: number | null
   return `${label}: ${usageText}/${capText} (${pctText})`;
 }
 
+function leadRiskKind(overdue: number, withoutFollowUp: number) {
+  if (overdue > 0) return "critical";
+  if (withoutFollowUp > 0) return "warning";
+  return "ok";
+}
+
+function formatPipelineCounts(row: AgencyOrgLeadRowLike) {
+  const counts = row.lead_summary.by_status;
+  return `novo ${counts.new} · engajado ${counts.engaged} · qualificado ${counts.qualified} · oferta ${counts.offer_sent} · ganho ${counts.won} · perdido ${counts.lost}`;
+}
+
+type AgencyOrgLeadRowLike = {
+  lead_summary: {
+    total: number;
+    by_status: {
+      new: number;
+      engaged: number;
+      qualified: number;
+      offer_sent: number;
+      won: number;
+      lost: number;
+    };
+    followup_overdue: number;
+    followup_today: number;
+    followup_upcoming: number;
+    followup_without: number;
+  };
+};
+
 function firstValue(value: string | string[] | undefined): string {
   if (Array.isArray(value)) return value[0] || "";
   return value || "";
@@ -123,9 +153,13 @@ export default async function AgencyDashboardPage({
   const resolved = await searchParams;
   const range = normalizeAgencyTimeRange(firstValue(resolved.range), "all");
 
-  let orgs: AgencyPlaybookRow[] = [];
+  let playbookRows: AgencyPlaybookRow[] = [];
+  let orgRows: AgencyOrgRow[] = [];
   try {
-    orgs = await listAgencyPlaybookRows();
+    [playbookRows, orgRows] = await Promise.all([
+      listAgencyPlaybookRows(),
+      listAgencyOrgRows(),
+    ]);
   } catch (error) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center p-6">
@@ -152,6 +186,8 @@ export default async function AgencyDashboardPage({
     );
   }
 
+  const orgRowsById = new Map(orgRows.map((row) => [row.id, row]));
+  const orgs = playbookRows.map((row) => ({ ...row, ...(orgRowsById.get(row.id) || {}) }));
   const totalOrgs = orgs.length;
   const activeOrgs = orgs.filter((org) => org.status === "active" && !org.kill_switch).length;
   const suspendedOrBlocked = orgs.filter((org) => org.status !== "active" || org.kill_switch).length;
@@ -159,6 +195,21 @@ export default async function AgencyDashboardPage({
   const totalProducts = orgs.reduce((sum, org) => sum + org.total_products, 0);
   const totalLeads = orgs.reduce((sum, org) => sum + org.total_leads, 0);
   const totalSavedResults = orgs.reduce((sum, org) => sum + org.total_saved_results, 0);
+  const totalLeadOverdue = orgs.reduce((sum, org) => sum + org.lead_summary.followup_overdue, 0);
+  const totalLeadWithoutFollowUp = orgs.reduce((sum, org) => sum + org.lead_summary.followup_without, 0);
+  const orgsWithLeadRisk = orgs.filter((org) => org.lead_summary.followup_overdue > 0 || org.lead_summary.followup_without > 0).length;
+  const leadRiskOrgs = [...orgs]
+    .sort((left, right) => {
+      const byOverdue = right.lead_summary.followup_overdue - left.lead_summary.followup_overdue;
+      if (byOverdue !== 0) return byOverdue;
+      const byWithout = right.lead_summary.followup_without - left.lead_summary.followup_without;
+      if (byWithout !== 0) return byWithout;
+      const byTotal = right.lead_summary.total - left.lead_summary.total;
+      if (byTotal !== 0) return byTotal;
+      return (right.lead_summary.followup_today + right.lead_summary.followup_upcoming) - (left.lead_summary.followup_today + left.lead_summary.followup_upcoming);
+    })
+    .filter((org) => org.lead_summary.total > 0)
+    .slice(0, 6);
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -212,6 +263,72 @@ export default async function AgencyDashboardPage({
           <StatCard icon={<DollarSign className="w-5 h-5 text-[#D4AF37]" />} label="Produtos totais" value={totalProducts.toString()} />
           <StatCard icon={<MessageSquare className="w-5 h-5 text-[#D4AF37]" />} label="Leads totais / Saved results totais" value={`${totalLeads} / ${totalSavedResults}`} />
         </div>
+
+        <section className="space-y-4">
+          <div className="space-y-1">
+            <Heading as="h2" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">
+              Risco comercial por org
+            </Heading>
+            <Text className="text-sm text-white/40">
+              Visão macro das orgs com mais follow-ups vencidos ou leads sem disciplina de acompanhamento. Vencidos primeiro.
+            </Text>
+          </div>
+
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+            <StatCard icon={<AlertCircle className="w-5 h-5 text-red-400" />} label="Leads vencidos" value={totalLeadOverdue.toString()} />
+            <StatCard icon={<CircleDashed className="w-5 h-5 text-yellow-300" />} label="Sem follow-up" value={totalLeadWithoutFollowUp.toString()} />
+            <StatCard icon={<MessageSquare className="w-5 h-5 text-[#D4AF37]" />} label="Org com risco" value={orgsWithLeadRisk.toString()} />
+            <StatCard icon={<Users className="w-5 h-5 text-[#D4AF37]" />} label="Orgs com leads" value={leadRiskOrgs.length.toString()} />
+          </div>
+
+          <div className="space-y-3">
+            {leadRiskOrgs.length > 0 ? (
+              leadRiskOrgs.map((org) => {
+                const riskKind = leadRiskKind(org.lead_summary.followup_overdue, org.lead_summary.followup_without);
+                return (
+                  <div key={`lead-risk-${org.id}`} className="p-5 rounded-[28px] bg-white/[0.03] border border-white/5 space-y-4">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Heading as="h3" className="text-2xl uppercase tracking-tighter">
+                            {org.name}
+                          </Heading>
+                          <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badgeClasses(riskKind)}`}>
+                            {riskKind === "critical" ? "Crítico" : riskKind === "warning" ? "Atenção" : "Saudável"}
+                          </span>
+                          <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badgeClasses("plan")}`}>
+                            Leads {formatCount(org.lead_summary.total)}
+                          </span>
+                        </div>
+                        <Text className="text-sm text-white/45">
+                          {org.slug} · overdue {formatCount(org.lead_summary.followup_overdue)} · sem follow-up {formatCount(org.lead_summary.followup_without)} · hoje {formatCount(org.lead_summary.followup_today)}
+                        </Text>
+                        <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
+                          Pipeline: {formatPipelineCounts(org as AgencyOrgLeadRowLike)}
+                        </Text>
+                      </div>
+                      <Link href={buildAgencyOrgDetailHref(org.id, { from: "agency", range })}>
+                        <VenusButton variant="glass" className="h-11 px-5 rounded-full uppercase tracking-[0.3em] text-[9px] font-bold border-white/10">
+                          Abrir org
+                        </VenusButton>
+                      </Link>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <Metric label="Vencidos" value={org.lead_summary.followup_overdue} />
+                      <Metric label="Hoje" value={org.lead_summary.followup_today} />
+                      <Metric label="Próximos" value={org.lead_summary.followup_upcoming} />
+                      <Metric label="Sem follow-up" value={org.lead_summary.followup_without} />
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="p-6 rounded-[28px] bg-white/[0.03] border border-white/5">
+                <Text className="text-sm text-white/40">Nenhuma org com leads suficientes para destacar risco comercial agora.</Text>
+              </div>
+            )}
+          </div>
+        </section>
 
         <section className="space-y-4">
           <div className="flex items-center justify-between">
