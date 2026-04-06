@@ -39,6 +39,53 @@ function formatDateTimeLocal(value: string | null | undefined) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+function localDateKey(value: string | null | undefined) {
+  if (!value) return null;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  const pad = (input: number) => String(input).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function parseLeadFollowUpFilter(value: string): "all" | "overdue" | "today" | "with_follow_up" | "without_follow_up" {
+  if (value === "overdue" || value === "today" || value === "with_follow_up" || value === "without_follow_up") {
+    return value;
+  }
+
+  return "all";
+}
+
+function classifyLeadFollowUp(value: string | null | undefined, now: Date) {
+  if (!value) {
+    return "without_follow_up" as const;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "without_follow_up" as const;
+  }
+
+  const key = localDateKey(value);
+  const todayKey = localDateKey(now.toISOString());
+  if (!key || !todayKey) {
+    return "with_follow_up" as const;
+  }
+
+  if (date.getTime() < now.getTime()) {
+    return "overdue" as const;
+  }
+
+  if (key === todayKey) {
+    return "today" as const;
+  }
+
+  return "with_follow_up" as const;
+}
+
 function formatCurrency(cents: number | null) {
   if (cents === null) return "Sem dados";
   return new Intl.NumberFormat("pt-BR", {
@@ -184,6 +231,8 @@ export default async function AgencyOrgDetailPage({
   const playbooksOrgId = firstValue(resolvedSearchParams.orgId);
   const playbooksActionType = firstValue(resolvedSearchParams.actionType);
   const playbooksLimit = Number(firstValue(resolvedSearchParams.limit)) || null;
+  const leadStatusFilter = firstValue(resolvedSearchParams.lead_status) || "all";
+  const leadFollowUpFilter = parseLeadFollowUpFilter(firstValue(resolvedSearchParams.follow_up));
   const supabase = await createClient();
   const {
     data: { user },
@@ -241,6 +290,39 @@ export default async function AgencyOrgDetailPage({
     acc[lead.status] = (acc[lead.status] || 0) + 1;
     return acc;
   }, {});
+  const now = new Date();
+  const filteredLeads = detail.leads.filter((lead) => {
+    const statusMatches = leadStatusFilter === "all" || lead.status === leadStatusFilter;
+    const followUpState = classifyLeadFollowUp(lead.next_follow_up_at, now);
+    const followUpMatches =
+      leadFollowUpFilter === "all" ||
+      (leadFollowUpFilter === "overdue" && followUpState === "overdue") ||
+      (leadFollowUpFilter === "today" && followUpState === "today") ||
+      (leadFollowUpFilter === "with_follow_up" && followUpState !== "without_follow_up") ||
+      (leadFollowUpFilter === "without_follow_up" && followUpState === "without_follow_up");
+
+    return statusMatches && followUpMatches;
+  });
+  const sortedLeads = [...filteredLeads].sort((left, right) => {
+    const leftState = classifyLeadFollowUp(left.next_follow_up_at, now);
+    const rightState = classifyLeadFollowUp(right.next_follow_up_at, now);
+    const order = { overdue: 0, today: 1, with_follow_up: 2, without_follow_up: 3 } as const;
+
+    if (order[leftState] !== order[rightState]) {
+      return order[leftState] - order[rightState];
+    }
+
+    const leftDate = left.next_follow_up_at ? new Date(left.next_follow_up_at).getTime() : Number.POSITIVE_INFINITY;
+    const rightDate = right.next_follow_up_at ? new Date(right.next_follow_up_at).getTime() : Number.POSITIVE_INFINITY;
+    if (leftDate !== rightDate) {
+      return leftDate - rightDate;
+    }
+
+    const leftInteraction = new Date(left.last_interaction_at || left.updated_at || left.created_at || 0).getTime();
+    const rightInteraction = new Date(right.last_interaction_at || right.updated_at || right.created_at || 0).getTime();
+    return rightInteraction - leftInteraction;
+  });
+  const leadSummary = detail.lead_summary;
   const rangeText = range === "all" ? "todos os períodos" : `últimos ${rangeLabel(range)}`;
   const rangeHref = range === "all" ? undefined : range;
   const backHref = buildAgencyBackHref({
@@ -257,6 +339,8 @@ export default async function AgencyOrgDetailPage({
     orgId: playbooksOrgId || undefined,
     actionType: playbooksActionType || undefined,
     limit: playbooksLimit || undefined,
+    lead_status: leadStatusFilter === "all" ? undefined : leadStatusFilter,
+    follow_up: leadFollowUpFilter === "all" ? undefined : leadFollowUpFilter,
   });
 
   return (
@@ -676,9 +760,16 @@ export default async function AgencyOrgDetailPage({
           )}
         </SectionShell>
 
-        <SectionShell title="Leads na janela" description={`Leads reais vinculados à org_id, filtrados em ${rangeText}, com status, intent score e estágio comercial simples.`}>
+        <SectionShell title="Leads na janela" description={`Leads reais vinculados à org_id, filtrados em ${rangeText}, com status, follow-up e leitura operacional simples.`}>
           {detail.leads.length > 0 ? (
             <div className="space-y-4">
+              <div className="grid grid-cols-2 xl:grid-cols-5 gap-4">
+                <SimpleCard label="Leads" value={formatNumber(leadSummary.total)} subvalue="total operacional" />
+                <SimpleCard label="Vencidos" value={formatNumber(leadSummary.followup_overdue)} subvalue="follow-up em atraso" />
+                <SimpleCard label="Hoje" value={formatNumber(leadSummary.followup_today)} subvalue="follow-up na janela atual" />
+                <SimpleCard label="Próximos" value={formatNumber(leadSummary.followup_upcoming)} subvalue="follow-up futuro" />
+                <SimpleCard label="Sem follow-up" value={formatNumber(leadSummary.followup_without)} subvalue="sem disciplina agendada" />
+              </div>
               <div className="flex flex-wrap gap-2">
                 {(["new", "engaged", "qualified", "offer_sent", "won", "lost"] as const).map((status) => (
                   <span
@@ -701,8 +792,73 @@ export default async function AgencyOrgDetailPage({
                   </span>
                 ))}
               </div>
-              <div className="space-y-3">
-                {detail.leads.map((lead) => (
+              <form method="get" className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+                <input type="hidden" name="range" value={range === "all" ? "all" : range} />
+                <input type="hidden" name="from" value={origin || "agency"} />
+                {playbooksOrgId ? <input type="hidden" name="orgId" value={playbooksOrgId} /> : null}
+                {playbooksActionType ? <input type="hidden" name="actionType" value={playbooksActionType} /> : null}
+                {playbooksLimit ? <input type="hidden" name="limit" value={playbooksLimit} /> : null}
+                <label className="space-y-1">
+                  <span className="block text-[8px] uppercase tracking-[0.3em] text-white/30 font-bold">Estágio</span>
+                  <select
+                    name="lead_status"
+                    defaultValue={leadStatusFilter}
+                    className="h-11 w-full rounded-full bg-black/40 border border-white/10 px-4 text-[10px] uppercase tracking-[0.3em] font-bold text-white outline-none"
+                  >
+                    <option value="all">Todos os estágios</option>
+                    <option value="new">Novo</option>
+                    <option value="engaged">Engajado</option>
+                    <option value="qualified">Qualificado</option>
+                    <option value="offer_sent">Oferta enviada</option>
+                    <option value="won">Ganho</option>
+                    <option value="lost">Perdido</option>
+                  </select>
+                </label>
+                <label className="space-y-1">
+                  <span className="block text-[8px] uppercase tracking-[0.3em] text-white/30 font-bold">Follow-up</span>
+                  <select
+                    name="follow_up"
+                    defaultValue={leadFollowUpFilter}
+                    className="h-11 w-full rounded-full bg-black/40 border border-white/10 px-4 text-[10px] uppercase tracking-[0.3em] font-bold text-white outline-none"
+                  >
+                    <option value="all">Todos</option>
+                    <option value="overdue">Vencidos</option>
+                    <option value="today">Hoje</option>
+                    <option value="with_follow_up">Com follow-up</option>
+                    <option value="without_follow_up">Sem follow-up</option>
+                  </select>
+                </label>
+                <VenusButton
+                  type="submit"
+                  variant="outline"
+                  className="h-11 px-5 rounded-full uppercase tracking-[0.3em] text-[8px] font-bold border-white/10"
+                >
+                  Aplicar filtros
+                </VenusButton>
+              </form>
+              <div className="flex items-center justify-between gap-3 text-[10px] uppercase tracking-[0.3em] text-white/40">
+                <span>
+                  Mostrando {filteredLeads.length} de {detail.leads.length} leads
+                </span>
+                <span>
+                  Ordem: vencidos primeiro, depois follow-up de hoje e próximos
+                </span>
+              </div>
+              {sortedLeads.length > 0 ? (
+                <div className="space-y-3">
+                  {sortedLeads.map((lead) => {
+                  const followUpState = classifyLeadFollowUp(lead.next_follow_up_at, now);
+                  const followUpLabel =
+                    followUpState === "overdue"
+                      ? "Vencido"
+                      : followUpState === "today"
+                        ? "Hoje"
+                        : followUpState === "with_follow_up"
+                          ? "Próximo"
+                          : "Sem follow-up";
+                  const followUpBadge = followUpState === "overdue" ? "blocked" : followUpState === "today" ? "risk-medium" : followUpState === "with_follow_up" ? "active" : "neutral";
+
+                  return (
                   <div key={lead.id} className="p-4 rounded-[24px] bg-white/[0.03] border border-white/5">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                       <div className="space-y-1">
@@ -718,6 +874,7 @@ export default async function AgencyOrgDetailPage({
                         <span className={`px-3 py-1 rounded-full border ${badge("neutral")}`}>
                           intent {lead.intent_score === null ? "Sem dados" : lead.intent_score.toFixed(0)}
                         </span>
+                        <span className={`px-3 py-1 rounded-full border ${badge(followUpBadge)}`}>{followUpLabel}</span>
                         <span className={`px-3 py-1 rounded-full border ${badge("neutral")}`}>
                           follow-up {lead.next_follow_up_at ? formatDate(lead.next_follow_up_at) : "Sem follow-up"}
                         </span>
@@ -761,8 +918,15 @@ export default async function AgencyOrgDetailPage({
                       </form>
                     </div>
                   </div>
-                ))}
-              </div>
+                  );
+                })}
+                </div>
+              ) : (
+                <EmptyState
+                  title="Nenhum lead nos filtros"
+                  description="Ajuste estágio ou follow-up para ver leads relevantes nessa janela."
+                />
+              )}
             </div>
           ) : (
             <EmptyState title="Sem leads" description="Nenhum lead recente encontrado para esta org." />

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { extractLeadSignalsFromSavedResultPayload } from "@/lib/leads";
+import { extractLeadSignalsFromSavedResultPayload, type LeadStatus } from "@/lib/leads";
 import { listAgencyBillingRows, type AgencyBillingRow } from "@/lib/billing";
 import { getOrgGuidanceSummary } from "@/lib/billing/guidance";
 import { getOrgPlaybookSummary, type OrgActionPlaybook } from "@/lib/billing/playbooks";
@@ -21,6 +21,15 @@ export interface AgencyOrgLeadRow {
   created_at: string | null;
   updated_at: string | null;
   last_interaction_at: string | null;
+}
+
+export interface AgencyOrgLeadSummary {
+  total: number;
+  by_status: Record<LeadStatus, number>;
+  followup_overdue: number;
+  followup_today: number;
+  followup_upcoming: number;
+  followup_without: number;
 }
 
 export interface AgencyOrgProductRow {
@@ -105,6 +114,7 @@ export interface AgencyOrgDetail {
   guidance: ReturnType<typeof getOrgGuidanceSummary>;
   playbook: OrgActionPlaybook;
   billing: AgencyOrgBillingDetail;
+  lead_summary: AgencyOrgLeadSummary;
   leads: AgencyOrgLeadRow[];
   products: AgencyOrgProductRow[];
   saved_results: AgencyOrgSavedResultRow[];
@@ -174,6 +184,64 @@ function asRecord(value: unknown) {
 
 function rangeWindow(range: AgencyTimeRange) {
   return resolveAgencyTimeRangeWindow(range);
+}
+
+function dateKey(value: Date) {
+  const pad = (input: number) => String(input).padStart(2, "0");
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+}
+
+function getLeadSummary(leads: AgencyOrgLeadRow[]): AgencyOrgLeadSummary {
+  const by_status: Record<LeadStatus, number> = {
+    new: 0,
+    engaged: 0,
+    qualified: 0,
+    offer_sent: 0,
+    won: 0,
+    lost: 0,
+  };
+
+  const now = new Date();
+  const todayKey = dateKey(now);
+
+  let followup_overdue = 0;
+  let followup_today = 0;
+  let followup_upcoming = 0;
+  let followup_without = 0;
+
+  for (const lead of leads) {
+    const status = lead.status as LeadStatus;
+    by_status[status] = (by_status[status] || 0) + 1;
+
+    if (!lead.next_follow_up_at) {
+      followup_without += 1;
+      continue;
+    }
+
+    const followUpAt = new Date(lead.next_follow_up_at);
+    if (Number.isNaN(followUpAt.getTime())) {
+      followup_without += 1;
+      continue;
+    }
+
+    const followUpKey = dateKey(followUpAt);
+    if (followUpAt.getTime() < now.getTime()) {
+      followup_overdue += 1;
+    } else if (followUpKey === todayKey) {
+      followup_today += 1;
+    } else {
+      followup_upcoming += 1;
+    }
+  }
+
+  return {
+    total: leads.length,
+    by_status,
+    followup_overdue,
+    followup_today,
+    followup_upcoming,
+    followup_without,
+  };
 }
 
 function summarizePayload(payload: unknown) {
@@ -531,6 +599,7 @@ export async function getAgencyOrgDetail(orgId: string, range: AgencyTimeRange =
     guidance,
     playbook: getOrgPlaybookSummary(guidance),
     billing: billing || { summary: org, recent_usage_rows: [] },
+    lead_summary: getLeadSummary(leads),
     leads,
     products,
     saved_results: savedResults,
