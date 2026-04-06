@@ -198,6 +198,16 @@ export default async function AgencyDashboardPage({
   const totalLeadOverdue = orgs.reduce((sum, org) => sum + org.lead_summary.followup_overdue, 0);
   const totalLeadWithoutFollowUp = orgs.reduce((sum, org) => sum + org.lead_summary.followup_without, 0);
   const orgsWithLeadRisk = orgs.filter((org) => org.lead_summary.followup_overdue > 0 || org.lead_summary.followup_without > 0).length;
+  const criticalLeadOrgs = [...orgs]
+    .filter((org) => org.lead_summary.followup_overdue > 0)
+    .sort((left, right) => {
+      const byOverdue = right.lead_summary.followup_overdue - left.lead_summary.followup_overdue;
+      if (byOverdue !== 0) return byOverdue;
+      const byWithout = right.lead_summary.followup_without - left.lead_summary.followup_without;
+      if (byWithout !== 0) return byWithout;
+      return right.lead_summary.total - left.lead_summary.total;
+    })
+    .slice(0, 4);
   const leadRiskOrgs = [...orgs]
     .sort((left, right) => {
       const byOverdue = right.lead_summary.followup_overdue - left.lead_summary.followup_overdue;
@@ -265,6 +275,57 @@ export default async function AgencyDashboardPage({
         </div>
 
         <section className="space-y-4">
+          <div className="space-y-1">
+            <Heading as="h2" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">
+              Prioridade máxima
+            </Heading>
+            <Text className="text-sm text-white/40">
+              Orgs com follow-up vencido. É a fila imediata de atenção comercial.
+            </Text>
+          </div>
+
+          {criticalLeadOrgs.length > 0 ? (
+            <div className="space-y-3">
+              {criticalLeadOrgs.map((org) => (
+                <div key={`critical-lead-${org.id}`} className="p-5 rounded-[28px] bg-red-500/5 border border-red-500/15 space-y-4">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Heading as="h3" className="text-xl uppercase tracking-tighter">
+                          {org.name}
+                        </Heading>
+                        <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badgeClasses("critical")}`}>
+                          Ação imediata
+                        </span>
+                        <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badgeClasses("plan")}`}>
+                          Leads {formatCount(org.lead_summary.total)}
+                        </span>
+                      </div>
+                      <Text className="text-sm text-white/45">
+                        {org.slug} · vencidos {formatCount(org.lead_summary.followup_overdue)} · sem follow-up {formatCount(org.lead_summary.followup_without)}
+                      </Text>
+                    </div>
+                    <Link href={buildAgencyOrgDetailHref(org.id, { from: "agency", range, followUp: "overdue" })}>
+                      <VenusButton variant="solid" className="h-11 px-5 rounded-full uppercase tracking-[0.3em] text-[9px] font-bold bg-red-500 text-white">
+                        Abrir vencidos
+                      </VenusButton>
+                    </Link>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <Metric label="Vencidos" value={org.lead_summary.followup_overdue} />
+                    <Metric label="Sem follow-up" value={org.lead_summary.followup_without} />
+                    <Metric label="Hoje" value={org.lead_summary.followup_today} />
+                    <Metric label="Total leads" value={org.lead_summary.total} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-6 rounded-[28px] bg-white/[0.03] border border-white/5">
+              <Text className="text-sm text-white/40">Nenhuma org com follow-up vencido agora. A fila imediata está limpa.</Text>
+            </div>
+          )}
+
           <div className="space-y-1">
             <Heading as="h2" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">
               Risco comercial por org
