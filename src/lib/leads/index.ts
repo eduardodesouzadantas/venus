@@ -1,11 +1,51 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createLeadStateIdempotencyKey } from "@/lib/reliability/idempotency";
+import {
+  captureOperationalTiming,
+  formatOperationalReason,
+  recordOperationalTenantEvent,
+} from "@/lib/reliability/observability";
 
-export type LeadStatus = "new" | "engaged" | "qualified" | "offer_sent" | "won" | "lost";
+export const LEAD_STATUSES = ["new", "engaged", "qualified", "offer_sent", "closing", "won", "lost"] as const;
+
+export type LeadStatus = (typeof LEAD_STATUSES)[number];
+
+export function isLeadStatus(value: unknown): value is LeadStatus {
+  return typeof value === "string" && (LEAD_STATUSES as readonly string[]).includes(value);
+}
+
+export function createEmptyLeadStatusCounts(): Record<LeadStatus, number> {
+  return LEAD_STATUSES.reduce((counts, status) => {
+    counts[status] = 0;
+    return counts;
+  }, {} as Record<LeadStatus, number>);
+}
+
+export function getLeadStatusLabel(status: LeadStatus) {
+  switch (status) {
+    case "new":
+      return "Novo";
+    case "engaged":
+      return "Engajado";
+    case "qualified":
+      return "Qualificado";
+    case "offer_sent":
+      return "Oferta enviada";
+    case "closing":
+      return "Fechamento iniciado";
+    case "won":
+      return "Ganho";
+    case "lost":
+      return "Perdido";
+  }
+}
 
 export function getLeadStatusEventType(status: LeadStatus) {
   switch (status) {
     case "offer_sent":
       return "lead.offer_sent";
+    case "closing":
+      return "lead.closing_started";
     case "won":
       return "lead.closed_won";
     case "lost":
@@ -72,11 +112,17 @@ const LEAD_STATUS_RANK: Record<LeadStatus, number> = {
   engaged: 1,
   qualified: 2,
   offer_sent: 3,
-  won: 4,
-  lost: 5,
+  closing: 4,
+  won: 5,
+  lost: 6,
 };
 
-function resolveLeadStatus(existingStatus: LeadStatus | null | undefined, nextStatus?: LeadStatus) {
+function isLeadUpdateConflictError(error: unknown) {
+  const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  return message.includes("Lead changed while editing") || message.includes("40001");
+}
+
+export function resolveLeadStatus(existingStatus: LeadStatus | null | undefined, nextStatus?: LeadStatus) {
   if (!nextStatus) {
     return existingStatus || "new";
   }
@@ -329,6 +375,10 @@ export interface LeadStatusUpdateInput {
   status?: LeadStatus;
   nextFollowUpAt?: string | null;
   lastInteractionAt?: string | null;
+  expectedUpdatedAt?: string | null;
+  idempotencyKey?: string | null;
+  actorUserId?: string | null;
+  eventSource?: string | null;
 }
 
 export async function updateLeadOperationalState(supabase: SupabaseClient, input: LeadStatusUpdateInput) {
@@ -345,33 +395,184 @@ export async function updateLeadOperationalState(supabase: SupabaseClient, input
     throw new Error("Missing lead updates");
   }
 
+  const startedAtMs = Date.now();
   const nextTimestamp = input.lastInteractionAt || new Date().toISOString();
-  const updatePayload: Record<string, unknown> = {
-    last_interaction_at: nextTimestamp,
-    updated_at: nextTimestamp,
-  };
+  const idempotencyKey =
+    normalizeString(input.idempotencyKey) ||
+    createLeadStateIdempotencyKey({
+      orgId,
+      leadId,
+      hasStatus,
+      status: input.status || null,
+      hasNextFollowUpAt: hasFollowUp,
+      nextFollowUpAt: hasFollowUp ? input.nextFollowUpAt || null : null,
+      expectedUpdatedAt: input.expectedUpdatedAt || null,
+    });
 
-  if (hasStatus) {
-    updatePayload.status = input.status;
+  try {
+    const { data, error } = await supabase.schema("tenant").rpc("apply_lead_state_change", {
+      p_org_id: orgId,
+      p_lead_id: leadId,
+      p_has_status: hasStatus,
+      p_status: input.status || null,
+      p_has_next_follow_up_at: hasFollowUp,
+      p_next_follow_up_at: hasFollowUp ? input.nextFollowUpAt || null : null,
+      p_last_interaction_at: nextTimestamp,
+      p_actor_user_id: input.actorUserId || null,
+      p_event_source: input.eventSource || "agency",
+      p_idempotency_key: idempotencyKey,
+      p_expected_updated_at: input.expectedUpdatedAt || null,
+    });
+
+    if (error || !data) {
+      throw new Error(error?.message || "Failed to update lead status");
+    }
+
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) {
+      throw new Error("Failed to update lead status");
+    }
+
+    await recordOperationalTenantEvent(supabase, {
+      orgId,
+      actorUserId: input.actorUserId || null,
+      eventSource: input.eventSource || "agency",
+      eventType: "lead.update_succeeded",
+      dedupeKeyParts: [
+        orgId,
+        leadId,
+        idempotencyKey,
+        input.status || "status_only",
+        hasFollowUp ? input.nextFollowUpAt || "follow_up_null" : "no_follow_up",
+      ],
+      payload: {
+        lead_id: leadId,
+        org_id: orgId,
+        status: (row as LeadRecord).status,
+        next_follow_up_at: (row as LeadRecord).next_follow_up_at,
+        updated_fields: {
+          status: hasStatus,
+          next_follow_up_at: hasFollowUp,
+        },
+        idempotency_key: idempotencyKey,
+        expected_updated_at: input.expectedUpdatedAt || null,
+        reason_code: formatOperationalReason("lead_update", "success"),
+        ...captureOperationalTiming(startedAtMs),
+      },
+    });
+
+    return { lead: row as LeadRecord };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to update lead status";
+    const isConflict = isLeadUpdateConflictError(error);
+
+    await recordOperationalTenantEvent(supabase, {
+      orgId,
+      actorUserId: input.actorUserId || null,
+      eventSource: input.eventSource || "agency",
+      eventType: isConflict ? "lead.update_conflict" : "lead.update_failed",
+      dedupeKeyParts: [
+        orgId,
+        leadId,
+        idempotencyKey,
+        isConflict ? "conflict" : "failed",
+        input.expectedUpdatedAt || "no_expected_updated_at",
+      ],
+      payload: {
+        lead_id: leadId,
+        org_id: orgId,
+        idempotency_key: idempotencyKey,
+        expected_updated_at: input.expectedUpdatedAt || null,
+        error_message: message,
+        reason_code: isConflict
+          ? formatOperationalReason("conflict", "stale_snapshot")
+          : formatOperationalReason("lead_update", "failed"),
+        ...captureOperationalTiming(startedAtMs),
+      },
+    });
+
+    throw new Error(message);
+  }
+}
+
+export interface PersistSavedResultLeadInput {
+  orgId: string;
+  idempotencyKey?: string | null;
+  userEmail?: string | null;
+  userName?: string | null;
+  payload: Record<string, unknown>;
+  leadName?: string | null;
+  leadEmail?: string | null;
+  leadPhone?: string | null;
+  leadSource?: string | null;
+  leadStatus?: LeadStatus;
+  intentScore?: number | null;
+  whatsappKey?: string | null;
+  lastInteractionAt?: string | null;
+  eventSource?: string | null;
+}
+
+export interface PersistSavedResultLeadResult {
+  savedResultId: string;
+  leadId: string;
+  savedResultCreated: boolean;
+  leadCreated: boolean;
+}
+
+interface PersistSavedResultLeadRpcRow {
+  saved_result_id?: string | null;
+  lead_id?: string | null;
+  saved_result_created?: boolean | null;
+  lead_created?: boolean | null;
+}
+
+export async function persistSavedResultAndLead(supabase: SupabaseClient, input: PersistSavedResultLeadInput) {
+  const orgId = normalizeString(input.orgId);
+  if (!orgId) {
+    throw new Error("Missing orgId");
   }
 
-  if (hasFollowUp) {
-    updatePayload.next_follow_up_at = input.nextFollowUpAt || null;
+  const idempotencyKey = normalizeString(input.idempotencyKey);
+  if (!idempotencyKey) {
+    throw new Error("Missing saved result idempotency key");
   }
 
-  const { data, error } = await supabase
-    .from("leads")
-    .update(updatePayload)
-    .eq("org_id", orgId)
-    .eq("id", leadId)
-    .select("*")
-    .single();
+  const { data, error } = await supabase.schema("tenant").rpc("persist_saved_result_and_lead", {
+    p_org_id: orgId,
+    p_idempotency_key: idempotencyKey,
+    p_user_email: normalizeLeadEmail(input.userEmail || null) || null,
+    p_user_name: normalizeString(input.userName) || null,
+    p_payload: input.payload,
+    p_lead_name: normalizeString(input.leadName) || null,
+    p_lead_email: normalizeLeadEmail(input.leadEmail || null) || null,
+    p_lead_phone: normalizeLeadPhone(input.leadPhone || null) || null,
+    p_lead_source: normalizeString(input.leadSource) || "app",
+    p_lead_status: input.leadStatus || "new",
+    p_intent_score: typeof input.intentScore === "number" && !Number.isNaN(input.intentScore) ? input.intentScore : null,
+    p_whatsapp_key: normalizeLeadPhone(input.whatsappKey || null) || null,
+    p_last_interaction_at: input.lastInteractionAt || null,
+    p_event_source: input.eventSource || "app",
+  });
 
   if (error || !data) {
-    throw new Error(error?.message || "Failed to update lead status");
+    throw new Error(error?.message || "Failed to persist saved result");
   }
 
-  return { lead: data as LeadRecord };
+  const row = Array.isArray(data) ? data[0] : data;
+  const typedRow = (row || {}) as PersistSavedResultLeadRpcRow;
+  const savedResultId = normalizeString(typedRow.saved_result_id);
+  const leadId = normalizeString(typedRow.lead_id);
+
+  if (!savedResultId || !leadId) {
+    throw new Error("Failed to persist saved result and lead");
+  }
+
+  return {
+    savedResultId,
+    leadId,
+    savedResultCreated: Boolean(typedRow.saved_result_created),
+    leadCreated: Boolean(typedRow.lead_created),
+  } satisfies PersistSavedResultLeadResult;
 }
 
 export async function updateLeadStatus(supabase: SupabaseClient, input: LeadStatusUpdateInput) {

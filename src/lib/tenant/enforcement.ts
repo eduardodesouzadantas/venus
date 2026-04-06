@@ -1,6 +1,11 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  createOperationalEventDedupeKey,
+  formatOperationalReason,
+  recordOperationalTenantEvent,
+} from "@/lib/reliability/observability";
 import type { TenantRecord } from "@/lib/tenant/core";
 
 export type TenantOperationalOperation =
@@ -100,19 +105,26 @@ async function recordOperationalBlock(
   decision: TenantOperationalDecision
 ) {
   const admin = createAdminClient();
-  const dedupeKey = `tenant_operational:${input.orgId}:${decision.operation}:${decision.reason || "unknown"}:${Date.now()}`;
-
-  const { error } = await admin.from("tenant_events").insert({
-    org_id: input.orgId,
-    actor_user_id: input.actorUserId || null,
-    event_type: "tenant.operational_blocked",
-    event_source: input.eventSource || "tenant_guard",
-    dedupe_key: dedupeKey,
+  await recordOperationalTenantEvent(admin, {
+    orgId: input.orgId,
+    actorUserId: input.actorUserId || null,
+    eventType: "tenant.operational_blocked",
+    eventSource: input.eventSource || "tenant_guard",
+    dedupeKey: createOperationalEventDedupeKey([
+      "tenant.operational_blocked",
+      input.orgId,
+      decision.operation,
+      decision.reason || "unknown",
+      decision.status || "unknown",
+      decision.kill_switch ? "kill_switch_on" : "kill_switch_off",
+      Date.now().toString(),
+    ]),
     payload: {
       org_id: input.orgId,
       org_slug: decision.org_slug,
       operation: decision.operation,
       reason: decision.reason,
+      reason_code: formatOperationalReason("tenant_blocked", decision.reason || "unknown"),
       status: decision.status,
       kill_switch: decision.kill_switch,
       plan_id: decision.plan_id,
@@ -120,10 +132,6 @@ async function recordOperationalBlock(
       ...input.metadata,
     },
   });
-
-  if (error) {
-    console.warn("[TENANT] failed to audit operational block", error);
-  }
 }
 
 export async function enforceTenantOperationalState(

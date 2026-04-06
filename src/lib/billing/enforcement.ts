@@ -2,6 +2,11 @@ import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getOrgBillingSummary } from "@/lib/billing";
+import {
+  createOperationalEventDedupeKey,
+  formatOperationalReason,
+  recordOperationalTenantEvent,
+} from "@/lib/reliability/observability";
 
 export type HardCapOperation =
   | "saved_result_generation"
@@ -192,19 +197,24 @@ async function recordHardCapBlock(
   decision: HardCapDecision
 ) {
   const admin = createAdminClient();
-  const dateSuffix = new Date().toISOString().slice(0, 10);
-  const dedupeKey = `hard_cap:${input.orgId}:${decision.operation}:${decision.metric || "unknown"}:${dateSuffix}:${Date.now()}`;
-
-  const { error } = await admin.from("tenant_events").insert({
-    org_id: input.orgId,
-    actor_user_id: input.actorUserId || null,
-    event_type: "billing.hard_cap_blocked",
-    event_source: input.eventSource || "billing_guard",
-    dedupe_key: dedupeKey,
+  await recordOperationalTenantEvent(admin, {
+    orgId: input.orgId,
+    actorUserId: input.actorUserId || null,
+    eventType: "billing.hard_cap_blocked",
+    eventSource: input.eventSource || "billing_guard",
+    dedupeKey: createOperationalEventDedupeKey([
+      "billing.hard_cap_blocked",
+      input.orgId,
+      decision.operation,
+      decision.metric || "unknown",
+      new Date().toISOString().slice(0, 10),
+      Date.now().toString(),
+    ]),
     payload: {
       org_id: input.orgId,
       operation: decision.operation,
       metric: decision.metric,
+      reason_code: formatOperationalReason("hard_cap", decision.metric || "unknown"),
       usage: decision.usage,
       cap: decision.cap,
       usage_pct: decision.usage_pct,
@@ -213,10 +223,6 @@ async function recordHardCapBlock(
       ...input.metadata,
     },
   });
-
-  if (error) {
-    console.warn("[BILLING] failed to audit hard cap block", error);
-  }
 }
 
 export async function enforceOrgHardCap(input: HardCapEnforcementInput): Promise<HardCapDecision> {
