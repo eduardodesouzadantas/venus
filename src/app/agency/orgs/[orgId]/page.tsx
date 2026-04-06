@@ -11,11 +11,21 @@ import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { VenusButton } from "@/components/ui/VenusButton";
 import { ExportActions } from "@/components/agency/ExportActions";
+import { LEAD_STATUSES, getLeadStatusLabel, type LeadStatus } from "@/lib/leads";
 import { createClient } from "@/lib/supabase/server";
 import { isAgencyRole, isMerchantRole, resolveTenantContext } from "@/lib/tenant/core";
 import { getAgencyOrgDetail } from "@/lib/agency/org-details";
 import { normalizeAgencyTimeRange, type AgencyTimeRange } from "@/lib/agency/time-range";
 import { buildAgencyBackHref, normalizeAgencyOrigin } from "@/lib/agency/navigation";
+import {
+  buildOrgOperationalRecommendations,
+  formatOperationalPriorityLabel,
+} from "@/lib/agency/operational-recommendations";
+import {
+  buildOperationalValueSummary,
+  formatOperationalValueRate,
+} from "@/lib/agency/value-summary";
+import { formatOperationalAgeDays } from "@/lib/agency/aging-summary";
 
 export const dynamic = "force-dynamic";
 
@@ -69,6 +79,8 @@ function leadStatusDisplayLabel(value: string) {
       return "Qualificado";
     case "offer_sent":
       return "Oferta enviada";
+    case "closing":
+      return "Fechamento iniciado";
     case "won":
       return "Ganho";
     case "lost":
@@ -78,10 +90,10 @@ function leadStatusDisplayLabel(value: string) {
   }
 }
 
-function leadStatusChipKind(value: string): "active" | "blocked" | "plan" | "neutral" | "risk-low" | "risk-medium" | "risk-high" {
+function leadStatusChipKind(value: LeadStatus | string): "active" | "blocked" | "plan" | "neutral" | "risk-low" | "risk-medium" | "risk-high" {
   if (value === "won") return "active";
   if (value === "lost") return "blocked";
-  if (value === "offer_sent") return "risk-medium";
+  if (value === "offer_sent" || value === "closing") return "risk-medium";
   if (value === "qualified" || value === "engaged") return "plan";
   return "neutral";
 }
@@ -96,6 +108,8 @@ function leadStatusLabel(value: string) {
       return "Qualificado";
     case "offer_sent":
       return "Oferta enviada";
+    case "closing":
+      return "Fechamento iniciado";
     case "won":
       return "Ganho";
     case "lost":
@@ -117,6 +131,57 @@ function leadFollowUpLabel(value: string) {
       return "Sem follow-up";
     default:
       return "Todos os follow-ups";
+  }
+}
+
+function leadAuditEventLabel(value: string) {
+  switch (value) {
+    case "lead.offer_sent":
+      return "Oferta enviada";
+    case "lead.closing_started":
+      return "Fechamento iniciado";
+    case "lead.closed_won":
+      return "Lead ganho";
+    case "lead.closed_lost":
+      return "Lead perdido";
+    case "lead.update_succeeded":
+      return "Atualização do lead concluída";
+    case "lead.update_conflict":
+      return "Conflito de atualização";
+    case "lead.update_failed":
+      return "Atualização do lead falhou";
+    case "lead.follow_up_updated":
+      return "Follow-up atualizado";
+    case "lead.status_updated":
+      return "Status atualizado";
+    case "lead.created_from_app":
+      return "Lead criado via app";
+    case "lead.updated_from_app":
+      return "Lead atualizado via app";
+    case "lead.created_from_whatsapp":
+      return "Lead criado via WhatsApp";
+    case "lead.engaged":
+      return "Lead engajado";
+    case "billing.hard_cap_blocked":
+      return "Bloqueio por hard cap";
+    case "tenant.operational_blocked":
+      return "Bloqueio operacional";
+    case "saved_result.processing_reservation_acquired":
+      return "Reserva adquirida";
+    case "saved_result.processing_reservation_wait":
+      return "Reserva em espera";
+    case "saved_result.processing_reservation_completed":
+      return "Reserva concluída";
+    case "saved_result.processing_reservation_failed":
+      return "Reserva falhou";
+    case "saved_result.processing_reservation_expired_reclaimed":
+      return "Reserva expirada e recuperada";
+    case "saved_result.process_and_persist_succeeded":
+      return "Persistência concluída";
+    case "saved_result.process_and_persist_failed":
+      return "Persistência falhou";
+    default:
+      return value;
   }
 }
 
@@ -158,6 +223,11 @@ function formatCurrency(cents: number | null) {
 function formatNumber(value: number | null) {
   if (value === null) return "Sem dados";
   return value.toLocaleString("pt-BR");
+}
+
+function formatDurationMs(value: number | null) {
+  if (value === null) return "Sem dados";
+  return `${Math.round(value).toLocaleString("pt-BR")}ms`;
 }
 
 function firstValue(value: string | string[] | undefined): string {
@@ -384,6 +454,9 @@ export default async function AgencyOrgDetailPage({
     return rightInteraction - leftInteraction;
   });
   const leadSummary = detail.lead_summary;
+  const operationalRecommendations = buildOrgOperationalRecommendations(detail.operational_summary, leadSummary, org.name, 3);
+  const operationalValueSummary = buildOperationalValueSummary(leadSummary);
+  const operationalAgingSummary = detail.aging_summary;
   const activeLeadFilterParts = [
     leadStatusFilter !== "all" ? `estágio ${leadStatusLabel(leadStatusFilter)}` : null,
     leadFollowUpFilter !== "all" ? `follow-up ${leadFollowUpLabel(leadFollowUpFilter)}` : null,
@@ -836,22 +909,12 @@ export default async function AgencyOrgDetailPage({
                 <SimpleCard label="Sem follow-up" value={formatNumber(leadSummary.followup_without)} subvalue="sem disciplina agendada" />
               </div>
               <div className="flex flex-wrap gap-2">
-                {(["new", "engaged", "qualified", "offer_sent", "won", "lost"] as const).map((status) => (
+                {LEAD_STATUSES.map((status) => (
                   <span
                     key={status}
-                    className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badge(status === "won" ? "active" : status === "lost" ? "blocked" : status === "new" ? "plan" : "neutral")}`}
+                    className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badge(status === "won" ? "active" : status === "lost" ? "blocked" : status === "new" ? "plan" : status === "offer_sent" || status === "closing" ? "risk-medium" : "neutral")}`}
                   >
-                    {status === "new"
-                      ? "Novo"
-                      : status === "engaged"
-                        ? "Engajado"
-                        : status === "qualified"
-                          ? "Qualificado"
-                          : status === "offer_sent"
-                            ? "Oferta"
-                            : status === "won"
-                              ? "Ganho"
-                              : "Perdido"}
+                    {getLeadStatusLabel(status)}
                     {" "}
                     {leadPipelineCounts[status] || 0}
                   </span>
@@ -883,12 +946,11 @@ export default async function AgencyOrgDetailPage({
                     className="h-11 w-full rounded-full bg-black/40 border border-white/10 px-4 text-[10px] uppercase tracking-[0.3em] font-bold text-white outline-none"
                   >
                     <option value="all">Todos os estágios</option>
-                    <option value="new">Novo</option>
-                    <option value="engaged">Engajado</option>
-                    <option value="qualified">Qualificado</option>
-                    <option value="offer_sent">Oferta enviada</option>
-                    <option value="won">Ganho</option>
-                    <option value="lost">Perdido</option>
+                    {LEAD_STATUSES.map((status) => (
+                      <option key={status} value={status}>
+                        {getLeadStatusLabel(status)}
+                      </option>
+                    ))}
                   </select>
                 </label>
                 <label className="space-y-1">
@@ -963,17 +1025,36 @@ export default async function AgencyOrgDetailPage({
                       </div>
                       {lead.status !== "won" && lead.status !== "lost" ? (
                         <div className="flex flex-wrap gap-2">
-                          <form action={`/api/admin/orgs/${org.id}/leads/${lead.id}`} method="post">
-                            <input type="hidden" name="status" value="offer_sent" />
-                            <input type="hidden" name="redirect_to" value={detailHref} />
-                            <VenusButton
-                              type="submit"
-                              variant="outline"
-                              className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-yellow-500/20 text-yellow-200"
-                            >
-                              Oferta enviada
-                            </VenusButton>
-                          </form>
+                          {lead.status !== "offer_sent" && lead.status !== "closing" ? (
+                            <form action={`/api/admin/orgs/${org.id}/leads/${lead.id}`} method="post">
+                              <input type="hidden" name="status" value="offer_sent" />
+                              <input type="hidden" name="redirect_to" value={detailHref} />
+                              <VenusButton
+                                type="submit"
+                                variant="outline"
+                                className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-yellow-500/20 text-yellow-200"
+                              >
+                                Oferta enviada
+                              </VenusButton>
+                            </form>
+                          ) : null}
+                          {lead.status !== "closing" ? (
+                            <form action={`/api/admin/orgs/${org.id}/leads/${lead.id}`} method="post">
+                              <input type="hidden" name="status" value="closing" />
+                              <input type="hidden" name="redirect_to" value={detailHref} />
+                              <VenusButton
+                                type="submit"
+                                variant="outline"
+                                className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-yellow-500/20 text-yellow-200"
+                              >
+                                Fechamento iniciado
+                              </VenusButton>
+                            </form>
+                          ) : (
+                            <span className={`px-3 py-1 rounded-full border ${badge("risk-medium")}`}>
+                              Fechamento iniciado
+                            </span>
+                          )}
                           <form action={`/api/admin/orgs/${org.id}/leads/${lead.id}`} method="post">
                             <input type="hidden" name="status" value="won" />
                             <input type="hidden" name="redirect_to" value={detailHref} />
@@ -1013,12 +1094,11 @@ export default async function AgencyOrgDetailPage({
                             defaultValue={lead.status}
                             className="h-10 rounded-full bg-black/40 border border-white/10 px-4 text-[10px] uppercase tracking-[0.3em] font-bold text-white outline-none"
                           >
-                            <option value="new">Novo</option>
-                            <option value="engaged">Engajado</option>
-                            <option value="qualified">Qualificado</option>
-                            <option value="offer_sent">Oferta enviada</option>
-                            <option value="won">Ganho</option>
-                            <option value="lost">Perdido</option>
+                            {LEAD_STATUSES.map((status) => (
+                              <option key={status} value={status}>
+                                {getLeadStatusLabel(status)}
+                              </option>
+                            ))}
                           </select>
                         </label>
                         <label className="space-y-1">
@@ -1215,7 +1295,7 @@ export default async function AgencyOrgDetailPage({
                   <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                     <div className="space-y-1">
                       <Heading as="h3" className="text-lg tracking-tighter">
-                        {event.event_type}
+                        {leadAuditEventLabel(event.event_type)}
                       </Heading>
                       <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
                         {event.event_source || "sem source"} · {event.payload_summary || "sem resumo"}
@@ -1230,6 +1310,228 @@ export default async function AgencyOrgDetailPage({
             </div>
           ) : (
             <EmptyState title="Sem eventos recentes" description="Nenhum tenant_event recente encontrado para esta org." />
+          )}
+        </SectionShell>
+
+        <SectionShell title="Atrito operacional da janela" description={`Resumo dos sinais técnicos e latências da org em ${rangeText}.`}>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+              <SimpleCard
+                label="Bloqueios"
+                value={formatNumber(detail.operational_summary.blocked_count)}
+                subvalue="tenant e hard caps"
+              />
+              <SimpleCard
+                label="Conflitos"
+                value={formatNumber(detail.operational_summary.conflict_count)}
+                subvalue="snapshot e concorrência"
+              />
+              <SimpleCard
+                label="Espera"
+                value={formatNumber(detail.operational_summary.wait_count)}
+                subvalue="single-flight"
+              />
+              <SimpleCard
+                label="Latência média"
+                value={formatDurationMs(detail.operational_summary.avg_duration_ms)}
+                subvalue={`pico ${formatDurationMs(detail.operational_summary.max_duration_ms)}`}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <div className="p-4 rounded-[24px] bg-white/[0.03] border border-white/5 space-y-3">
+                <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Top reason_codes</Text>
+                {detail.operational_summary.top_reason_codes.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {detail.operational_summary.top_reason_codes.map((row) => (
+                      <span key={row.key} className="px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border bg-white/5 text-white/70 border-white/10">
+                        {row.key} · {row.count}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <Text className="text-sm text-white/40">Nenhum reason_code recente na janela selecionada.</Text>
+                )}
+              </div>
+
+              <div className="p-4 rounded-[24px] bg-white/[0.03] border border-white/5 space-y-3">
+                <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Fluxos mais lentos</Text>
+                {detail.operational_summary.top_event_types.length > 0 ? (
+                  <div className="space-y-2">
+                    {detail.operational_summary.top_event_types.slice(0, 3).map((row) => (
+                      <div key={row.key} className="flex items-center justify-between gap-3 text-sm">
+                        <span className="text-white/80 break-all">{row.key}</span>
+                        <span className="text-white/45 uppercase tracking-[0.25em] text-[8px]">
+                          {row.count} · média {formatDurationMs(row.avg_duration_ms)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <Text className="text-sm text-white/40">Nenhuma latência relevante encontrada na janela.</Text>
+                )}
+              </div>
+            </div>
+          </div>
+        </SectionShell>
+
+        <SectionShell title="Valor operacional" description={`Leitura canônica do avanço comercial de ${org.name} nesta janela. Sem receita inventada.`}>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+              <SimpleCard label="Leads totais" value={formatNumber(operationalValueSummary.total_leads)} subvalue="base canônica" />
+              <SimpleCard label="Pipeline ativo" value={formatNumber(operationalValueSummary.active_pipeline)} subvalue="engaged + qualified + offer_sent + closing" />
+              <SimpleCard label="Avanço operacional" value={formatOperationalValueRate(operationalValueSummary.advanced_pipeline_rate)} subvalue={`fechados + avançados ${formatNumber(operationalValueSummary.advanced_pipeline)}`} />
+              <SimpleCard label="Ganho / perdido" value={`${formatNumber(operationalValueSummary.stage_counts.won)} / ${formatNumber(operationalValueSummary.stage_counts.lost)}`} subvalue={`taxa de ganho ${formatOperationalValueRate(operationalValueSummary.win_rate)}`} />
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <div className="p-4 rounded-[24px] bg-white/[0.03] border border-white/5 space-y-3">
+                <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Pipeline em fechamento</Text>
+                <Heading as="h3" className="text-xl tracking-tighter">
+                  {formatNumber(operationalValueSummary.stage_counts.offer_sent)} oferta enviada · {formatNumber(operationalValueSummary.stage_counts.closing)} em closing
+                </Heading>
+                <Text className="text-sm text-white/45">
+                  Pipeline ativo {formatOperationalValueRate(operationalValueSummary.pipeline_active_rate)} · fechado {formatOperationalValueRate(operationalValueSummary.terminal_rate)}
+                </Text>
+              </div>
+
+              <div className="p-4 rounded-[24px] bg-white/[0.03] border border-white/5 space-y-3">
+                <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Gargalo principal</Text>
+                <Heading as="h3" className="text-xl tracking-tighter">
+                  {operationalValueSummary.state_label}
+                </Heading>
+                <Text className="text-sm text-white/45">
+                  {operationalValueSummary.bottleneck_action}
+                </Text>
+                <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
+                  Gap {formatNumber(operationalValueSummary.bottleneck_gap)} · avanço total {formatOperationalValueRate(operationalValueSummary.advanced_pipeline_rate)}
+                </Text>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <span className="px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border bg-white/5 text-white/70 border-white/10">
+                engajado {formatNumber(operationalValueSummary.stage_counts.engaged)}
+              </span>
+              <span className="px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border bg-white/5 text-white/70 border-white/10">
+                qualificado {formatNumber(operationalValueSummary.stage_counts.qualified)}
+              </span>
+              <span className="px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border bg-white/5 text-white/70 border-white/10">
+                oferta {formatNumber(operationalValueSummary.stage_counts.offer_sent)}
+              </span>
+              <span className="px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border bg-white/5 text-white/70 border-white/10">
+                closing {formatNumber(operationalValueSummary.stage_counts.closing)}
+              </span>
+              <span className="px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border bg-white/5 text-white/70 border-white/10">
+                won {formatNumber(operationalValueSummary.stage_counts.won)}
+              </span>
+              <span className="px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border bg-white/5 text-white/70 border-white/10">
+                lost {formatNumber(operationalValueSummary.stage_counts.lost)}
+              </span>
+            </div>
+          </div>
+        </SectionShell>
+
+        <SectionShell title="Aging do pipeline" description={`Tempo parado por estágio em ${org.name}, usando last_interaction_at, depois updated_at, depois created_at.`}>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+              <SimpleCard label="Leads envelhecidos" value={formatNumber(operationalAgingSummary.aged_count)} subvalue=">= 7 dias" />
+              <SimpleCard label="Críticos" value={formatNumber(operationalAgingSummary.critical_count)} subvalue=">= 14 dias" />
+              <SimpleCard label="Idade média" value={formatOperationalAgeDays(operationalAgingSummary.average_age_days)} subvalue="pipeline ativo" />
+              <SimpleCard label="Pior estágio" value={operationalAgingSummary.bottleneck_stage === "none" ? "Sem gargalo" : operationalAgingSummary.bottleneck_label} subvalue="tempo parado" />
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <div className="p-4 rounded-[24px] bg-white/[0.03] border border-white/5 space-y-3">
+                <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Estágio mais envelhecido</Text>
+                <Heading as="h3" className="text-xl tracking-tighter">
+                  {operationalAgingSummary.state_label}
+                </Heading>
+                <Text className="text-sm text-white/45">
+                  {operationalAgingSummary.bottleneck_action}
+                </Text>
+                <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
+                  pico {formatOperationalAgeDays(operationalAgingSummary.max_age_days)} · envelhecidos {formatNumber(operationalAgingSummary.bottleneck_aged_count)}
+                </Text>
+              </div>
+
+              <div className="p-4 rounded-[24px] bg-white/[0.03] border border-white/5 space-y-3">
+                <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Leads por estágio</Text>
+                {operationalAgingSummary.stage_summaries.length > 0 ? (
+                  <div className="space-y-2">
+                    {operationalAgingSummary.stage_summaries.map((stage) => (
+                      <div key={stage.key} className="flex items-center justify-between gap-3 text-sm">
+                        <span className="text-white/80">{getLeadStatusLabel(stage.key)}</span>
+                        <span className="text-white/45 uppercase tracking-[0.25em] text-[8px]">
+                          média {formatOperationalAgeDays(stage.avg_age_days)} · pico {formatOperationalAgeDays(stage.max_age_days)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <Text className="text-sm text-white/40">Nenhum lead recente com aging mensurável nesta janela.</Text>
+                )}
+              </div>
+            </div>
+          </div>
+        </SectionShell>
+
+        <SectionShell title="Recomendação operacional" description={`Próxima ação sugerida para ${org.name}, derivada dos sinais agregados da janela.`}>
+          {operationalRecommendations.length > 0 ? (
+            <div className="space-y-3">
+              <div className="p-5 rounded-[28px] bg-[#D4AF37]/5 border border-[#D4AF37]/15 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">
+                      Próxima ação sugerida
+                    </Text>
+                    <Heading as="h3" className="text-xl tracking-tighter">
+                      {operationalRecommendations[0].title}
+                    </Heading>
+                  </div>
+                  <span
+                    className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${
+                      operationalRecommendations[0].priority === "high"
+                        ? badge("risk-high")
+                        : operationalRecommendations[0].priority === "medium"
+                          ? badge("risk-medium")
+                          : badge("risk-low")
+                    }`}
+                  >
+                    {formatOperationalPriorityLabel(operationalRecommendations[0].priority)}
+                  </span>
+                </div>
+                <Text className="text-sm text-white/55">{operationalRecommendations[0].summary}</Text>
+                <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
+                  Ação: {operationalRecommendations[0].action}
+                </Text>
+                <div className="flex flex-wrap gap-2">
+                  {operationalRecommendations[0].evidence.map((item) => (
+                    <span
+                      key={`${operationalRecommendations[0].key}-${item}`}
+                      className="px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border bg-white/5 text-white/70 border-white/10"
+                    >
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {operationalRecommendations.slice(1).length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {operationalRecommendations.slice(1).map((recommendation) => (
+                    <span
+                      key={recommendation.key}
+                      className="px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border bg-white/5 text-white/70 border-white/10"
+                    >
+                      {recommendation.title} · {formatOperationalPriorityLabel(recommendation.priority)}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <EmptyState title="Sem recomendação" description="Não houve sinais suficientes para propor uma próxima ação nesta janela." />
           )}
         </SectionShell>
       </div>

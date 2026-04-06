@@ -6,7 +6,20 @@ import { ShieldCheck, Users, DollarSign, Zap, HeartPulse, MessageSquare, AlertCi
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { VenusButton } from "@/components/ui/VenusButton";
-import { listAgencyOrgRows, type AgencyOrgRow } from "@/lib/agency";
+import { getAgencyOperationalFrictionSummary, listAgencyOrgRows, type AgencyOrgRow } from "@/lib/agency";
+import {
+  buildAgencyOperationalRecommendations,
+  formatOperationalPriorityLabel,
+} from "@/lib/agency/operational-recommendations";
+import {
+  collectOperationalValueSummary,
+  formatOperationalValueRate,
+} from "@/lib/agency/value-summary";
+import {
+  formatOperationalAgeDays,
+  mergeOperationalAgingSummaries,
+} from "@/lib/agency/aging-summary";
+import { LEAD_STATUSES, getLeadStatusLabel, type LeadStatus } from "@/lib/leads";
 import { createClient } from "@/lib/supabase/server";
 import { isAgencyRole, isMerchantRole, resolveTenantContext } from "@/lib/tenant/core";
 import { listAgencyPlaybookRows, type AgencyPlaybookRow } from "@/lib/billing/playbooks";
@@ -62,6 +75,11 @@ function metricValue(value: number | null) {
   return value === null ? "Sem dados" : value.toLocaleString("pt-BR");
 }
 
+function formatDurationMs(value: number | null) {
+  if (value === null) return "Sem dados";
+  return `${Math.round(value).toLocaleString("pt-BR")}ms`;
+}
+
 function softCapKind(status: "ok" | "warning" | "critical" | "no_data") {
   if (status === "critical") return "critical";
   if (status === "warning") return "warning";
@@ -91,20 +109,23 @@ function leadRiskKind(overdue: number, withoutFollowUp: number) {
 
 function formatPipelineCounts(row: AgencyOrgLeadRowLike) {
   const counts = row.lead_summary.by_status;
-  return `novo ${counts.new} · engajado ${counts.engaged} · qualificado ${counts.qualified} · oferta ${counts.offer_sent} · ganho ${counts.won} · perdido ${counts.lost}`;
+  const pipelineLabels: Record<LeadStatus, string> = {
+    new: "novo",
+    engaged: "engajado",
+    qualified: "qualificado",
+    offer_sent: "oferta",
+    closing: "fechamento",
+    won: "ganho",
+    lost: "perdido",
+  };
+
+  return LEAD_STATUSES.map((status) => `${pipelineLabels[status]} ${counts[status]}`).join(" · ");
 }
 
 type AgencyOrgLeadRowLike = {
   lead_summary: {
     total: number;
-    by_status: {
-      new: number;
-      engaged: number;
-      qualified: number;
-      offer_sent: number;
-      won: number;
-      lost: number;
-    };
+    by_status: Record<LeadStatus, number>;
     followup_overdue: number;
     followup_today: number;
     followup_upcoming: number;
@@ -155,10 +176,12 @@ export default async function AgencyDashboardPage({
 
   let playbookRows: AgencyPlaybookRow[] = [];
   let orgRows: AgencyOrgRow[] = [];
+  let operationalSummary = null as Awaited<ReturnType<typeof getAgencyOperationalFrictionSummary>> | null;
   try {
-    [playbookRows, orgRows] = await Promise.all([
+    [playbookRows, orgRows, operationalSummary] = await Promise.all([
       listAgencyPlaybookRows(),
       listAgencyOrgRows(),
+      getAgencyOperationalFrictionSummary(range),
     ]);
   } catch (error) {
     return (
@@ -188,6 +211,7 @@ export default async function AgencyDashboardPage({
 
   const orgRowsById = new Map(orgRows.map((row) => [row.id, row]));
   const orgs = playbookRows.map((row) => ({ ...row, ...(orgRowsById.get(row.id) || {}) }));
+  const orgNameById = new Map(orgs.map((row) => [row.id, row.name]));
   const totalOrgs = orgs.length;
   const activeOrgs = orgs.filter((org) => org.status === "active" && !org.kill_switch).length;
   const suspendedOrBlocked = orgs.filter((org) => org.status !== "active" || org.kill_switch).length;
@@ -218,8 +242,9 @@ export default async function AgencyDashboardPage({
       return (
         right.lead_summary.by_status.engaged +
         right.lead_summary.by_status.qualified +
-        right.lead_summary.by_status.offer_sent -
-        (left.lead_summary.by_status.engaged + left.lead_summary.by_status.qualified + left.lead_summary.by_status.offer_sent)
+        right.lead_summary.by_status.offer_sent +
+        right.lead_summary.by_status.closing -
+        (left.lead_summary.by_status.engaged + left.lead_summary.by_status.qualified + left.lead_summary.by_status.offer_sent + left.lead_summary.by_status.closing)
       );
     })
     .slice(0, 4);
@@ -235,6 +260,47 @@ export default async function AgencyDashboardPage({
     })
     .filter((org) => org.lead_summary.total > 0)
     .slice(0, 6);
+  const frictionTopOrgs = (operationalSummary?.top_orgs || []).map((row) => ({
+    ...row,
+    name: orgNameById.get(row.key) || row.key,
+  }));
+  const operationalRecommendationOrgs = frictionTopOrgs
+    .map((row) => {
+      const org = orgRowsById.get(row.key);
+      if (!org) {
+        return null;
+      }
+
+      return {
+        id: org.id,
+        name: org.name,
+        lead_summary: org.lead_summary,
+        operational_summary: row,
+      };
+    })
+    .filter((value): value is {
+      id: string;
+      name: string;
+      lead_summary: AgencyOrgRow["lead_summary"];
+      operational_summary: (typeof frictionTopOrgs)[number];
+    } => Boolean(value));
+  const operationalRecommendations = operationalSummary
+    ? buildAgencyOperationalRecommendations(operationalSummary, operationalRecommendationOrgs, 3)
+    : [];
+  const operationalValueSummary = collectOperationalValueSummary(orgs.map((row) => row.lead_summary));
+  const operationalAgingSummary = mergeOperationalAgingSummaries(orgs.map((row) => row.aging_summary));
+  const agingTopOrgs = [...orgs]
+    .filter((org) => org.aging_summary.critical_count > 0 || org.aging_summary.aged_count > 0)
+    .sort((left, right) => {
+      const byCritical = right.aging_summary.critical_count - left.aging_summary.critical_count;
+      if (byCritical !== 0) return byCritical;
+      const byAged = right.aging_summary.aged_count - left.aging_summary.aged_count;
+      if (byAged !== 0) return byAged;
+      const byAge = (right.aging_summary.max_age_days || 0) - (left.aging_summary.max_age_days || 0);
+      if (byAge !== 0) return byAge;
+      return right.lead_summary.total - left.lead_summary.total;
+    })
+    .slice(0, 4);
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -353,7 +419,7 @@ export default async function AgencyDashboardPage({
           {withoutFollowUpUrgentOrgs.length > 0 ? (
             <div className="space-y-3">
               {withoutFollowUpUrgentOrgs.map((org) => {
-                const activePipelineCount = org.lead_summary.by_status.engaged + org.lead_summary.by_status.qualified + org.lead_summary.by_status.offer_sent;
+                const activePipelineCount = org.lead_summary.by_status.engaged + org.lead_summary.by_status.qualified + org.lead_summary.by_status.offer_sent + org.lead_summary.by_status.closing;
                 return (
                   <div key={`without-follow-up-${org.id}`} className="p-5 rounded-[28px] bg-yellow-500/5 border border-yellow-500/15 space-y-4">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -379,11 +445,12 @@ export default async function AgencyDashboardPage({
                         </VenusButton>
                       </Link>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                       <Metric label="Sem follow-up" value={org.lead_summary.followup_without} />
                       <Metric label="Engajados" value={org.lead_summary.by_status.engaged} />
                       <Metric label="Qualificados" value={org.lead_summary.by_status.qualified} />
                       <Metric label="Oferta enviada" value={org.lead_summary.by_status.offer_sent} />
+                      <Metric label="Fechamento" value={org.lead_summary.by_status.closing} />
                     </div>
                   </div>
                 );
@@ -414,8 +481,9 @@ export default async function AgencyDashboardPage({
           <div className="space-y-3">
             {leadRiskOrgs.length > 0 ? (
               leadRiskOrgs.map((org) => {
-                const riskKind = leadRiskKind(org.lead_summary.followup_overdue, org.lead_summary.followup_without);
+              const riskKind = leadRiskKind(org.lead_summary.followup_overdue, org.lead_summary.followup_without);
                 const engagedCount = org.lead_summary.by_status.engaged;
+                const closingCount = org.lead_summary.by_status.closing;
                 return (
                   <div key={`lead-risk-${org.id}`} className="p-5 rounded-[28px] bg-white/[0.03] border border-white/5 space-y-4">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -468,6 +536,16 @@ export default async function AgencyDashboardPage({
                               </VenusButton>
                             </Link>
                           ) : null}
+                          {closingCount > 0 ? (
+                            <Link href={buildAgencyOrgDetailHref(org.id, { from: "agency", range, leadStatus: "closing" })}>
+                              <VenusButton
+                                variant="outline"
+                                className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-yellow-500/20 text-yellow-200"
+                              >
+                                Fechamento ({closingCount})
+                              </VenusButton>
+                            </Link>
+                          ) : null}
                         </div>
                       </div>
                       <Link href={buildAgencyOrgDetailHref(org.id, { from: "agency", range })}>
@@ -490,6 +568,270 @@ export default async function AgencyDashboardPage({
                 <Text className="text-sm text-white/40">Nenhuma org com leads suficientes para destacar risco comercial agora.</Text>
               </div>
             )}
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="space-y-1">
+            <Heading as="h2" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">Atrito operacional</Heading>
+            <Text className="text-sm text-white/40">
+              Leitura agregada dos eventos já emitidos na janela {range === "all" ? "total" : range === "7d" ? "de 7 dias" : range === "30d" ? "de 30 dias" : "de 90 dias"}, focada em bloqueios, conflitos e espera.
+            </Text>
+          </div>
+
+          {operationalSummary ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+                <StatCard icon={<AlertCircle className="w-5 h-5 text-red-400" />} label="Bloqueios" value={operationalSummary.blocked_count.toString()} />
+                <StatCard icon={<ShieldCheck className="w-5 h-5 text-yellow-300" />} label="Conflitos" value={operationalSummary.conflict_count.toString()} />
+                <StatCard icon={<CircleDashed className="w-5 h-5 text-[#D4AF37]" />} label="Espera single-flight" value={operationalSummary.wait_count.toString()} />
+                <StatCard icon={<HeartPulse className="w-5 h-5 text-green-400" />} label="Latência média" value={formatDurationMs(operationalSummary.avg_duration_ms)} />
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <div className="p-5 rounded-[28px] bg-white/[0.03] border border-white/5 space-y-3">
+                  <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Top reason_codes</Text>
+                  {operationalSummary.top_reason_codes.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {operationalSummary.top_reason_codes.map((row) => (
+                        <span key={row.key} className="px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border bg-white/5 text-white/70 border-white/10">
+                          {row.key} · {row.count}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <Text className="text-sm text-white/40">Nenhum reason_code recente na janela selecionada.</Text>
+                  )}
+                </div>
+
+                <div className="p-5 rounded-[28px] bg-white/[0.03] border border-white/5 space-y-3">
+                  <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Orgs com mais atrito</Text>
+                  {frictionTopOrgs.length > 0 ? (
+                    <div className="space-y-2">
+                      {frictionTopOrgs.slice(0, 4).map((row) => (
+                        <div key={row.key} className="flex items-center justify-between gap-3 text-sm">
+                          <span className="text-white/80">{row.name}</span>
+                          <span className="text-white/45 uppercase tracking-[0.25em] text-[8px]">
+                            {row.friction_score} sinais · {formatDurationMs(row.avg_duration_ms)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <Text className="text-sm text-white/40">Nenhuma org acumulou atrito suficiente na janela selecionada.</Text>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                {operationalSummary.top_event_types.slice(0, 3).map((row) => (
+                  <div key={row.key} className="p-5 rounded-[28px] bg-white/[0.03] border border-white/5 space-y-2">
+                    <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Fluxo crítico</Text>
+                    <Heading as="h3" className="text-lg tracking-tighter break-all">
+                      {row.key}
+                    </Heading>
+                    <Text className="text-sm text-white/45">
+                      {row.count} eventos · média {formatDurationMs(row.avg_duration_ms)} · pico {formatDurationMs(row.max_duration_ms)}
+                    </Text>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="p-6 rounded-[28px] bg-white/[0.03] border border-white/5">
+              <Text className="text-sm text-white/40">Não foi possível carregar a agregação operacional desta janela.</Text>
+            </div>
+          )}
+        </section>
+
+        <section className="space-y-4">
+          <div className="space-y-1">
+            <Heading as="h2" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">Ações sugeridas</Heading>
+            <Text className="text-sm text-white/40">
+              Recomendações executivas derivadas dos sinais operacionais da janela atual. São regras canônicas, não automação.
+            </Text>
+          </div>
+
+          {operationalRecommendations.length > 0 ? (
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+              {operationalRecommendations.map((recommendation) => (
+                <div key={recommendation.key} className="p-5 rounded-[28px] bg-[#D4AF37]/5 border border-[#D4AF37]/15 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">
+                        {recommendation.kind.replace(/_/g, " ")}
+                      </Text>
+                      <Heading as="h3" className="text-xl tracking-tighter">
+                        {recommendation.title}
+                      </Heading>
+                    </div>
+                    <span
+                      className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badgeClasses(
+                        recommendation.priority === "high" ? "critical" : recommendation.priority === "medium" ? "warning" : "ok"
+                      )}`}
+                    >
+                      {formatOperationalPriorityLabel(recommendation.priority)}
+                    </span>
+                  </div>
+                  <Text className="text-sm text-white/55">{recommendation.summary}</Text>
+                  <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">{recommendation.action}</Text>
+                  {recommendation.org_name ? (
+                    <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
+                      Org: {recommendation.org_name}
+                    </Text>
+                  ) : null}
+                  <div className="flex flex-wrap gap-2">
+                    {recommendation.evidence.map((item) => (
+                      <span
+                        key={`${recommendation.key}-${item}`}
+                        className="px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border bg-white/5 text-white/70 border-white/10"
+                      >
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-6 rounded-[28px] bg-white/[0.03] border border-white/5">
+              <Text className="text-sm text-white/40">Nenhuma recomendação operacional disponível na janela atual.</Text>
+            </div>
+          )}
+        </section>
+
+        <section className="space-y-4">
+          <div className="space-y-1">
+            <Heading as="h2" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">Valor operacional</Heading>
+            <Text className="text-sm text-white/40">
+              Leitura canônica do avanço comercial real. Sem receita inventada, apenas estágio, conversão e gargalo.
+            </Text>
+          </div>
+
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+            <StatCard icon={<Users className="w-5 h-5 text-[#D4AF37]" />} label="Leads totais" value={operationalValueSummary.total_leads.toLocaleString("pt-BR")} />
+            <StatCard icon={<HeartPulse className="w-5 h-5 text-green-400" />} label="Pipeline ativo" value={operationalValueSummary.active_pipeline.toLocaleString("pt-BR")} />
+            <StatCard
+              icon={<Zap className="w-5 h-5 text-[#D4AF37]" />}
+              label="Avanço operacional"
+              value={formatOperationalValueRate(operationalValueSummary.advanced_pipeline_rate)}
+            />
+            <StatCard
+              icon={<MessageSquare className="w-5 h-5 text-[#D4AF37]" />}
+              label="Ganho / perdido"
+              value={`${operationalValueSummary.stage_counts.won.toLocaleString("pt-BR")} / ${operationalValueSummary.stage_counts.lost.toLocaleString("pt-BR")}`}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <div className="p-5 rounded-[28px] bg-white/[0.03] border border-white/5 space-y-3">
+              <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Pipeline em fechamento</Text>
+              <Heading as="h3" className="text-xl tracking-tighter">
+                {operationalValueSummary.stage_counts.offer_sent.toLocaleString("pt-BR")} oferta enviada · {operationalValueSummary.stage_counts.closing.toLocaleString("pt-BR")} em closing
+              </Heading>
+              <Text className="text-sm text-white/45">
+                Fechados: {operationalValueSummary.terminal_pipeline.toLocaleString("pt-BR")} · taxa de fechamento {formatOperationalValueRate(operationalValueSummary.win_rate)}
+              </Text>
+              <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
+                Avanço total: {formatOperationalValueRate(operationalValueSummary.advanced_pipeline_rate)}
+              </Text>
+            </div>
+
+            <div className="p-5 rounded-[28px] bg-white/[0.03] border border-white/5 space-y-3">
+              <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Gargalo principal</Text>
+              <Heading as="h3" className="text-xl tracking-tighter">
+                {operationalValueSummary.state_label}
+              </Heading>
+              <Text className="text-sm text-white/45">{operationalValueSummary.bottleneck_action}</Text>
+              <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
+                Pipeline ativo {formatOperationalValueRate(operationalValueSummary.pipeline_active_rate)} · fechado {formatOperationalValueRate(operationalValueSummary.terminal_rate)}
+              </Text>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <span className="px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border bg-white/5 text-white/70 border-white/10">
+              engajado {operationalValueSummary.stage_counts.engaged.toLocaleString("pt-BR")}
+            </span>
+            <span className="px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border bg-white/5 text-white/70 border-white/10">
+              qualificado {operationalValueSummary.stage_counts.qualified.toLocaleString("pt-BR")}
+            </span>
+            <span className="px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border bg-white/5 text-white/70 border-white/10">
+              oferta {operationalValueSummary.stage_counts.offer_sent.toLocaleString("pt-BR")}
+            </span>
+            <span className="px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border bg-white/5 text-white/70 border-white/10">
+              closing {operationalValueSummary.stage_counts.closing.toLocaleString("pt-BR")}
+            </span>
+            <span className="px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border bg-white/5 text-white/70 border-white/10">
+              won {operationalValueSummary.stage_counts.won.toLocaleString("pt-BR")}
+            </span>
+            <span className="px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border bg-white/5 text-white/70 border-white/10">
+              lost {operationalValueSummary.stage_counts.lost.toLocaleString("pt-BR")}
+            </span>
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="space-y-1">
+            <Heading as="h2" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">Aging do pipeline</Heading>
+            <Text className="text-sm text-white/40">
+              Leitura canônica do tempo parado por estágio. Fonte temporal: last_interaction_at, depois updated_at, depois created_at.
+            </Text>
+          </div>
+
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+            <StatCard icon={<AlertCircle className="w-5 h-5 text-red-400" />} label="Leads envelhecidos" value={operationalAgingSummary.aged_count.toLocaleString("pt-BR")} />
+            <StatCard icon={<AlertCircle className="w-5 h-5 text-red-400" />} label="Críticos" value={operationalAgingSummary.critical_count.toLocaleString("pt-BR")} />
+            <StatCard icon={<HeartPulse className="w-5 h-5 text-green-400" />} label="Idade média" value={formatOperationalAgeDays(operationalAgingSummary.average_age_days)} />
+            <StatCard icon={<Zap className="w-5 h-5 text-[#D4AF37]" />} label="Pior estágio" value={operationalAgingSummary.bottleneck_stage === "none" ? "Sem gargalo" : operationalAgingSummary.bottleneck_label} />
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <div className="p-5 rounded-[28px] bg-white/[0.03] border border-white/5 space-y-3">
+              <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Estágio mais envelhecido</Text>
+              <Heading as="h3" className="text-xl tracking-tighter">
+                {operationalAgingSummary.state_label}
+              </Heading>
+              <Text className="text-sm text-white/45">{operationalAgingSummary.bottleneck_action}</Text>
+              <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
+                Pico {formatOperationalAgeDays(operationalAgingSummary.max_age_days)} · leads envelhecidos {operationalAgingSummary.bottleneck_aged_count.toLocaleString("pt-BR")}
+              </Text>
+            </div>
+
+            <div className="p-5 rounded-[28px] bg-white/[0.03] border border-white/5 space-y-3">
+              <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Orgs com aging crítico</Text>
+              {agingTopOrgs.length > 0 ? (
+                <div className="space-y-2">
+                  {agingTopOrgs.map((org) => (
+                    <div key={org.id} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="text-white/80">{org.name}</span>
+                      <span className="text-white/45 uppercase tracking-[0.25em] text-[8px]">
+                        {org.aging_summary.critical_count} críticos · pico {formatOperationalAgeDays(org.aging_summary.max_age_days)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <Text className="text-sm text-white/40">Nenhuma org acumulou aging crítico na janela atual.</Text>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+            {operationalAgingSummary.stage_summaries.slice(0, 3).map((stage) => (
+              <div key={stage.key} className="p-5 rounded-[28px] bg-white/[0.03] border border-white/5 space-y-2">
+                <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Aging por estágio</Text>
+                <Heading as="h3" className="text-lg tracking-tighter">
+                  {getLeadStatusLabel(stage.key)}
+                </Heading>
+                <Text className="text-sm text-white/45">
+                  média {formatOperationalAgeDays(stage.avg_age_days)} · pico {formatOperationalAgeDays(stage.max_age_days)}
+                </Text>
+                <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
+                  envelhecidos {stage.aged_count.toLocaleString("pt-BR")} · críticos {stage.critical_count.toLocaleString("pt-BR")}
+                </Text>
+              </div>
+            ))}
           </div>
         </section>
 

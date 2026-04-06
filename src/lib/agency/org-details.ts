@@ -1,12 +1,14 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { extractLeadSignalsFromSavedResultPayload, type LeadStatus } from "@/lib/leads";
+import { createEmptyLeadStatusCounts, extractLeadSignalsFromSavedResultPayload, isLeadStatus, type LeadStatus } from "@/lib/leads";
 import { listAgencyBillingRows, type AgencyBillingRow } from "@/lib/billing";
 import { getOrgGuidanceSummary } from "@/lib/billing/guidance";
 import { getOrgPlaybookSummary, type OrgActionPlaybook } from "@/lib/billing/playbooks";
 import { resolveAgencyTimeRangeWindow, type AgencyTimeRange } from "@/lib/agency/time-range";
 import { listPlaybookQueueItems, type AgencyPlaybookQueueItem } from "@/lib/agency/playbook-queue";
+import { collectOperationalSignalSummary, type OperationalSignalSummary } from "@/lib/agency/operational-signals";
+import { buildOperationalAgingSummary, type AgencyAgingSummary } from "@/lib/agency/aging-summary";
 
 export interface AgencyOrgLeadRow {
   id: string;
@@ -62,6 +64,7 @@ export interface AgencyOrgEventRow {
   event_source: string | null;
   created_at: string | null;
   payload_summary: string | null;
+  payload: Record<string, unknown> | null;
 }
 
 export interface AgencyOrgWhatsAppConversationRow {
@@ -115,6 +118,8 @@ export interface AgencyOrgDetail {
   playbook: OrgActionPlaybook;
   billing: AgencyOrgBillingDetail;
   lead_summary: AgencyOrgLeadSummary;
+  aging_summary: AgencyAgingSummary;
+  operational_summary: OperationalSignalSummary;
   leads: AgencyOrgLeadRow[];
   products: AgencyOrgProductRow[];
   saved_results: AgencyOrgSavedResultRow[];
@@ -193,12 +198,7 @@ function dateKey(value: Date) {
 
 function getLeadSummary(leads: AgencyOrgLeadRow[]): AgencyOrgLeadSummary {
   const by_status: Record<LeadStatus, number> = {
-    new: 0,
-    engaged: 0,
-    qualified: 0,
-    offer_sent: 0,
-    won: 0,
-    lost: 0,
+    ...createEmptyLeadStatusCounts(),
   };
 
   const now = new Date();
@@ -211,7 +211,9 @@ function getLeadSummary(leads: AgencyOrgLeadRow[]): AgencyOrgLeadSummary {
 
   for (const lead of leads) {
     const status = lead.status as LeadStatus;
-    by_status[status] = (by_status[status] || 0) + 1;
+    if (isLeadStatus(status)) {
+      by_status[status] = (by_status[status] || 0) + 1;
+    }
 
     if (!lead.next_follow_up_at) {
       followup_without += 1;
@@ -247,12 +249,48 @@ function getLeadSummary(leads: AgencyOrgLeadRow[]): AgencyOrgLeadSummary {
 function summarizePayload(payload: unknown) {
   const record = asRecord(payload);
   const tenant = asRecord(record.tenant);
+  const reasonCode = toNullableString(record.reason_code);
+  const durationMs = typeof record.duration_ms === "number"
+    ? record.duration_ms
+    : typeof record.duration_ms === "string"
+      ? Number(record.duration_ms)
+      : null;
+  const generationDurationMs = typeof record.generation_duration_ms === "number"
+    ? record.generation_duration_ms
+    : typeof record.generation_duration_ms === "string"
+      ? Number(record.generation_duration_ms)
+      : null;
+  const persistDurationMs = typeof record.persist_duration_ms === "number"
+    ? record.persist_duration_ms
+    : typeof record.persist_duration_ms === "string"
+      ? Number(record.persist_duration_ms)
+      : null;
+  const waitDurationMs = typeof record.wait_duration_ms === "number"
+    ? record.wait_duration_ms
+    : typeof record.wait_duration_ms === "string"
+      ? Number(record.wait_duration_ms)
+      : null;
+  const hasDurationMs = typeof durationMs === "number" && Number.isFinite(durationMs);
+  const hasGenerationDurationMs = typeof generationDurationMs === "number" && Number.isFinite(generationDurationMs);
+  const hasPersistDurationMs = typeof persistDurationMs === "number" && Number.isFinite(persistDurationMs);
+  const hasWaitDurationMs = typeof waitDurationMs === "number" && Number.isFinite(waitDurationMs);
   const parts = [
     tenant.orgSlug ? `tenant=${tenant.orgSlug}` : "",
     tenant.source ? `source=${tenant.source}` : "",
     record.org_slug ? `org_slug=${record.org_slug}` : "",
     record.lead_id ? `lead_id=${record.lead_id}` : "",
     record.saved_result_id ? `saved_result_id=${record.saved_result_id}` : "",
+    record.reservation_key ? `reservation_key=${record.reservation_key}` : "",
+    record.result_source ? `result_source=${record.result_source}` : "",
+    record.operation ? `operation=${record.operation}` : "",
+    record.metric ? `metric=${record.metric}` : "",
+    record.status ? `status=${record.status}` : "",
+    record.failure_stage ? `failure_stage=${record.failure_stage}` : "",
+    reasonCode ? `reason=${reasonCode}` : "",
+    hasDurationMs ? `duration=${durationMs}ms` : "",
+    hasGenerationDurationMs ? `generation=${generationDurationMs}ms` : "",
+    hasPersistDurationMs ? `persist=${persistDurationMs}ms` : "",
+    hasWaitDurationMs ? `wait=${waitDurationMs}ms` : "",
     record.product_id ? `product_id=${record.product_id}` : "",
     record.action ? `action=${record.action}` : "",
   ].filter(Boolean);
@@ -443,6 +481,7 @@ export async function getAgencyOrgEventsRows(orgId: string, range: AgencyTimeRan
     event_source: toNullableString(row.event_source),
     created_at: toNullableDate(row.created_at),
     payload_summary: summarizePayload(row.payload),
+    payload: asRecord(row.payload),
   }));
 }
 
@@ -600,6 +639,13 @@ export async function getAgencyOrgDetail(orgId: string, range: AgencyTimeRange =
     playbook: getOrgPlaybookSummary(guidance),
     billing: billing || { summary: org, recent_usage_rows: [] },
     lead_summary: getLeadSummary(leads),
+    aging_summary: buildOperationalAgingSummary(leads),
+    operational_summary: collectOperationalSignalSummary(events.map((event) => ({
+      org_id: org.id,
+      event_type: event.event_type,
+      created_at: event.created_at,
+      payload: event.payload,
+    }))),
     leads,
     products,
     saved_results: savedResults,
