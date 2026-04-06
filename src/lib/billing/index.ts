@@ -145,7 +145,7 @@ async function listAgencyBillingRowsWithFilters(filters: AgencyBillingFilters): 
   ] = await Promise.all([
     admin.from("products").select("org_id, created_at"),
     admin.from("leads").select("org_id, created_at, updated_at, last_interaction_at"),
-    admin.from("saved_results").select("org_id, created_at, updated_at"),
+    admin.from("saved_results").select("org_id, created_at"),
     admin.from("tenant_events").select("org_id, created_at"),
     admin.from("whatsapp_conversations").select("org_slug, created_at"),
     admin.from("whatsapp_messages").select("org_slug, created_at"),
@@ -203,14 +203,14 @@ async function listAgencyBillingRowsWithFilters(filters: AgencyBillingFilters): 
     latestMapUpdate(lastActivityByOrgId, row.org_id, row.last_interaction_at || row.updated_at || row.created_at);
   }
 
-  for (const row of (savedResultsResult.data || []) as Array<{ org_id: string | null; created_at: string | null; updated_at: string | null }>) {
+  for (const row of (savedResultsResult.data || []) as Array<{ org_id: string | null; created_at: string | null }>) {
     if (!row.org_id || !orgById.has(row.org_id)) continue;
     if (!inRange(row.created_at, dateFrom)) continue;
     countMapIncrement(totalSavedResultsByOrgId, row.org_id);
     if (sameUtcDay(row.created_at, today)) {
       countMapIncrement(todaySavedResultsByOrgId, row.org_id);
     }
-    latestMapUpdate(lastActivityByOrgId, row.org_id, row.updated_at || row.created_at);
+    latestMapUpdate(lastActivityByOrgId, row.org_id, row.created_at);
   }
 
   if (whatsappConversationsAvailable) {

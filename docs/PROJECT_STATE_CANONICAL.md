@@ -178,7 +178,23 @@ O que nao precisa ser reaberto agora:
 16. Etapa de observabilidade - adicionou sinais operacionais, reason codes e timings.
 17. Etapa de leitura executiva - criou agregacao operacional, recomendacoes, valor operacional e aging por estagio.
 
-## 4. O Que Ainda Falta De Verdade
+## 4. Estado Pos-Separacao Em Commits
+
+A separacao final do worktree foi concluida em commits limpos e isolados. O repositorio ficou com o estado operacional organizado em clusters justificaveis por si so.
+
+- `68b41ab` - pacote A de fechamento do ciclo: documento canônico, surface final de resultado e base de testes.
+- `c4b0bd9` - IA / recommendation: enriquecimento de catalogo, normalizacao de resultado e ranking mais restrito.
+- `1d8c731` - agency / governanca: summaries de valor, aging, friccao e leitura executiva por org.
+- `9ed37c1` - confiabilidade / core: idempotencia, single-flight, observabilidade e mutacoes transacionais do lead.
+- `0e5e398` - demo / prova / premium polish: home, proof page, DemoTour e asset visual alinhados ao tom premium.
+
+Estado atual apos a separacao:
+- worktree limpo
+- clusters isolados em commits distintos
+- sequencia pronta para PRs na ordem definida
+- nenhuma mistura de escopo remanescente no estado final do repositorio
+
+## 5. O Que Ainda Falta De Verdade
 
 ### Maturidade Sistemica
 
@@ -213,36 +229,42 @@ Ainda falta:
 - capacidade de auditoria e recuperacao mais forte
 - automacoes leves, mas ainda nao executadas, para reduzir trabalho repetitivo
 
-## 5. Prioridade Real
+## 6. Prioridade Real
 
-A ordem correta, olhando o estado atual, e:
+A ordem correta, olhando o estado atual e a separacao em commits, e:
 
-1. Consolidacao e limpeza
+1. Fechamento e publicacao das PRs ja separadas
+- manter os clusters isolados
+- publicar na ordem definida
+- evitar reagrupamento desnecessario
+- preservar o estado limpo do worktree e a narrativa de continuidade
+
+2. Consolidacao e limpeza
 - estabilizar o que ja foi feito
 - reduzir deriva
 - impedir regressao de arquitetura e produto
 - fechar lacunas pequenas de confiabilidade e leitura
 
-2. Prova de valor
+3. Prova de valor
 - reforcar o loop de valor comercial
 - tornar o ganho operacional mais visivel para o usuario
 - provar que o sistema nao so organiza, mas melhora conversao e cadencia
 
-3. Maturidade operacional
+4. Maturidade operacional
 - fortalecer testes
 - melhorar ambiente
 - endurecer governanca de execucao
 - expandir a confiabilidade sem inflar arquitetura
 
-4. Ponte transacional mais concreta
+5. Ponte transacional mais concreta
 - so depois de estabilizar o valor, evoluir para ponte operacional mais forte entre fechamento e acao real
 - sem inventar pedido, checkout ou ERP antes da hora
 
-5. Escala e automacao leve
+6. Escala e automacao leve
 - aplicar automacoes canonicas pequenas quando houver lastro suficiente
 - evitar complexidade antecipada
 
-## 6. O Que Nao Fazer Agora
+## 7. O Que Nao Fazer Agora
 
 Nao reabrir:
 - ERP
