@@ -42,6 +42,7 @@ import {
   readMerchantBenefitProgram,
   type MerchantBenefitProgram,
 } from "@/lib/social/merchant-benefits";
+import { useUserImage } from "@/lib/onboarding/UserImageContext";
 
 interface SocialShareActionsProps {
   look: LookData;
@@ -64,6 +65,7 @@ export function SocialShareActions({
   appName,
   resultUrl,
 }: SocialShareActionsProps) {
+  const { userPhoto } = useUserImage();
   const [status, setStatus] = React.useState<"idle" | "sharing" | "copied" | "downloaded">("idle");
   const [economy, setEconomy] = React.useState<SocialEconomyState>({
     points: 0,
@@ -98,12 +100,13 @@ export function SocialShareActions({
       styleIdentity,
       imageGoal,
       profileSignal,
+      userPhotoUrl: userPhoto,
       intentScore,
       brandName,
       appName,
       resultUrl,
     }),
-    [look, styleIdentity, imageGoal, profileSignal, intentScore, brandName, appName, resultUrl]
+    [look, styleIdentity, imageGoal, profileSignal, userPhoto, intentScore, brandName, appName, resultUrl]
   );
 
   const caption = React.useMemo(() => buildSocialCaption(shareInput), [shareInput]);

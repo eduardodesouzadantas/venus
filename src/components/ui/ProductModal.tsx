@@ -127,14 +127,14 @@ function ProductModalContent({ product, onClose }: ProductModalContentProps) {
         </div>
 
         <div className="relative z-10 flex flex-1 flex-col items-center">
-          <div ref={galleryRef} className="w-full max-w-[760px] px-4">
+          <div ref={galleryRef} className="w-full max-w-[840px] px-4">
             <div
               className={`group relative aspect-[4/5] w-full cursor-zoom-in overflow-hidden rounded-[36px] border border-white/10 bg-[#0A0A0A] shadow-2xl transition-transform duration-500 ease-in-out ${isZoomed ? "scale-[1.02]" : "scale-100"}`}
               onDoubleClick={handleDoubleTap}
               onTouchStart={handleGalleryTouchStart}
               onTouchEnd={handleGalleryTouchEnd}
             >
-              <img src={images[currentImageIndex]} alt={product.name} loading="lazy" className="h-full w-full object-cover" />
+              <img src={images[currentImageIndex]} alt={product.name} loading="lazy" className="h-full w-full object-cover object-center" />
               <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
 
               {!isZoomed && images.length > 1 && (
@@ -176,14 +176,14 @@ function ProductModalContent({ product, onClose }: ProductModalContentProps) {
             </div>
 
             {images.length > 1 && !isZoomed && (
-              <div className="mt-4 grid grid-cols-4 gap-3">
+              <div className="mt-4 grid grid-cols-4 gap-4">
                 {images.map((img, index) => (
                   <button
                     key={index}
                     onClick={() => setCurrentImageIndex(index)}
-                    className={`relative aspect-[3/4] overflow-hidden rounded-2xl border-2 transition-all ${index === currentImageIndex ? "border-[#D4AF37] scale-[1.02]" : "border-white/10 opacity-60"}`}
+                    className={`relative aspect-[3/4] overflow-hidden rounded-[1.35rem] border-2 transition-all ${index === currentImageIndex ? "border-[#D4AF37] scale-[1.03]" : "border-white/10 opacity-60"}`}
                   >
-                    <img src={img} className="h-full w-full object-cover" />
+                    <img src={img} className="h-full w-full object-cover object-center" />
                   </button>
                 ))}
               </div>

@@ -6,6 +6,7 @@ export interface SocialShareInput {
   styleIdentity: string;
   imageGoal: string;
   profileSignal?: string;
+  userPhotoUrl?: string | null;
   brandName?: string;
   appName?: string;
   intentScore?: number;
@@ -62,6 +63,37 @@ async function loadImage(url: string) {
     img.onerror = reject;
     img.src = url;
   });
+}
+
+async function loadCanvasImage(url?: string | null) {
+  if (!url) return null;
+
+  const normalized = url.trim();
+  if (!normalized) return null;
+
+  if (/^(data:|blob:|\/)/i.test(normalized)) {
+    try {
+      return await loadImage(normalized);
+    } catch {
+      return null;
+    }
+  }
+
+  try {
+    const response = await fetch(normalized, { mode: "cors", cache: "force-cache" });
+    if (!response.ok) return null;
+
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+
+    try {
+      return await loadImage(objectUrl);
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  } catch {
+    return null;
+  }
 }
 
 function getEffectLine(styleIdentity: string, imageGoal: string, intentScore = 0) {
@@ -133,6 +165,7 @@ export async function buildSocialShareImage(input: SocialShareInput) {
     .filter(Boolean)
     .slice(0, 3);
   const benefitLine = benefitTitles.length ? benefitTitles.join(" · ") : merchantProgram.headline;
+  const lookName = normalizeText(input.look.name);
   const width = 1080;
   const height = 1350;
   const canvas = document.createElement("canvas");
@@ -143,18 +176,24 @@ export async function buildSocialShareImage(input: SocialShareInput) {
   canvas.width = width;
   canvas.height = height;
 
-  const heroImageUrl =
-    input.look.items?.[0]?.photoUrl ||
-    input.look.tryOnUrl ||
-    "/hero-final.jpg";
+  const heroImageUrl = input.look.items?.[0]?.photoUrl || input.look.tryOnUrl || "/hero-final.jpg";
+  const userImageUrl = input.userPhotoUrl || null;
 
   ctx.fillStyle = "#090909";
   ctx.fillRect(0, 0, width, height);
 
-  try {
-    const image = await loadImage(heroImageUrl);
+  const heroImage = await loadCanvasImage(heroImageUrl);
+  const userImage = await loadCanvasImage(userImageUrl);
+
+  const fillCoverImage = (
+    image: HTMLImageElement,
+    x: number,
+    y: number,
+    panelWidth: number,
+    panelHeight: number
+  ) => {
     const sourceRatio = image.width / image.height;
-    const targetRatio = width / 760;
+    const targetRatio = panelWidth / panelHeight;
     let sWidth = image.width;
     let sHeight = image.height;
     let sx = 0;
@@ -168,18 +207,92 @@ export async function buildSocialShareImage(input: SocialShareInput) {
       sy = (image.height - sHeight) / 2;
     }
 
-    ctx.drawImage(image, sx, sy, sWidth, sHeight, 0, 0, width, 760);
-  } catch {
-    const gradient = ctx.createLinearGradient(0, 0, 0, 760);
+    ctx.drawImage(image, sx, sy, sWidth, sHeight, x, y, panelWidth, panelHeight);
+  };
+
+  const drawFallbackPanel = (
+    x: number,
+    y: number,
+    panelWidth: number,
+    panelHeight: number,
+    label: string,
+    title: string
+  ) => {
+    const gradient = ctx.createLinearGradient(x, y, x, y + panelHeight);
     gradient.addColorStop(0, "#181818");
     gradient.addColorStop(1, "#0A0A0A");
     ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, width, 760);
+    roundRect(ctx, x, y, panelWidth, panelHeight, 36);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.16)";
+    ctx.font = "700 12px Inter, Arial, sans-serif";
+    ctx.fillText(label.toUpperCase(), x + 28, y + 36);
+    ctx.fillStyle = "rgba(255,255,255,0.9)";
+    ctx.font = "700 34px Georgia, 'Times New Roman', serif";
+    fitText(ctx, title, panelWidth - 56).slice(0, 3).forEach((line, index) => {
+      ctx.fillText(line, x + 28, y + 88 + index * 40);
+    });
+  };
+
+  // Hero split: person + look, built to survive without tainted remote draws.
+  const leftPanel = { x: 48, y: 160, width: 404, height: 500 };
+  const rightPanel = { x: 504, y: 160, width: 528, height: 500 };
+
+  ctx.fillStyle = "rgba(255,255,255,0.03)";
+  roundRect(ctx, leftPanel.x, leftPanel.y, leftPanel.width, leftPanel.height, 40);
+  ctx.fill();
+  roundRect(ctx, rightPanel.x, rightPanel.y, rightPanel.width, rightPanel.height, 40);
+  ctx.fill();
+
+  if (userImage) {
+    fillCoverImage(userImage, leftPanel.x, leftPanel.y, leftPanel.width, leftPanel.height);
+  } else {
+    drawFallbackPanel(leftPanel.x, leftPanel.y, leftPanel.width, leftPanel.height, "Você", "Assinatura pessoal");
   }
 
+  if (heroImage) {
+    fillCoverImage(heroImage, rightPanel.x, rightPanel.y, rightPanel.width, rightPanel.height);
+  } else {
+    drawFallbackPanel(rightPanel.x, rightPanel.y, rightPanel.width, rightPanel.height, "Look", lookName);
+  }
+
+  ctx.fillStyle = "rgba(0,0,0,0.25)";
+  roundRect(ctx, leftPanel.x, leftPanel.y, leftPanel.width, leftPanel.height, 40);
+  ctx.fill();
+  roundRect(ctx, rightPanel.x, rightPanel.y, rightPanel.width, rightPanel.height, 40);
+  ctx.fill();
+
+  ctx.fillStyle = "rgba(255,255,255,0.12)";
+  ctx.font = "700 12px Inter, Arial, sans-serif";
+  ctx.fillText("VOCÊ", leftPanel.x + 28, leftPanel.y + 36);
+  ctx.fillText("LOOK DA LOJA", rightPanel.x + 28, rightPanel.y + 36);
+
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = "700 36px Georgia, 'Times New Roman', serif";
+  fitText(ctx, "Poste a sua melhor versão", leftPanel.width - 56)
+    .slice(0, 3)
+    .forEach((line, index) => {
+      ctx.fillText(line, leftPanel.x + 28, leftPanel.y + 94 + index * 42);
+    });
+
+  ctx.fillStyle = "rgba(255,255,255,0.88)";
+  ctx.font = "700 30px Georgia, 'Times New Roman', serif";
+  fitText(ctx, lookName, rightPanel.width - 56)
+    .slice(0, 3)
+    .forEach((line, index) => {
+      ctx.fillText(line, rightPanel.x + 28, rightPanel.y + 94 + index * 42);
+    });
+
+  ctx.fillStyle = "rgba(0,0,0,0.35)";
+  roundRect(ctx, 48, 684, 984, 58, 22);
+  ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.82)";
+  ctx.font = "600 18px Inter, Arial, sans-serif";
+  ctx.fillText(`Marque ${brandHandle} e ${cortexHandle} ao postar`, 72, 721);
+
   const topGradient = ctx.createLinearGradient(0, 0, 0, 760);
-  topGradient.addColorStop(0, "rgba(0,0,0,0.1)");
-  topGradient.addColorStop(1, "rgba(0,0,0,0.92)");
+  topGradient.addColorStop(0, "rgba(0,0,0,0)");
+  topGradient.addColorStop(1, "rgba(0,0,0,0)");
   ctx.fillStyle = topGradient;
   ctx.fillRect(0, 0, width, 760);
 
@@ -209,7 +322,6 @@ export async function buildSocialShareImage(input: SocialShareInput) {
   ctx.fillText("InovaCortex", 852, 86);
 
   // Title area
-  const lookName = normalizeText(input.look.name);
   ctx.fillStyle = "#FFFFFF";
   ctx.font = "700 56px Georgia, 'Times New Roman', serif";
   const titleLines = fitText(ctx, lookName, 980);

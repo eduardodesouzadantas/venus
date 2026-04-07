@@ -71,7 +71,7 @@ export function LookCardSwipeable({
 
   return (
     <>
-      <div className="relative flex w-[84vw] max-w-[320px] flex-shrink-0 snap-center flex-col overflow-hidden rounded-[32px] border border-white/5 bg-[#111111] pb-7 shadow-2xl sm:w-[88vw] sm:max-w-[360px] sm:rounded-[40px] sm:pb-8">
+      <div className="relative flex w-[90vw] max-w-[390px] flex-shrink-0 snap-center flex-col overflow-hidden rounded-[32px] border border-white/5 bg-[#111111] pb-7 shadow-2xl sm:w-[88vw] sm:max-w-[440px] sm:rounded-[40px] sm:pb-8">
         <div
           className="group relative aspect-[4/5] w-full cursor-pointer overflow-hidden bg-[#0A0A0A] transition-transform duration-300 active:scale-[0.98]"
           onClick={handleOpenMainLook}
@@ -150,13 +150,13 @@ export function LookCardSwipeable({
               <div key={item.id} className="group/item flex items-center justify-between">
                 <div className="flex items-center gap-3 sm:gap-4">
                   <div
-                    className="flex h-14 w-14 flex-shrink-0 cursor-pointer overflow-hidden rounded-2xl border border-white/5 bg-white/5 shadow-lg shadow-[#D4AF37]/20 transition-all hover:scale-110 active:scale-95 hover:shadow-[#D4AF37]/30 sm:h-16 sm:w-16"
+                    className="flex h-[4.75rem] w-[4.75rem] flex-shrink-0 cursor-pointer overflow-hidden rounded-2xl border border-white/5 bg-white/5 shadow-lg shadow-[#D4AF37]/20 transition-all hover:scale-110 active:scale-95 hover:shadow-[#D4AF37]/30 sm:h-20 sm:w-20"
                     onClick={() => handleOpenProduct(item)}
                   >
                     <img
                       src={item.photoUrl || "https://images.unsplash.com/photo-1544441893-675973e31d85?q=80&w=200&auto=format"}
                       alt={item.name}
-                      className="h-full w-full object-cover grayscale transition-all group-hover/item:grayscale-0"
+                      className="h-full w-full object-cover object-center grayscale transition-all group-hover/item:grayscale-0"
                     />
                   </div>
                   <div className="flex flex-col">
@@ -166,7 +166,7 @@ export function LookCardSwipeable({
                         <span className="rounded-sm bg-white/10 px-1 py-0.5 text-[7px] font-bold text-[#D4AF37]">BEST SELLER</span>
                       )}
                     </div>
-                    <span className="max-w-[132px] truncate text-[10px] font-medium text-white/80 sm:max-w-[140px] sm:text-[11px]">{item.name}</span>
+                    <span className="max-w-[150px] truncate text-[10px] font-medium text-white/80 sm:max-w-[180px] sm:text-[11px]">{item.name}</span>
                     <span className="mt-0.5 font-serif text-[9px] text-[#D4AF37] sm:text-[10px]">{mockPrices[item.id] || mockPrices.default}</span>
                   </div>
                 </div>

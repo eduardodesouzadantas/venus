@@ -74,6 +74,37 @@ async function loadImage(url: string) {
   });
 }
 
+async function loadCanvasImage(url?: string | null) {
+  if (!url) return null;
+
+  const normalized = url.trim();
+  if (!normalized) return null;
+
+  if (/^(data:|blob:|\/)/i.test(normalized)) {
+    try {
+      return await loadImage(normalized);
+    } catch {
+      return null;
+    }
+  }
+
+  try {
+    const response = await fetch(normalized, { mode: "cors", cache: "force-cache" });
+    if (!response.ok) return null;
+
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+
+    try {
+      return await loadImage(objectUrl);
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  } catch {
+    return null;
+  }
+}
+
 function drawPill(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -118,36 +149,37 @@ export async function buildTryOnPosterBlob(input: TryOnPosterInput) {
   ctx.fillStyle = "#090909";
   ctx.fillRect(0, 0, width, height);
 
-  try {
-    const image = await loadImage(input.lookImageUrl);
-    const sourceRatio = image.width / image.height;
+  const lookImage = await loadCanvasImage(input.lookImageUrl);
+  const topGradient = ctx.createLinearGradient(0, 0, 0, 760);
+  topGradient.addColorStop(0, "#181818");
+  topGradient.addColorStop(1, "#0A0A0A");
+
+  ctx.fillStyle = topGradient;
+  ctx.fillRect(0, 0, width, 760);
+
+  if (lookImage) {
+    const sourceRatio = lookImage.width / lookImage.height;
     const targetRatio = width / 760;
-    let sWidth = image.width;
-    let sHeight = image.height;
+    let sWidth = lookImage.width;
+    let sHeight = lookImage.height;
     let sx = 0;
     let sy = 0;
 
     if (sourceRatio > targetRatio) {
-      sWidth = image.height * targetRatio;
-      sx = (image.width - sWidth) / 2;
+      sWidth = lookImage.height * targetRatio;
+      sx = (lookImage.width - sWidth) / 2;
     } else {
-      sHeight = image.width / targetRatio;
-      sy = (image.height - sHeight) / 2;
+      sHeight = lookImage.width / targetRatio;
+      sy = (lookImage.height - sHeight) / 2;
     }
 
-    ctx.drawImage(image, sx, sy, sWidth, sHeight, 0, 0, width, 760);
-  } catch {
-    const gradient = ctx.createLinearGradient(0, 0, 0, 760);
-    gradient.addColorStop(0, "#181818");
-    gradient.addColorStop(1, "#0A0A0A");
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, width, 760);
+    ctx.drawImage(lookImage, sx, sy, sWidth, sHeight, 0, 0, width, 760);
   }
 
-  const topGradient = ctx.createLinearGradient(0, 0, 0, 760);
-  topGradient.addColorStop(0, "rgba(0,0,0,0.12)");
-  topGradient.addColorStop(1, "rgba(0,0,0,0.9)");
-  ctx.fillStyle = topGradient;
+  const heroOverlay = ctx.createLinearGradient(0, 0, 0, 760);
+  heroOverlay.addColorStop(0, "rgba(0,0,0,0.12)");
+  heroOverlay.addColorStop(1, "rgba(0,0,0,0.9)");
+  ctx.fillStyle = heroOverlay;
   ctx.fillRect(0, 0, width, 760);
 
   const goldGlow = ctx.createRadialGradient(width * 0.5, 150, 30, width * 0.5, 150, 420);
@@ -174,21 +206,29 @@ export async function buildTryOnPosterBlob(input: TryOnPosterInput) {
   ctx.fillText("InovaCortex", 852, 86);
 
   try {
-    const userImage = await loadImage(input.userPhotoUrl);
-    const size = 210;
-    const x = 56;
-    const y = 590;
-    ctx.save();
-    ctx.shadowColor = "rgba(212,175,55,0.45)";
-    ctx.shadowBlur = 24;
-    roundRect(ctx, x, y, size + 30, size + 30, 36);
-    ctx.fillStyle = "rgba(0,0,0,0.4)";
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(x + 135, y + 135, 95, 95, 0, 0, Math.PI * 2);
-    ctx.clip();
-    ctx.drawImage(userImage, x + 40, y + 40, 190, 190);
-    ctx.restore();
+    const userImage = await loadCanvasImage(input.userPhotoUrl);
+    const size = 240;
+    const x = 48;
+    const y = 570;
+    if (userImage) {
+      ctx.save();
+      ctx.shadowColor = "rgba(212,175,55,0.45)";
+      ctx.shadowBlur = 24;
+      roundRect(ctx, x, y, size + 30, size + 30, 36);
+      ctx.fillStyle = "rgba(0,0,0,0.4)";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(x + 158, y + 158, 112, 112, 0, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(userImage, x + 36, y + 36, 224, 224);
+      ctx.restore();
+      ctx.fillStyle = "rgba(0,0,0,0.42)";
+      roundRect(ctx, x + 12, y + size - 2, 196, 38, 18);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.82)";
+      ctx.font = "700 12px Inter, Arial, sans-serif";
+      ctx.fillText("VOCE + LOOK", x + 30, y + size + 22);
+    }
   } catch {
     // If the user photo cannot be loaded, the poster still renders the look image.
   }
