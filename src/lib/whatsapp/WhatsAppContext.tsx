@@ -203,6 +203,31 @@ export const WhatsAppProvider = ({ children }: { children: React.ReactNode }) =>
     const conv = conversations.find(c => c.id === targetId && c.orgSlug === currentOrgSlug);
     if (!conv) return;
 
+    if (userId !== "user") {
+      const response = await fetch(`/api/org/${currentOrgSlug}/whatsapp/send`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+        },
+        body: JSON.stringify({
+          conversationId: targetId,
+          text,
+          type,
+          sender: userId,
+          metadata: metadata || {},
+        }),
+      });
+
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        console.error("Error sending Meta WhatsApp message:", payload?.error || response.statusText);
+        return;
+      }
+
+      return payload?.message_id;
+    }
+
     // 1. Insert message
     const { data: newMsg, error: msgError } = await supabase
       .from('whatsapp_messages')
