@@ -1,23 +1,39 @@
 import { LookData } from "@/types/result";
+import { readMerchantBenefitProgram } from "@/lib/social/merchant-benefits";
 
 export interface SocialShareInput {
   look: LookData;
   styleIdentity: string;
   imageGoal: string;
+  profileSignal?: string;
   brandName?: string;
   appName?: string;
   intentScore?: number;
   resultUrl?: string;
+  brandHandle?: string;
+  cortexHandle?: string;
 }
 
 const DEFAULT_BRAND = "Maison Elite";
-const DEFAULT_APP = "InovaCortex · Venus Engine";
+const DEFAULT_APP = "Venus Engine";
+const DEFAULT_CORTEX_HANDLE = "@InovaCortex";
 
 const normalizeText = (value: string) =>
   value
     .replace(/\s+/g, " ")
     .replace(/[.?!\s]+$/, "")
     .trim();
+
+const slugHandle = (value: string) =>
+  `@${value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "")
+    .toLowerCase()
+    .replace(/^@+/, "")}`;
+
+const getBrandHandle = (input: SocialShareInput) => input.brandHandle || slugHandle(input.brandName || DEFAULT_BRAND);
+const getCortexHandle = (input: SocialShareInput) => input.cortexHandle || DEFAULT_CORTEX_HANDLE;
 
 const fitText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number) => {
   const words = text.split(" ");
@@ -76,25 +92,47 @@ export function buildSocialCaption(input: SocialShareInput) {
   const lookName = input.look.name;
   const styleIdentity = input.styleIdentity || "uma assinatura de estilo própria";
   const imageGoal = input.imageGoal || "evoluir a imagem";
+  const profileSignal = input.profileSignal?.trim();
+  const brandHandle = getBrandHandle(input);
+  const cortexHandle = getCortexHandle(input);
+  const merchantProgram = readMerchantBenefitProgram(brandName);
+  const benefitTitles = merchantProgram.benefits
+    .map((benefit) => normalizeText(benefit.title))
+    .filter(Boolean)
+    .slice(0, 3);
   const effect = getEffectLine(styleIdentity, imageGoal, input.intentScore);
-  const question = input.intentScore && input.intentScore >= 70
-    ? "Você usaria essa versão para qual compromisso?"
-    : "Qual versão conversa mais com você?";
+  const testLine = input.resultUrl
+    ? `Teste a Venus no seu perfil: ${input.resultUrl}`
+    : "Teste a Venus no seu perfil e gere a sua próxima leitura.";
+  const profileLine = profileSignal
+    ? `A leitura ficou alinhada com ${profileSignal}.`
+    : "A leitura ficou alinhada com meu jeito de me apresentar.";
+  const benefitLine = benefitTitles.length
+    ? `Benefícios desta loja: ${benefitTitles.join(" · ")}.`
+    : merchantProgram.intro;
 
-  return normalizeText(
-    [
-      `Acabei de testar uma nova leitura de estilo com o ${appName}.`,
-      `O look ${lookName} levou a imagem para uma direção de ${styleIdentity.toLowerCase()} e ficou ${effect.toLowerCase()}`,
-      question,
-      `Se quiser montar o seu, entra no app e gera a próxima proposta.`,
-      `#${brandName.replace(/\s+/g, "")} #VenusEngine`,
-    ].join(" ")
-  );
+  return [
+    normalizeText(`Acabei de testar esta leitura com o ${appName} na ${brandName}.`),
+    normalizeText(`O look ${lookName} levou a proposta para ${styleIdentity.toLowerCase()} e ficou ${effect.toLowerCase()}.`),
+    normalizeText(profileLine),
+    normalizeText(benefitLine),
+    normalizeText(`Marque ${brandHandle} e ${cortexHandle} ao postar.`),
+    normalizeText(testLine),
+    `#${brandName.replace(/\s+/g, "")} #InovaCortex #VenusEngine`,
+  ].join("\n\n");
 }
 
 export async function buildSocialShareImage(input: SocialShareInput) {
   const brandName = input.brandName || DEFAULT_BRAND;
   const appName = input.appName || DEFAULT_APP;
+  const brandHandle = getBrandHandle(input);
+  const cortexHandle = getCortexHandle(input);
+  const merchantProgram = readMerchantBenefitProgram(brandName);
+  const benefitTitles = merchantProgram.benefits
+    .map((benefit) => normalizeText(benefit.title))
+    .filter(Boolean)
+    .slice(0, 3);
+  const benefitLine = benefitTitles.length ? benefitTitles.join(" · ") : merchantProgram.headline;
   const width = 1080;
   const height = 1350;
   const canvas = document.createElement("canvas");
@@ -168,7 +206,7 @@ export async function buildSocialShareImage(input: SocialShareInput) {
   ctx.fill();
   ctx.fillStyle = "rgba(255,255,255,0.72)";
   ctx.font = "700 16px Inter, Arial, sans-serif";
-  ctx.fillText("Curadoria Venus", 818, 86);
+  ctx.fillText("InovaCortex", 852, 86);
 
   // Title area
   const lookName = normalizeText(input.look.name);
@@ -192,6 +230,13 @@ export async function buildSocialShareImage(input: SocialShareInput) {
     ctx.fillText(line, 50, titleY + 18 + index * 34);
   });
 
+  ctx.fillStyle = "rgba(0,0,0,0.5)";
+  roundRect(ctx, 48, 905, 984, 58, 22);
+  ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.82)";
+  ctx.font = "600 18px Inter, Arial, sans-serif";
+  ctx.fillText(`Marque ${brandHandle} e ${cortexHandle} ao postar`, 72, 942);
+
   // Benefit cards
   const effectLine = getEffectLine(input.styleIdentity, input.imageGoal, input.intentScore);
   drawPill(ctx, 50, 980, 320, 72, "Efeito percebido", effectLine);
@@ -199,13 +244,18 @@ export async function buildSocialShareImage(input: SocialShareInput) {
   const lookText = input.look.intention || input.look.explanation || "Uma proposta que conversa com o perfil.";
   drawPill(ctx, 392, 980, 638, 72, "Leitura do look", lookText);
 
+  const profileText = input.profileSignal || "Perfil traduzido em uma proposta mais coerente.";
+  drawPill(ctx, 50, 1070, 980, 72, "Leitura de personalidade", profileText);
+
+  drawPill(ctx, 50, 1160, 980, 72, "Benefícios da loja", benefitLine);
+
   // Footer
   ctx.fillStyle = "rgba(255,255,255,0.45)";
   ctx.font = "600 18px Inter, Arial, sans-serif";
   ctx.fillText(`InovaCortex · ${appName}`, 50, 1280);
   ctx.fillStyle = "rgba(212,175,55,0.9)";
   ctx.font = "700 16px Inter, Arial, sans-serif";
-  ctx.fillText("Compartilhe ou ajuste antes de postar", 790, 1280);
+  ctx.fillText("Teste a Venus antes de publicar", 750, 1280);
 
   return await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => {
