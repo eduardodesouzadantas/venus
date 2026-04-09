@@ -152,7 +152,7 @@ export default function MerchantWhatsAppCampaigns({ params }: { params: { slug: 
                         <div className="h-14 w-full bg-[#075E54] flex items-center px-6 gap-3 shadow-md">
                            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center border border-white/10 font-serif font-bold text-white text-xs">V</div>
                            <div className="flex flex-col">
-                              <span className="text-[10px] text-white font-bold leading-none">Maison Elite Executive</span>
+                              <span className="text-[10px] text-white font-bold leading-none">Venus Engine Executive</span>
                               <span className="text-[7px] text-white/60 tracking-widest uppercase font-bold leading-none mt-0.5">Online</span>
                            </div>
                         </div>

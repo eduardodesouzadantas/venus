@@ -2,6 +2,8 @@ export interface TryOnPosterInput {
   userPhotoUrl: string;
   lookImageUrl: string;
   lookName: string;
+  essenceLabel?: string;
+  essenceSummary?: string;
   brandName?: string;
   appName?: string;
   brandHandle?: string;
@@ -10,7 +12,7 @@ export interface TryOnPosterInput {
   profileSignal?: string;
 }
 
-const DEFAULT_BRAND = "Maison Elite";
+const DEFAULT_BRAND = "Venus Engine";
 const DEFAULT_APP = "InovaCortex";
 const DEFAULT_CORTEX_HANDLE = "@InovaCortex";
 
@@ -88,8 +90,10 @@ async function loadCanvasImage(url?: string | null) {
     }
   }
 
+  const proxiedUrl = `/api/image-proxy?url=${encodeURIComponent(normalized)}`;
+
   try {
-    const response = await fetch(normalized, { mode: "cors", cache: "force-cache" });
+    const response = await fetch(proxiedUrl, { cache: "force-cache" });
     if (!response.ok) return null;
 
     const blob = await response.blob();
@@ -101,7 +105,17 @@ async function loadCanvasImage(url?: string | null) {
       URL.revokeObjectURL(objectUrl);
     }
   } catch {
-    return null;
+    try {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      return await new Promise<HTMLImageElement>((resolve, reject) => {
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = proxiedUrl;
+      });
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -141,6 +155,8 @@ export async function buildTryOnPosterBlob(input: TryOnPosterInput) {
 
   const brandName = input.brandName || DEFAULT_BRAND;
   const appName = input.appName || DEFAULT_APP;
+  const essenceLabel = input.essenceLabel?.trim() || "Essência captada";
+  const essenceSummary = input.essenceSummary?.trim() || "A leitura encontrou uma proposta mais coerente com o seu perfil.";
   const brandHandle = input.brandHandle || slugHandle(brandName);
   const cortexHandle = input.cortexHandle || DEFAULT_CORTEX_HANDLE;
   const benefitLine = input.benefitLine || "Benefícios definidos pela loja";
@@ -257,17 +273,18 @@ export async function buildTryOnPosterBlob(input: TryOnPosterInput) {
   ctx.font = "600 18px Inter, Arial, sans-serif";
   ctx.fillText(`Marque ${brandHandle} e ${cortexHandle} ao postar`, 72, 942);
 
-  drawPill(ctx, 50, 980, 320, 72, "Efeito percebido", "Mais coerente e mais desejável");
-  drawPill(ctx, 392, 980, 638, 72, "Leitura do look", input.lookName);
-  drawPill(ctx, 50, 1070, 980, 72, "Leitura de personalidade", profileSignal);
-  drawPill(ctx, 50, 1160, 980, 72, "Benefícios da loja", benefitLine);
+  drawPill(ctx, 50, 980, 980, 72, essenceLabel, essenceSummary);
+  drawPill(ctx, 50, 1070, 320, 72, "Efeito percebido", "Mais coerente e mais desejável");
+  drawPill(ctx, 392, 1070, 638, 72, "Leitura do look", input.lookName);
+  drawPill(ctx, 50, 1160, 980, 72, "Leitura de personalidade", profileSignal);
+  drawPill(ctx, 50, 1250, 980, 72, "Desbloqueios da loja", benefitLine);
 
   ctx.fillStyle = "rgba(255,255,255,0.45)";
   ctx.font = "600 18px Inter, Arial, sans-serif";
-  ctx.fillText(`InovaCortex · ${appName}`, 50, 1280);
+  ctx.fillText(`InovaCortex · ${appName}`, 50, 1340);
   ctx.fillStyle = "rgba(212,175,55,0.9)";
   ctx.font = "700 16px Inter, Arial, sans-serif";
-  ctx.fillText("Teste a Venus antes de publicar", 750, 1280);
+  ctx.fillText("Teste a Venus antes de publicar", 750, 1340);
 
   return await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => {

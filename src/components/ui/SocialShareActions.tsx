@@ -43,11 +43,14 @@ import {
   type MerchantBenefitProgram,
 } from "@/lib/social/merchant-benefits";
 import { useUserImage } from "@/lib/onboarding/UserImageContext";
+import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
 
 interface SocialShareActionsProps {
   look: LookData;
   styleIdentity: string;
   imageGoal: string;
+  essenceLabel?: string;
+  essenceSummary?: string;
   profileSignal?: string;
   intentScore?: number;
   brandName?: string;
@@ -59,6 +62,8 @@ export function SocialShareActions({
   look,
   styleIdentity,
   imageGoal,
+  essenceLabel,
+  essenceSummary,
   profileSignal,
   intentScore,
   brandName,
@@ -66,6 +71,7 @@ export function SocialShareActions({
   resultUrl,
 }: SocialShareActionsProps) {
   const { userPhoto } = useUserImage();
+  const { data: onboardingData } = useOnboarding();
   const [status, setStatus] = React.useState<"idle" | "sharing" | "copied" | "downloaded">("idle");
   const [economy, setEconomy] = React.useState<SocialEconomyState>({
     points: 0,
@@ -99,14 +105,30 @@ export function SocialShareActions({
       look,
       styleIdentity,
       imageGoal,
+      essenceLabel,
+      essenceSummary,
       profileSignal,
-      userPhotoUrl: userPhoto,
+      userPhotoUrl: userPhoto || onboardingData.scanner.facePhoto || onboardingData.scanner.bodyPhoto || undefined,
       intentScore,
       brandName,
       appName,
       resultUrl,
     }),
-    [look, styleIdentity, imageGoal, profileSignal, userPhoto, intentScore, brandName, appName, resultUrl]
+    [
+      look,
+      styleIdentity,
+      imageGoal,
+      essenceLabel,
+      essenceSummary,
+      profileSignal,
+      userPhoto,
+      onboardingData.scanner.facePhoto,
+      onboardingData.scanner.bodyPhoto,
+      intentScore,
+      brandName,
+      appName,
+      resultUrl,
+    ]
   );
 
   const caption = React.useMemo(() => buildSocialCaption(shareInput), [shareInput]);
@@ -117,12 +139,12 @@ export function SocialShareActions({
   const streakBonusPreview = React.useMemo(() => getShareBonusPreview(economy, config), [economy, config]);
   const dailyFreeGenerations = getDailyFreeGenerationsRemaining();
   const brandTag = React.useMemo(() => {
-    const raw = (brandName || "Maison Elite")
+    const raw = (brandName || "Venus Engine")
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
       .replace(/[^a-zA-Z0-9]+/g, "")
       .toLowerCase();
-    return raw ? `@${raw}` : "@maisonelite";
+    return raw ? `@${raw}` : "@venusengine";
   }, [brandName]);
   const cortexTag = "@InovaCortex";
   const currentThreshold = React.useMemo(() => {
@@ -203,10 +225,10 @@ export function SocialShareActions({
         ? "Legenda copiada"
         : status === "downloaded"
           ? "Imagem pronta"
-          : brandName || "Maison Elite";
+          : brandName || "Venus Engine";
 
   return (
-    <div className="space-y-4 rounded-[32px] border border-white/5 bg-white/[0.03] p-5">
+    <div className="space-y-4 rounded-[32px] border border-white/5 bg-white/[0.03] p-4 sm:p-5">
       <div className="flex items-start gap-3">
         <div className="mt-1 flex h-9 w-9 items-center justify-center rounded-2xl bg-[#D4AF37]/10 text-[#D4AF37]">
           <Sparkles size={16} />
@@ -214,7 +236,7 @@ export function SocialShareActions({
         <div className="space-y-1">
           <Text className="text-[10px] font-bold uppercase tracking-[0.35em] text-[#D4AF37]">Compartilhar e destravar</Text>
           <Text className="text-sm leading-relaxed text-white/70">
-            Publique esta leitura com legenda pronta, marcação da loja e CTA para testar a Venus. Compartilhar libera pontos e mantém sua sequência viva.
+            Publique a leitura com legenda pronta, marcação da loja e CTA para testar a Venus.
           </Text>
         </div>
       </div>
@@ -287,7 +309,7 @@ export function SocialShareActions({
         </div>
       </div>
 
-      <div className="space-y-2 rounded-[28px] border border-white/5 bg-black/25 p-4">
+      <div className="hidden space-y-2 rounded-[28px] border border-white/5 bg-black/25 p-4 sm:block">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-[#D4AF37]">
             <CheckCircle2 size={14} />
@@ -316,7 +338,7 @@ export function SocialShareActions({
         </div>
       </div>
 
-      <div className="space-y-3 rounded-[28px] border border-[#D4AF37]/15 bg-[#D4AF37]/5 p-4">
+      <div className="hidden space-y-3 rounded-[28px] border border-[#D4AF37]/15 bg-[#D4AF37]/5 p-4 sm:block">
         <div className="space-y-1">
           <Text className="text-[10px] font-bold uppercase tracking-[0.35em] text-[#D4AF37]">{merchantBenefits.headline}</Text>
           <Text className="text-sm leading-relaxed text-white/70">{merchantBenefits.intro}</Text>
@@ -365,8 +387,8 @@ export function SocialShareActions({
       </div>
 
       <div className="flex items-center justify-between">
-        <Text className="text-[8px] uppercase tracking-[0.35em] text-white/25">
-          Legenda pronta para Instagram, WhatsApp e apps compatíveis.
+        <Text className="text-[8px] uppercase tracking-[0.35em] text-white/25 sm:text-[8px]">
+          Legenda pronta para postar.
         </Text>
         <Text className="text-[8px] uppercase tracking-[0.35em] text-[#D4AF37]">{statusLabel}</Text>
       </div>

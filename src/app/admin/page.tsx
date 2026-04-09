@@ -50,7 +50,7 @@ export default function AdminPortal() {
                      </div>
                      <div className="flex flex-col">
                         <Heading as="h3" className="text-xl tracking-tight uppercase">Merchant Panel</Heading>
-                        <Text className="text-[10px] text-white/30 uppercase tracking-[0.2em] font-bold">Maison Elite · Catalog & Conversions</Text>
+                        <Text className="text-[10px] text-white/30 uppercase tracking-[0.2em] font-bold">Venus Engine · Catalog & Conversions</Text>
                      </div>
                   </div>
                   <ChevronRight size={20} className="text-white/10 group-hover:text-white group-hover:translate-x-1 transition-all" />

@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import React, { Suspense, useMemo } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowRight, Activity, Bookmark, BrainCircuit, History, LayoutGrid, PackageCheck, Sparkles, Star, Target, Watch } from "lucide-react";
+import { ArrowRight, Activity, Bookmark, BrainCircuit, History, LayoutGrid, PackageCheck, Sparkles, Star, Target, Watch, BookOpen } from "lucide-react";
 import { Text } from "@/components/ui/Text";
 import { VenusButton } from "@/components/ui/VenusButton";
 import { LookCardSwipeable } from "@/components/ui/LookCardSwipeable";
@@ -15,6 +15,7 @@ import { getEngagedIds, getStatsSummary } from "@/lib/analytics/tracker";
 import type { BehaviorStatsSummary } from "@/lib/analytics/tracker";
 import type { UserStats } from "@/lib/ai/orchestrator";
 import type { LookData } from "@/types/result";
+import type { VisualAnalysisPayload } from "@/types/visual-analysis";
 import { orchestrateExperience } from "@/lib/ai/orchestrator";
 import { buildResultSurface } from "@/lib/result/surface";
 import {
@@ -40,6 +41,7 @@ function ResultDashboardContent() {
   const [statsSummary, setStatsSummary] = React.useState<BehaviorStatsSummary | null>(null);
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [isHandoffLoading, setIsHandoffLoading] = React.useState(false);
+  const [visualAnalysis, setVisualAnalysis] = React.useState<VisualAnalysisPayload | null>(null);
 
   React.useEffect(() => {
     setEngagedLookIds(getEngagedIds("look"));
@@ -59,7 +61,37 @@ function ResultDashboardContent() {
     }
   }, [isSaved, onboardingData.contact]);
 
-  const surface = useMemo(() => buildResultSurface(onboardingData), [onboardingData]);
+  React.useEffect(() => {
+    if (!id || id === "MOCK_DB_FAIL") return;
+
+    let cancelled = false;
+
+    const loadVisualAnalysis = async () => {
+      try {
+        const response = await fetch(`/api/result/${encodeURIComponent(id)}`, { cache: "no-store" });
+        if (!response.ok) return;
+
+        const payload = (await response.json()) as {
+          analysis?: VisualAnalysisPayload | null;
+          finalResult?: unknown;
+        };
+
+        if (!cancelled && payload.analysis) {
+          setVisualAnalysis(payload.analysis);
+        }
+      } catch (error) {
+        console.warn("[RESULT] failed to load persisted visual analysis", error);
+      }
+    };
+
+    void loadVisualAnalysis();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  const surface = useMemo(() => buildResultSurface(onboardingData, visualAnalysis), [onboardingData, visualAnalysis]);
 
   const { rankedLooks, aiInsight } = useMemo(() => {
     const rawStats = statsSummary || { looks: {}, products: {} };
@@ -77,13 +109,17 @@ function ResultDashboardContent() {
   }, [surface.looks, statsSummary, engagedLookIds]);
 
   const featuredShareLook = rankedLooks?.[0] || surface.looks?.[0];
-  const profileSignal = [
-    onboardingData.lifestyle.purchaseDna,
-    onboardingData.lifestyle.purchaseBehavior,
-    onboardingData.lifestyle.environments.slice(0, 2).join(", "),
-  ]
+  const profileSignal = (
+    visualAnalysis?.keySignals?.length
+      ? visualAnalysis.keySignals.slice(0, 3)
+      : [
+          onboardingData.lifestyle.purchaseDna,
+          onboardingData.lifestyle.purchaseBehavior,
+          onboardingData.lifestyle.environments.slice(0, 2).join(", "),
+        ]
+  )
     .filter(Boolean)
-    .join(" · ");
+    .join(" • ");
 
   const handleWhatsAppHandoff = async () => {
     if (!canOpenWhatsAppHandoff) {
@@ -220,11 +256,27 @@ function ResultDashboardContent() {
 
   if (!id) {
     return (
-      <div className="flex h-screen flex-col items-center justify-center bg-black">
-        <Text className="mb-4 text-red-500">Dossiê não encontrado ou expirado.</Text>
-        <Link href="/onboarding/intent" onClick={handleRestartConsultation}>
-          <VenusButton variant="solid">Recomeçar consulta</VenusButton>
-        </Link>
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#04070A] px-6 text-white">
+        <div className="w-full max-w-sm space-y-8 text-center">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/5">
+            <BookOpen className="h-8 w-8 text-[#D4AF37]" />
+          </div>
+          
+          <div className="space-y-3">
+            <h1 className="text-2xl font-serif uppercase tracking-tighter text-white">
+              Sua leitura ainda não foi gerada
+            </h1>
+            <p className="text-sm leading-relaxed text-white/60">
+              Complete o onboarding para revelar seu dossiê de estilo
+            </p>
+          </div>
+
+          <Link href="/onboarding/intent" onClick={handleRestartConsultation}>
+            <VenusButton variant="solid" className="w-full bg-[#D4AF37] text-black">
+              Começar agora <ArrowRight className="ml-2 h-4 w-4" />
+            </VenusButton>
+          </Link>
+        </div>
       </div>
     );
   }
@@ -235,29 +287,71 @@ function ResultDashboardContent() {
     <div className={`flex min-h-screen flex-col overflow-x-hidden pb-44 transition-colors duration-1000 ${aiInsight.intensity === "HIGH" ? "bg-black" : "bg-[#0A0A0A]"}`}>
       {isSaved && <SavedProfileToast />}
 
-      <div className="fixed left-1/2 top-4 z-[300] hidden -translate-x-1/2 items-center gap-3 rounded-full border border-[#D4AF37]/30 bg-black/40 px-4 py-2 backdrop-blur-3xl animate-in fade-in slide-in-from-top-4 sm:flex">
+      <div className="fixed left-1/2 top-4 z-[300] hidden -translate-x-1/2 items-center gap-3 rounded-full border border-white/10 bg-slate-950/55 px-4 py-2 backdrop-blur-3xl animate-in fade-in slide-in-from-top-4 sm:flex">
         <div className="relative">
-          <Activity className="h-3 w-3 animate-pulse text-[#D4AF37]" />
-          <div className="absolute inset-0 rounded-full bg-[#D4AF37]/20 blur-md" />
+          <Activity className="h-3 w-3 animate-pulse text-slate-300" />
+          <div className="absolute inset-0 rounded-full bg-slate-300/15 blur-md" />
         </div>
-        <span className="text-[9px] font-bold uppercase tracking-widest text-[#D4AF37]">Leitura de intenção: {aiInsight.intentScore}%</span>
+        <span className="text-[9px] font-bold uppercase tracking-widest text-slate-200">Leitura de intenção: {aiInsight.intentScore}%</span>
         <div className="h-3 w-[1px] bg-white/10" />
         <BrainCircuit className="h-3 w-3 text-white/40" />
         <span className="text-[9px] font-bold uppercase tracking-widest text-white/40">Modo: {aiInsight.strategy.mode}</span>
       </div>
 
       <div className="relative overflow-hidden px-5 pb-10 pt-[4.5rem] transition-all sm:px-6 sm:pb-12 sm:pt-24">
-        <div className="pointer-events-none absolute left-0 top-0 h-full w-full bg-gradient-to-b from-[#D4AF37]/10 to-transparent" />
+        <div className="pointer-events-none absolute left-0 top-0 h-full w-full bg-gradient-to-b from-slate-200/8 to-transparent" />
 
         <div className="flex flex-col space-y-3 sm:space-y-4">
-          <div className="flex items-center gap-2">
-            <div className="h-6 w-px bg-[#D4AF37]" />
-            <span className="text-[10px] font-bold uppercase tracking-[0.4em] text-[#D4AF37]">Sua leitura pessoal</span>
+        <div className="flex items-center gap-2">
+            <div className="h-6 w-px bg-slate-200/70" />
+            <span className="text-[10px] font-bold uppercase tracking-[0.4em] text-slate-200">Essência captada</span>
           </div>
 
           <h1 className="max-w-[11ch] text-[2.05rem] font-serif uppercase leading-[0.95] tracking-tighter sm:max-w-none sm:text-4xl">{surface.headline}</h1>
 
           <Text className="max-w-[18rem] text-[15px] leading-relaxed text-white/60 sm:max-w-[280px] sm:text-sm">{surface.subheadline}</Text>
+
+          <div className="rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.06)_0%,rgba(255,255,255,0.02)_100%)] p-4 shadow-[0_18px_60px_rgba(0,0,0,0.28)] sm:rounded-[36px] sm:p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 space-y-1">
+                <Text className="text-[9px] font-bold uppercase tracking-[0.34em] text-slate-300">Leitura personalizada</Text>
+                <Text className="text-[15px] font-semibold text-white sm:text-base">
+                  {surface.essence.label} • {surface.essence.styleDirection}
+                </Text>
+              </div>
+              <span className="rounded-full border border-white/10 bg-black/35 px-3 py-1 text-[8px] font-bold uppercase tracking-[0.28em] text-slate-200">
+                {surface.essence.confidenceLabel}
+              </span>
+            </div>
+            <Text className="mt-2 text-[14px] leading-relaxed text-white/74 sm:text-sm">
+              A Venus interpreta seu perfil e devolve uma curadoria de stylist, não um formulário.
+            </Text>
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {[
+                surface.essence.styleDirection,
+                surface.palette.family,
+                surface.palette.contrast,
+                "Curadoria real",
+              ].map((item) => (
+                <span
+                  key={item}
+                  className="rounded-full border border-white/8 bg-black/25 px-3 py-2 text-[8px] font-bold uppercase tracking-[0.24em] text-white/55"
+                >
+                  {item}
+                </span>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {surface.essence.keySignals.slice(0, 3).map((signal) => (
+                <span
+                  key={signal}
+                  className="rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-[8px] font-bold uppercase tracking-[0.2em] text-white/45"
+                >
+                  {signal}
+                </span>
+              ))}
+            </div>
+          </div>
 
           <div className="flex flex-col gap-3 pt-2 sm:flex-row">
             {canOpenWhatsAppHandoff ? (
@@ -265,7 +359,7 @@ function ResultDashboardContent() {
                 type="button"
                 onClick={handleWhatsAppHandoff}
                 disabled={isHandoffLoading}
-                className="h-12 w-full bg-[#D4AF37] px-5 text-[9px] font-bold uppercase tracking-[0.28em] text-black hover:bg-[#D4AF37]/90 sm:w-auto sm:px-6 sm:tracking-[0.35em]"
+              className="h-12 w-full bg-[#D4AF37] px-5 text-[9px] font-bold uppercase tracking-[0.28em] text-black hover:bg-[#D4AF37]/90 sm:w-auto sm:px-6 sm:tracking-[0.35em]"
               >
                 {isHandoffLoading ? "Abrindo WhatsApp..." : surface.primaryCtaLabel}
               </VenusButton>
@@ -290,14 +384,74 @@ function ResultDashboardContent() {
                 look={featuredShareLook}
                 styleIdentity={surface.hero.dominantStyle}
                 imageGoal={onboardingData.intent.imageGoal || surface.diagnostic.desiredGoal}
+                essenceLabel={surface.essence.label}
+                essenceSummary={surface.essence.summary}
                 profileSignal={profileSignal}
                 intentScore={aiInsight.intentScore}
-                brandName="Maison Elite"
+                brandName="Venus Engine"
                 appName="Venus Engine"
                 resultUrl={typeof window !== "undefined" ? window.location.href : undefined}
               />
             </div>
           )}
+
+          <div className="rounded-[30px] border border-white/6 bg-white/[0.03] p-4 sm:rounded-[34px] sm:p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-2">
+                <Text className="text-[9px] font-bold uppercase tracking-[0.34em] text-white/35">Porta de entrada para a loja inteira</Text>
+                <Text className="text-[16px] font-semibold leading-tight text-white sm:text-[17px]">
+                  {surface.desirePulse.title}
+                </Text>
+                <Text className="max-w-[30rem] text-[14px] leading-relaxed text-white/65 sm:text-sm">
+                  {surface.desirePulse.body}
+                </Text>
+              </div>
+              <span className="rounded-full border border-white/10 bg-slate-200/10 px-3 py-1.5 text-[8px] font-bold uppercase tracking-[0.28em] text-slate-200">
+                Máquina de aquisição
+              </span>
+            </div>
+            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {surface.desirePulse.bullets.map((bullet, index) => (
+                <div key={bullet} className="rounded-[22px] border border-white/5 bg-black/20 p-3">
+                  <div className="flex items-center justify-between">
+                    <Text className="text-[10px] font-bold uppercase tracking-[0.28em] text-slate-200">{String(index + 1).padStart(2, "0")}</Text>
+                    <Text className="text-[8px] uppercase tracking-[0.26em] text-white/30">
+                      {index === 0 ? "Entende" : index === 1 ? "Posta" : "Atrai"}
+                    </Text>
+                  </div>
+                  <Text className="mt-2 text-[13px] leading-relaxed text-white/72">{bullet}</Text>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-[30px] border border-white/6 bg-white/[0.03] p-4 sm:rounded-[34px] sm:p-5">
+            <div className="flex items-center gap-3">
+              <BrainCircuit className="h-4 w-4 text-slate-300" />
+              <span className="text-[10px] font-bold uppercase tracking-[0.34em] text-white/45">Leitura guiada</span>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {[
+                surface.essence.label,
+                surface.palette.family,
+                surface.hero.dominantStyle,
+                "Curadoria real",
+              ]
+                .filter(Boolean)
+                .slice(0, 4)
+                .map((item) => (
+                  <span
+                    key={item}
+                    className="rounded-full border border-white/8 bg-black/25 px-3 py-2 text-[8px] font-bold uppercase tracking-[0.24em] text-white/55"
+                  >
+                    {item}
+                  </span>
+                ))}
+            </div>
+            <Text className="mt-3 text-[13px] leading-relaxed text-white/65">
+              A Venus usa a leitura visual e o catálogo para chegar ao look mais coerente sem expor bastidores técnicos para o cliente.
+            </Text>
+          </div>
         </div>
 
         <div className="mt-7 grid grid-cols-2 gap-3 sm:mt-10 sm:grid-cols-4 sm:gap-4">
@@ -323,7 +477,7 @@ function ResultDashboardContent() {
       <div className="space-y-11 px-5 sm:space-y-14 sm:px-6">
         <section className="space-y-5 sm:space-y-6">
           <div className="flex items-center gap-3">
-            <Target className="h-4 w-4 text-[#D4AF37]" />
+            <Target className="h-4 w-4 text-slate-300" />
             <span className="text-[10px] font-bold uppercase tracking-widest">Leitura pessoal</span>
           </div>
 
@@ -332,8 +486,8 @@ function ResultDashboardContent() {
               <span className="text-[9px] font-bold uppercase tracking-widest text-white/30">O que o perfil pede</span>
               <Text className="text-[15px] italic text-white/90 sm:text-sm">&quot;{surface.diagnostic.desiredGoal}&quot;</Text>
             </div>
-            <div className="space-y-3 rounded-[28px] border border-[#D4AF37]/10 bg-[#D4AF37]/5 p-5 sm:rounded-[32px] sm:p-6">
-              <span className="text-[9px] font-bold uppercase tracking-widest text-[#D4AF37]">Como o resultado fecha o gap</span>
+            <div className="space-y-3 rounded-[28px] border border-white/8 bg-white/[0.03] p-5 sm:rounded-[32px] sm:p-6">
+              <span className="text-[9px] font-bold uppercase tracking-widest text-slate-300">Como o resultado fecha o gap</span>
               <Text className="text-[15px] text-white/90 sm:text-sm">{surface.diagnostic.gapSolution}</Text>
             </div>
           </div>
@@ -345,7 +499,7 @@ function ResultDashboardContent() {
               <LayoutGrid className="h-4 w-4 text-white/40" />
               <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Sua paleta pessoal</span>
             </div>
-            <span className="text-[9px] font-bold uppercase tracking-widest text-[#D4AF37]">{surface.palette.family}</span>
+            <span className="text-[9px] font-bold uppercase tracking-widest text-slate-300">{surface.palette.family}</span>
           </div>
 
           <div className="flex h-[4.5rem] gap-2.5 overflow-hidden rounded-[28px] sm:h-20 sm:gap-3 sm:rounded-[32px]">
@@ -370,7 +524,7 @@ function ResultDashboardContent() {
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <Sparkles className="h-4 w-4 text-[#D4AF37]" />
+                <Sparkles className="h-4 w-4 text-slate-300" />
                 <span className="px-2 text-[10px] font-bold uppercase tracking-widest">Looks sugeridos</span>
               </div>
               {aiInsight.intentScore > 60 && (
@@ -381,11 +535,11 @@ function ResultDashboardContent() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="hidden grid-cols-1 gap-3 sm:grid">
             {surface.lookHierarchy.map((item) => (
               <div key={item.label} className="rounded-[24px] border border-white/5 bg-white/[0.03] p-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-[9px] font-bold uppercase tracking-widest text-[#D4AF37]">{item.label}</span>
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-slate-200">{item.label}</span>
                   <span className="text-[9px] font-bold uppercase tracking-widest text-white/30">{item.title}</span>
                 </div>
                 <Text className="mt-2 text-xs leading-relaxed text-white/70">{item.description}</Text>
@@ -398,7 +552,7 @@ function ResultDashboardContent() {
               <div key={look.id} className="relative">
                 {(index === 0 || aiInsight.intensity === "HIGH") && (
                   <div className="absolute -top-5 left-2 flex items-center gap-2 sm:-top-6">
-                    <Star size={10} className="text-[#D4AF37]" />
+                    <Star size={10} className="text-slate-300" />
                     <span className="text-[8px] font-bold uppercase tracking-widest text-white/40">Este é o look mais coerente com o seu perfil</span>
                   </div>
                 )}
@@ -469,7 +623,7 @@ function ResultDashboardContent() {
             onClick={handleGoToLooks}
             className="group relative flex w-full items-center justify-center gap-3 overflow-hidden rounded-full bg-white p-3.5 text-black shadow-2xl transition-transform active:scale-[0.98] sm:p-4"
           >
-            <div className="absolute inset-0 translate-x-full bg-[#D4AF37] transition-transform duration-500 group-hover:translate-x-0" />
+            <div className="absolute inset-0 translate-x-full bg-slate-200 transition-transform duration-500 group-hover:translate-x-0" />
             <div className="relative z-10 flex items-center gap-3">
               <div className="flex h-7 w-7 items-center justify-center rounded-full bg-black/5 sm:h-8 sm:w-8">
                 <Watch size={16} />

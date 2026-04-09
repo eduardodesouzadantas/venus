@@ -19,7 +19,7 @@ export const generateWACopy = (
   
   // Heuristic-based generation (AI Logic Simulation)
   const segments: Record<string, string> = {
-    inativos: "Sentimos sua falta na Maison Elite.",
+    inativos: "Sentimos sua falta na Venus Engine.",
     alta_intencao: "Vimos o seu interesse naquela curadoria.",
     try_on_users: "Sua versão AI do look anterior foi um sucesso.",
     bundle_buyers: "Como está sua última aquisição de look completo?",
@@ -35,7 +35,7 @@ export const generateWACopy = (
     pos_compra: "Sua satisfação é nossa prioridade absoluta."
   };
 
-  const segmentMsg = segments[segment] || "Valorizamos sua presença na Maison Elite.";
+  const segmentMsg = segments[segment] || "Valorizamos sua presença na Venus Engine.";
   const objectiveMsg = objectives[objective] || "Temos algo especial em nossa curadoria.";
 
   const templates: Record<typeof tone, GeneratedCopy> = {

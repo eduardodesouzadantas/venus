@@ -5,6 +5,8 @@ export interface SocialShareInput {
   look: LookData;
   styleIdentity: string;
   imageGoal: string;
+  essenceLabel?: string;
+  essenceSummary?: string;
   profileSignal?: string;
   userPhotoUrl?: string | null;
   brandName?: string;
@@ -15,7 +17,7 @@ export interface SocialShareInput {
   cortexHandle?: string;
 }
 
-const DEFAULT_BRAND = "Maison Elite";
+const DEFAULT_BRAND = "Venus Engine";
 const DEFAULT_APP = "Venus Engine";
 const DEFAULT_CORTEX_HANDLE = "@InovaCortex";
 
@@ -79,8 +81,10 @@ async function loadCanvasImage(url?: string | null) {
     }
   }
 
+  const proxiedUrl = `/api/image-proxy?url=${encodeURIComponent(normalized)}`;
+
   try {
-    const response = await fetch(normalized, { mode: "cors", cache: "force-cache" });
+    const response = await fetch(proxiedUrl, { cache: "force-cache" });
     if (!response.ok) return null;
 
     const blob = await response.blob();
@@ -92,7 +96,17 @@ async function loadCanvasImage(url?: string | null) {
       URL.revokeObjectURL(objectUrl);
     }
   } catch {
-    return null;
+    try {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      return await new Promise<HTMLImageElement>((resolve, reject) => {
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = proxiedUrl;
+      });
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -124,6 +138,8 @@ export function buildSocialCaption(input: SocialShareInput) {
   const lookName = input.look.name;
   const styleIdentity = input.styleIdentity || "uma assinatura de estilo própria";
   const imageGoal = input.imageGoal || "evoluir a imagem";
+  const essenceLabel = input.essenceLabel?.trim();
+  const essenceSummary = input.essenceSummary?.trim();
   const profileSignal = input.profileSignal?.trim();
   const brandHandle = getBrandHandle(input);
   const cortexHandle = getCortexHandle(input);
@@ -139,17 +155,21 @@ export function buildSocialCaption(input: SocialShareInput) {
   const profileLine = profileSignal
     ? `A leitura ficou alinhada com ${profileSignal}.`
     : "A leitura ficou alinhada com meu jeito de me apresentar.";
+  const essenceLine = essenceLabel
+    ? `Minha essência captada foi ${essenceLabel}.${essenceSummary ? ` ${essenceSummary}` : ""}`
+    : "A leitura captou minha essência de forma mais precisa.";
   const benefitLine = benefitTitles.length
-    ? `Benefícios desta loja: ${benefitTitles.join(" · ")}.`
+    ? `Desbloqueios da loja: ${benefitTitles.join(" · ")}.`
     : merchantProgram.intro;
 
   return [
-    normalizeText(`Acabei de testar esta leitura com o ${appName} na ${brandName}.`),
+    normalizeText(`Acabei de encontrar uma leitura que realmente entendeu minha essência com o ${appName} na ${brandName}.`),
     normalizeText(`O look ${lookName} levou a proposta para ${styleIdentity.toLowerCase()} e ficou ${effect.toLowerCase()}.`),
+    normalizeText(essenceLine),
     normalizeText(profileLine),
     normalizeText(benefitLine),
     normalizeText(`Marque ${brandHandle} e ${cortexHandle} ao postar.`),
-    normalizeText(testLine),
+    normalizeText(`Quer testar sua própria essência? ${testLine}`),
     `#${brandName.replace(/\s+/g, "")} #InovaCortex #VenusEngine`,
   ].join("\n\n");
 }
@@ -157,6 +177,8 @@ export function buildSocialCaption(input: SocialShareInput) {
 export async function buildSocialShareImage(input: SocialShareInput) {
   const brandName = input.brandName || DEFAULT_BRAND;
   const appName = input.appName || DEFAULT_APP;
+  const essenceLabel = input.essenceLabel?.trim() || "Essência captada";
+  const essenceSummary = input.essenceSummary?.trim() || "A leitura encontrou uma proposta mais coerente com o seu perfil.";
   const brandHandle = getBrandHandle(input);
   const cortexHandle = getCortexHandle(input);
   const merchantProgram = readMerchantBenefitProgram(brandName);
@@ -349,25 +371,26 @@ export async function buildSocialShareImage(input: SocialShareInput) {
   ctx.font = "600 18px Inter, Arial, sans-serif";
   ctx.fillText(`Marque ${brandHandle} e ${cortexHandle} ao postar`, 72, 942);
 
-  // Benefit cards
+  drawPill(ctx, 50, 980, 980, 72, essenceLabel, essenceSummary);
+
   const effectLine = getEffectLine(input.styleIdentity, input.imageGoal, input.intentScore);
-  drawPill(ctx, 50, 980, 320, 72, "Efeito percebido", effectLine);
+  drawPill(ctx, 50, 1070, 320, 72, "Efeito percebido", effectLine);
 
   const lookText = input.look.intention || input.look.explanation || "Uma proposta que conversa com o perfil.";
-  drawPill(ctx, 392, 980, 638, 72, "Leitura do look", lookText);
+  drawPill(ctx, 392, 1070, 638, 72, "Leitura do look", lookText);
 
   const profileText = input.profileSignal || "Perfil traduzido em uma proposta mais coerente.";
-  drawPill(ctx, 50, 1070, 980, 72, "Leitura de personalidade", profileText);
+  drawPill(ctx, 50, 1160, 980, 72, "Leitura de personalidade", profileText);
 
-  drawPill(ctx, 50, 1160, 980, 72, "Benefícios da loja", benefitLine);
+  drawPill(ctx, 50, 1250, 980, 72, "Desbloqueios da loja", benefitLine);
 
   // Footer
   ctx.fillStyle = "rgba(255,255,255,0.45)";
   ctx.font = "600 18px Inter, Arial, sans-serif";
-  ctx.fillText(`InovaCortex · ${appName}`, 50, 1280);
+  ctx.fillText(`InovaCortex · ${appName}`, 50, 1340);
   ctx.fillStyle = "rgba(212,175,55,0.9)";
   ctx.font = "700 16px Inter, Arial, sans-serif";
-  ctx.fillText("Teste a Venus antes de publicar", 750, 1280);
+  ctx.fillText("Teste a Venus antes de publicar", 750, 1340);
 
   return await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => {

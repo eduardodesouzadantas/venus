@@ -211,7 +211,7 @@ export default function MerchantIntegrations({ params }: { params: Promise<{ slu
             <div className="flex items-center gap-2">
               <div className="h-6 w-px bg-[#D4AF37]" />
               <Text className="text-[10px] font-bold uppercase tracking-[0.4em] text-[#D4AF37]">
-                Maison Elite Ecosystem
+                Venus Engine Ecosystem
               </Text>
             </div>
             <Heading as="h1" className="text-3xl tracking-tighter uppercase whitespace-nowrap">

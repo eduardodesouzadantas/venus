@@ -11,7 +11,7 @@ export interface MerchantBenefitProgram {
   benefits: MerchantBenefitItem[];
 }
 
-const DEFAULT_STORE = "Maison Elite";
+const DEFAULT_STORE = "Venus Engine";
 const STORAGE_PREFIX = "venus_merchant_benefit_program_v1";
 
 const DEFAULT_PROGRAM: MerchantBenefitProgram = {
