@@ -147,21 +147,24 @@ function resolveTone(input: {
   inactiveDays: number;
   freemiumDaysRemaining: number | null;
   softCapSummary: OrgSoftCapSummary;
+  leads: number;
+  tryons: number;
 }) {
   const status = normalize(input.status).toLowerCase();
   const planId = normalize(input.planId).toLowerCase();
-  const isInactive = status !== "active";
+  const hasActivity = input.leads > 0 || input.tryons > 0;
+  const isInactiveExplicit = status !== "active";
   const isStale = input.inactiveDays > 7;
+  const isNoActivity = !hasActivity;
   const isExpiredFreemium = planId === "freemium" && input.freemiumDaysRemaining !== null && input.freemiumDaysRemaining <= 0;
-  const isCriticalUsage = input.softCapSummary.overall_status === "critical" || input.usagePct >= 90;
-  const isWarningUsage =
-    planId === "freemium" || input.usagePct > 80 || input.softCapSummary.overall_status === "warning" || input.softCapSummary.warning_count > 0;
-
-  if (isInactive || isStale || isExpiredFreemium || isCriticalUsage) {
+  
+  // Churn Risco: inativa > 7 dias OU status inativo OU 0 atividade total
+  if (isInactiveExplicit || isStale || isNoActivity || isExpiredFreemium) {
     return "red" as const;
   }
 
-  if (isWarningUsage) {
+  // Warning (AMBER): alta utilização do plano
+  if (input.usagePct >= 90 || input.softCapSummary.overall_status === "critical") {
     return "amber" as const;
   }
 
@@ -311,6 +314,8 @@ async function loadDashboardData(): Promise<DashboardData> {
         inactiveDays,
         freemiumDaysRemaining,
         softCapSummary,
+        leads,
+        tryons,
       });
       const statusLabel = resolveStatusLabel({
         status: org.status,
@@ -498,9 +503,9 @@ export default async function AgencyDashboardPage() {
                             style={{
                               width: `${org.usagePct}%`,
                               background:
-                                org.tone === "red"
+                                org.usagePct >= 90
                                   ? "linear-gradient(90deg, var(--red), #7f1d1d)"
-                                  : org.tone === "amber"
+                                  : org.usagePct >= 70
                                     ? "linear-gradient(90deg, var(--amber), #7a4a00)"
                                     : "linear-gradient(90deg, var(--green), var(--gold))",
                             }}
@@ -626,12 +631,12 @@ export default async function AgencyDashboardPage() {
 
               <div className="border-b border-[var(--border)] pb-4 pt-4">
                 <div className={`${spaceMono.className} text-[11px] uppercase tracking-[1px] text-[var(--muted)]`}>
-                  SAUDE DA REDE
+                  SAÚDE DA REDE
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                <GaugeCard label="RETENCAO %" value={`${data.retentionPct}%`} tone="green" />
+                <GaugeCard label="RETENÇÃO %" value={`${data.retentionPct}%`} tone="green" />
                 <GaugeCard label="MRR NOVO" value={formatMoney(data.mrrNovo)} tone="gold" />
                 <GaugeCard label="CHURN RISCO" value={formatInteger(data.churnRisk)} tone="amber" />
                 <GaugeCard label="CUSTO IA" value={formatMoney(data.iaCost)} tone="green" />

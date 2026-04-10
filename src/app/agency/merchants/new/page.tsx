@@ -1,7 +1,7 @@
 "use client";
 
-import { FormEvent, useState } from "react";
 import Link from "next/link";
+import { type FormEvent, useState } from "react";
 
 type ProvisionResult = {
   ok?: boolean;
@@ -105,7 +105,6 @@ export default function NewAgencyMerchantPage() {
           provision_mode: isBranchProvision ? "branch" : "independent",
           branch_mode: isBranchProvision ? "new" : "existing",
           merchant_group_name: isBranchProvision ? branchName : undefined,
-          agency_org_id: isBranchProvision ? undefined : undefined,
         }),
       });
 
@@ -130,7 +129,7 @@ export default function NewAgencyMerchantPage() {
             </Link>
             <h1 className="mt-4 text-2xl font-semibold tracking-[-0.04em]">Provisionar nova loja</h1>
             <p className="mt-2 text-sm text-[var(--muted)]">
-              Cria usuario merchant, org, membership e tenant core pelo endpoint existente.
+              Cria usuário merchant, org, membership e tenant core pelo endpoint existente.
             </p>
           </div>
 
@@ -139,7 +138,7 @@ export default function NewAgencyMerchantPage() {
               <input className={inputClass} required value={name} onChange={(event) => handleNameChange(event.target.value)} placeholder="Ex: Venus Store Ipanema" />
             </Field>
 
-            <Field label="Slug" hint={`Preview: /org/${resolvedSlug || "slug"}/dashboard`}>
+            <Field label="Slug" hint={`Prévia: /org/${resolvedSlug || "slug"}/dashboard`}>
               <input className={`${inputClass} font-mono`} required value={slug} onChange={(event) => setSlug(slugify(event.target.value))} placeholder="venus-store-ipanema" />
             </Field>
 
@@ -152,7 +151,7 @@ export default function NewAgencyMerchantPage() {
               </select>
             </Field>
 
-            <Field label="Email do lojista">
+            <Field label="E-mail do lojista">
               <input className={inputClass} required type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="lojista@marca.com" />
             </Field>
 
@@ -187,10 +186,10 @@ export default function NewAgencyMerchantPage() {
 
         <aside className="bg-[var(--bg3)] p-5 sm:p-7">
           <div className="sticky top-5 space-y-4">
-            <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[var(--muted)]">Mission packet</p>
+            <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[var(--muted)]">Pacote da missão</p>
             <div className="border border-[var(--border)] bg-[var(--bg)] p-4">
               <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--gold)]">Slug</p>
-              <p className="mt-2 break-all font-mono text-lg text-[var(--text)]">{resolvedSlug || "aguardando-nome"}</p>
+              <p className="mt-2 break-all font-mono text-lg text-[var(--text)]">{resolvedSlug || "aguardando nome"}</p>
             </div>
             <div className="grid grid-cols-2 gap-[1px] bg-[var(--border)]">
               <div className="bg-[var(--bg)] p-4">
@@ -199,11 +198,11 @@ export default function NewAgencyMerchantPage() {
               </div>
               <div className="bg-[var(--bg)] p-4">
                 <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-[var(--muted)]">Status</p>
-                <p className="mt-2 font-mono text-lg uppercase text-[var(--amber)]">draft</p>
+                <p className="mt-2 font-mono text-lg uppercase text-[var(--amber)]">rascunho</p>
               </div>
             </div>
             <p className="text-xs leading-5 text-[var(--muted)]">
-              A senha temporaria e gerada no envio porque o endpoint atual exige password. O email de boas-vindas continua sendo disparado pelo backend.
+              A senha temporária é gerada no envio porque o endpoint atual exige password. O e-mail de boas-vindas continua sendo disparado pelo backend.
             </p>
           </div>
         </aside>

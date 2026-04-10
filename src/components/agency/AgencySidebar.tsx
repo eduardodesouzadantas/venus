@@ -8,7 +8,7 @@ const navItems = [
   { label: "Lojas", href: "/agency/merchants", code: "ORG" },
   { label: "Nova loja", href: "/agency/merchants/new", code: "NEW" },
   { label: "Financeiro", href: "/agency/billing", code: "FIN" },
-  { label: "Configuracoes", href: "/agency/settings", code: "CFG" },
+  { label: "Configurações", href: "/agency/settings", code: "CFG" },
 ];
 
 function isActive(pathname: string, href: string) {
@@ -80,7 +80,7 @@ export function AgencySidebar() {
             SISTEMA ONLINE
           </div>
           <p className="mt-3 text-xs leading-5 text-[var(--muted)]">
-            Painel operacional da agencia para lojas, cobranca e configuracoes.
+            Painel operacional da agência para lojas, cobrança e configurações.
           </p>
         </div>
       </div>

@@ -109,34 +109,36 @@ async function getDashboardData(orgId: string): Promise<DashboardStats> {
   };
 }
 
-function MiniSparkline({ trend }: { trend: "up" | "down" | "flat" }) {
+function MiniSparkline({ trend, status }: { trend: "up" | "down" | "flat"; status: "green" | "yellow" | "red" }) {
   const points = trend === "up" ? [20, 35, 28, 45, 52, 48, 70] : trend === "down" ? [70, 55, 62, 45, 38, 42, 25] : [35, 38, 32, 35, 38, 35, 35];
   const max = 100;
   const path = points.map((y, i) => `${i === 0 ? "M" : "L"} ${(i / (points.length - 1)) * 48} ${max - y}`).join(" ");
+  const color = status === "green" ? "#22c55e" : status === "yellow" ? "#eab308" : "#ef4444";
 
   return (
-    <svg width="48" height="24" className="opacity-60">
-      <path d={path} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={trend === "up" ? "text-green-400" : trend === "down" ? "text-red-400" : "text-white/40"} />
+    <svg width="48" height="24" className="overflow-visible">
+      <path d={path} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
 function KpiCard({ label, value, sub, delta, status, sparkline }: { label: string; value: string; sub: string; delta: string; status: "green" | "yellow" | "red"; sparkline: "up" | "down" | "flat" }) {
   const colorMap = { green: "bg-green-500", yellow: "bg-yellow-500", red: "bg-red-500" };
-  const textColorMap = { green: "text-green-400", yellow: "text-yellow-400", red: "text-red-400" };
+  const deltaColor = sparkline === "up" ? "text-[#00ff88]" : sparkline === "down" ? "text-[#ff4444]" : "text-white/40";
 
   return (
     <div className="relative p-6 rounded-2xl bg-white/[0.03] border border-white/5 hover:bg-white/[0.05] transition-colors overflow-hidden">
       <div className={`absolute top-0 left-0 right-0 h-0.5 ${colorMap[status]}`} />
       <div className="flex items-center justify-between mb-4">
         <span className="text-[9px] uppercase font-bold tracking-widest text-white/30">{label}</span>
-        <MiniSparkline trend={sparkline} />
+        <MiniSparkline trend={sparkline} status={status} />
       </div>
       <div className="font-mono text-2xl tracking-tighter mb-1">{value}</div>
       <div className="flex items-center justify-between">
         <span className="text-[8px] uppercase tracking-widest text-white/20">{sub}</span>
-        <span className={`text-[9px] font-bold ${textColorMap[status]} flex items-center gap-1`}>
-          {sparkline === "up" ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />} {delta}
+        <span className={`text-[9px] font-bold ${deltaColor} flex items-center gap-1`}>
+          {sparkline === "up" ? <ArrowUpRight size={10} /> : sparkline === "down" ? <ArrowDownRight size={10} /> : null}
+          {delta}
         </span>
       </div>
     </div>
@@ -144,11 +146,12 @@ function KpiCard({ label, value, sub, delta, status, sparkline }: { label: strin
 }
 
 function PipelineColumn({ label, count, max, color }: { label: string; count: number; max: number; color: string }) {
-  const height = max > 0 ? Math.max((count / max) * 100, 8) : 8;
+  // 4px minimum bar height if count is 0
+  const height = max > 0 ? Math.max((count / max) * 100, 3.33) : 3.33;
   return (
     <div className="flex flex-col items-center gap-2">
       <div className="w-full flex items-end justify-center" style={{ height: 120 }}>
-        <div className="w-10 rounded-t-md transition-all duration-500" style={{ height: `${height}%`, backgroundColor: color }} />
+        <div className="w-10 rounded-t-sm transition-all duration-500" style={{ height: `${height}%`, backgroundColor: color }} />
       </div>
       <div className="font-mono text-xl font-bold">{count}</div>
       <span className="text-[8px] uppercase tracking-widest text-white/40">{label}</span>
@@ -284,26 +287,16 @@ export default async function MerchantDashboard({ params }: { params: Promise<{ 
       </aside>
 
       <main className="flex-1 p-6 overflow-y-auto no-scrollbar">
-        <header className="flex items-center justify-between mb-8">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <div className="w-px h-4 bg-[#D4AF37]" />
-              <span className="text-[9px] uppercase font-bold tracking-[0.3em] text-[#D4AF37]">{displayName}</span>
-              <span className="flex items-center gap-1.5 ml-3">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                <span className="text-[8px] uppercase tracking-widest text-green-500">AO VIVO</span>
-              </span>
-            </div>
-            <Heading as="h1" className="text-xl tracking-tight uppercase font-bold">Inteligência Operacional</Heading>
+        <header className="flex items-center justify-between mb-0 border-b border-white/5 -mx-6 px-6 py-3 bg-black">
+          <div className="flex items-center gap-2">
+            <div className="w-px h-3 bg-[#D4AF37]" />
+            <span className="text-[10px] uppercase font-bold tracking-[0.3em] text-white/80">{displayName}</span>
           </div>
-
-          <div className="flex gap-2">
-            <Link href={`${orgBase}/catalog`} className="px-4 py-2 rounded-full border border-white/10 text-[9px] font-bold uppercase tracking-wider text-white/40 hover:text-white transition-colors">
-              Catálogo
-            </Link>
-            <Link href={`${orgBase}/catalog/new`} className="px-4 py-2 rounded-full bg-white text-black text-[9px] font-bold uppercase tracking-wider hover:bg-white/90">
-              + Produto
-            </Link>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#00ff88] animate-pulse" />
+              <span className="text-[8px] uppercase font-bold tracking-[0.2em] text-[#00ff88]">● AO VIVO</span>
+            </div>
           </div>
         </header>
 
@@ -324,16 +317,16 @@ export default async function MerchantDashboard({ params }: { params: Promise<{ 
           </div>
         )}
 
-        <div className="grid grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-4 gap-3 mb-0 pt-6">
           <KpiCard label="Leads ativos" value={stats.leadsAtivos.toString()} sub="no funil" delta="+3 hoje" status={stats.leadsAtivos > 10 ? "green" : stats.leadsAtivos > 0 ? "yellow" : "red"} sparkline="up" />
           <KpiCard label="Fechados" value={stats.leadsGanhos.toString()} sub="este mês" delta="+1 semana" status={stats.leadsGanhos > 0 ? "green" : "red"} sparkline={stats.leadsGanhos > 0 ? "up" : "flat"} />
           <KpiCard label="Try-ons" value={stats.tryonsWeek.toString()} sub="esta semana" delta="+5 hoje" status={stats.tryonsWeek > 5 ? "green" : stats.tryonsWeek > 0 ? "yellow" : "red"} sparkline="up" />
           <KpiCard label="Posts" value={stats.postagensWeek.toString()} sub="confirmados" delta="+2 hoje" status={stats.postagensWeek > 0 ? "green" : "yellow"} sparkline="up" />
         </div>
 
-        <div className="mb-6 p-4 rounded-2xl bg-white/[0.02] border border-white/5">
-          <div className="text-[9px] font-bold uppercase tracking-wider text-white/40 mb-4">PIPELINE DE VENDAS</div>
-          <div className="flex justify-between gap-2">
+        <div className="mb-6 p-4 rounded-b-2xl bg-white/[0.01] border-x border-b border-white/5">
+          <div className="text-[9px] font-bold uppercase tracking-wider text-white/20 mb-4 px-2">PIPELINE DE VENDAS</div>
+          <div className="flex justify-between gap-2 px-2">
             {pipelineData.map((col) => (
               <PipelineColumn key={col.label} label={col.label} count={col.count} max={maxPipeline} color={col.color} />
             ))}
@@ -351,7 +344,13 @@ export default async function MerchantDashboard({ params }: { params: Promise<{ 
                 <ProductCard key={product.id} product={product} />
               ))}
               {stats.productsWithTryons.length === 0 && (
-                <div className="text-center py-8 text-white/30 text-[10px]">Nenhum produto cadastrado</div>
+                <div className="flex flex-col items-center justify-center py-12 rounded-2xl border border-dashed border-white/10 bg-white/[0.01]">
+                   <ShoppingBag size={24} className="text-white/10 mb-3" />
+                   <span className="text-white/40 text-[11px] mb-4">Seu catálogo está vazio</span>
+                   <Link href={`${orgBase}/catalog/new`} className="px-5 py-2 rounded-full bg-[linear-gradient(180deg,#F1D77A_0%,#D4AF37_100%)] text-black text-[9px] font-bold uppercase tracking-wider">
+                     Adicionar primeiro produto →
+                   </Link>
+                </div>
               )}
             </div>
           </section>

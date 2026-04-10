@@ -1,5 +1,8 @@
 export const dynamic = "force-dynamic";
 
+const publicBaseUrl = "https://venus-engine.vercel.app";
+const webhookUrl = `${publicBaseUrl}/api/meta/whatsapp/webhook`;
+
 const settings = [
   {
     label: "Provisionamento",
@@ -18,7 +21,7 @@ const settings = [
   },
   {
     label: "Auditoria",
-    value: "Retencao 90d",
+    value: "Retenção 90d",
     tone: "green",
   },
 ];
@@ -28,6 +31,13 @@ function toneClass(tone: string) {
   if (tone === "red") return "bg-[var(--red)] shadow-[0_0_14px_var(--red)]";
   return "bg-[var(--green)] shadow-[0_0_14px_var(--green)]";
 }
+
+const preferenceFields = [
+  { label: "Nome público", value: "InovaCortex" },
+  { label: "Domínio padrão", value: "venus-engine.vercel.app" },
+  { label: "E-mail de suporte", value: "contato@inovacortex.com" },
+  { label: "Webhook operacional", value: webhookUrl },
+];
 
 export default function AgencySettingsPage() {
   return (
@@ -39,10 +49,10 @@ export default function AgencySettingsPage() {
         <div className="mt-2 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
             <h1 className="font-[family-name:var(--font-space-mono)] text-2xl font-bold uppercase tracking-[-0.04em] text-[var(--text)]">
-              Configuracoes
+              Configurações
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted)]">
-              Parametros operacionais da agencia, seguranca e automacoes do Venus Engine.
+              Parâmetros operacionais da agência, segurança e automações do Venus Engine.
             </p>
           </div>
           <div className="flex items-center gap-2 font-[family-name:var(--font-space-mono)] text-[10px] uppercase tracking-[1px] text-[var(--green)]">
@@ -71,32 +81,38 @@ export default function AgencySettingsPage() {
       <section className="mt-6 grid gap-6 xl:grid-cols-[1fr_360px]">
         <div className="border border-[var(--border)] bg-[var(--bg2)] p-5">
           <div className="font-[family-name:var(--font-space-mono)] text-[10px] uppercase tracking-[2px] text-[var(--gold)]">
-            Preferencias da Agencia
+            PREFERÊNCIAS DA AGÊNCIA
           </div>
           <div className="mt-5 grid gap-4 md:grid-cols-2">
-            {["Nome publico", "Dominio padrao", "Email de suporte", "Webhook operacional"].map((label) => (
-              <label key={label} className="block">
+            {[
+              { label: "Nome público", value: "InovaCortex" },
+              { label: "Domínio padrão", value: "venus-engine.vercel.app" },
+              { label: "E-mail de suporte", value: "contato@inovacortex.com" },
+              { label: "Webhook operacional", value: webhookUrl },
+            ].map((item) => (
+              <label key={item.label} className="block">
                 <span className="font-[family-name:var(--font-space-mono)] text-[9px] uppercase tracking-[1px] text-[var(--muted)]">
-                  {label}
+                  {item.label}
                 </span>
                 <input
-                  className="mt-2 w-full border border-[var(--border)] bg-[var(--bg3)] px-3 py-3 text-sm text-[var(--text)] outline-none transition placeholder:text-[var(--muted)] focus:border-[var(--gold)]"
-                  placeholder="Configurar"
+                  className="mt-2 w-full border border-[var(--border)] bg-[var(--bg3)] px-3 py-3 font-[family-name:var(--font-space-mono)] text-sm text-[var(--text)] outline-none transition focus:border-[var(--gold)]"
+                  defaultValue={item.value}
+                  readOnly
                 />
               </label>
             ))}
           </div>
           <button className="mt-5 border border-[var(--gold)] bg-[rgba(201,168,76,0.12)] px-4 py-3 font-[family-name:var(--font-space-mono)] text-[10px] font-bold uppercase tracking-[1.5px] text-[var(--gold)]">
-            SALVAR CONFIGURACOES
+            SALVAR CONFIGURAÇÕES
           </button>
         </div>
 
         <div className="border border-[var(--border)] bg-[var(--bg2)] p-5">
           <div className="font-[family-name:var(--font-space-mono)] text-[10px] uppercase tracking-[2px] text-[var(--gold)]">
-            Seguranca
+            Segurança
           </div>
           <div className="mt-5 space-y-3">
-            {["Logs de auditoria ativos", "Acesso agency restrito", "Rotacao de chaves pendente"].map((item, index) => (
+            {["Logs de auditoria ativos", "Acesso agency restrito", "Rotação de chaves pendente"].map((item, index) => (
               <div key={item} className="flex items-center gap-3 border border-[var(--border)] bg-[var(--bg3)] p-3">
                 <span className={`h-2 w-2 rounded-full ${index === 2 ? toneClass("amber") : toneClass("green")}`} />
                 <span className="text-sm text-[var(--text)]">{item}</span>

@@ -33,12 +33,12 @@ function SplashContent() {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-[#0a0a0a] text-white px-6 overflow-hidden relative">
-      {/* Halo Pulsante de Luxo */}
+      {/* Halo Pulsante de Luxo - Agora como um anel fino */}
       <motion.div
         initial={{ opacity: 0 }}
-        animate={{ opacity: [0.1, 0.3, 0.1] }}
+        animate={{ opacity: [0.2, 0.4, 0.2], scale: [1, 1.05, 1] }}
         transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-        className="absolute w-[300px] h-[300px] rounded-full border border-[#D4AF37]/20 blur-2xl"
+        className="absolute w-[180px] h-[180px] rounded-full border border-[#D4AF37]/40 z-0"
       />
 
       {/* Logo V Dourado */}
@@ -49,11 +49,11 @@ function SplashContent() {
         className="mb-12 relative z-10"
       >
         <div className="relative">
-             {/* Efeito de brilho pulsar ao redor */}
+             {/* Efeito de brilho muito sutil e contido */}
             <motion.div 
-                animate={{ scale: [1, 1.1, 1], opacity: [0.2, 0.5, 0.2] }}
+                animate={{ opacity: [0.1, 0.2, 0.1] }}
                 transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-                className="absolute inset-0 bg-[#D4AF37]/20 rounded-full blur-xl"
+                className="absolute inset-x-[-10px] inset-y-[-10px] bg-[#D4AF37]/10 rounded-full blur-md"
             />
             <VenusAvatar size={120} animated />
         </div>
@@ -96,10 +96,7 @@ function SplashContent() {
         </AnimatePresence>
       </div>
 
-      {/* Background Decor */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-[#D4AF37]/5 rounded-full blur-[140px]" />
-      </div>
+      {/* Background Decor removido para manter #0a0a0a puro */}
     </div>
   );
 }

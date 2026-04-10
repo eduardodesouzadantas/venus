@@ -55,7 +55,17 @@ function statusClass(tone: "green" | "amber" | "red" | "gold") {
   return "text-[#00ff88] border-[#00ff88]/30 bg-[#00ff88]/10";
 }
 
-function Kpi({ label, value, sub, tone }: { label: string; value: string; sub: string; tone: "green" | "amber" | "red" | "gold" }) {
+function Kpi({
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  tone: "green" | "amber" | "red" | "gold";
+}) {
   return (
     <div className="bg-[#0f1410] p-5">
       <p className="font-mono text-[9px] uppercase tracking-[1px] text-[#6b7d6c]">{label}</p>
@@ -121,7 +131,7 @@ export default async function AgencyBillingPage() {
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="font-mono text-[10px] uppercase tracking-[2px] text-[#C9A84C]">INOVACORTEX / FINANCEIRO</p>
-            <h1 className="mt-1 font-mono text-2xl font-bold uppercase tracking-tight">Agency Billing Control</h1>
+            <h1 className="mt-1 font-mono text-2xl font-bold uppercase tracking-tight">Controle Financeiro da Agência</h1>
           </div>
           <Link href="/agency" className="font-mono text-[11px] uppercase tracking-[1px] text-[#C9A84C]">
             Voltar ao overview
@@ -132,29 +142,31 @@ export default async function AgencyBillingPage() {
       <section className="grid gap-[1px] bg-[#1e2820] md:grid-cols-4">
         <Kpi label="MRR total" value={formatMoney(mrrTotal)} sub={`${activeRows.length} lojas ativas`} tone="gold" />
         <Kpi label="Planos pagos" value={String(activeRows.filter((row) => planPrice(row.plan_id) > 0).length)} sub="base ativa monetizada" tone="green" />
-        <Kpi label="Pendencias" value={String(pendingRows.length)} sub="inadimplencia, risco ou bloqueio" tone={pendingRows.length ? "amber" : "green"} />
-        <Kpi label="Receita 30d" value={formatMoney(revenueTotal)} sub={`custo registrado ${formatMoney(costTotal)}`} tone="gold" />
+        <Kpi label="Pendências" value={String(pendingRows.length)} sub="inadimplência, risco ou bloqueio" tone={pendingRows.length ? "amber" : "green"} />
+        <Kpi label="Receita operacional 30d" value={formatMoney(revenueTotal)} sub={`custo registrado ${formatMoney(costTotal)}`} tone="gold" />
       </section>
 
       <section className="grid gap-[1px] bg-[#1e2820] lg:grid-cols-[1fr_360px]">
         <div className="space-y-6 bg-[#080c0a] p-6">
           <div className="rounded-none border border-[#1e2820] bg-[#0f1410]">
             <div className="flex items-center justify-between border-b border-[#1e2820] px-5 py-4">
-              <h2 className="font-mono text-xs uppercase tracking-[1px] text-[#6b7d6c]">Breakdown por plano</h2>
+              <h2 className="font-mono text-xs uppercase tracking-[1px] text-[#6b7d6c]">Distribuição por plano</h2>
               <span className="font-mono text-[10px] uppercase tracking-[1px] text-[#C9A84C]">{rows.length} lojas</span>
             </div>
             <div className="divide-y divide-[#1e2820]">
-              {breakdown.length ? breakdown.map(([plan, item]) => (
-                <div key={plan} className="grid grid-cols-[1fr_auto_auto] items-center gap-4 px-5 py-4">
-                  <div className="flex items-center gap-3">
-                    <span className="h-2 w-2 rounded-full bg-[#00ff88]" />
-                    <p className="font-mono text-sm uppercase text-[#e8f0e9]">{plan}</p>
+              {breakdown.length ? (
+                breakdown.map(([plan, item]) => (
+                  <div key={plan} className="grid grid-cols-[1fr_auto_auto] items-center gap-4 px-5 py-4">
+                    <div className="flex items-center gap-3">
+                      <span className="h-2 w-2 rounded-full bg-[#00ff88]" />
+                      <p className="font-mono text-sm uppercase text-[#e8f0e9]">{plan}</p>
+                    </div>
+                    <p className="font-mono text-sm text-[#6b7d6c]">{item.count} lojas</p>
+                    <p className="font-mono text-sm font-bold text-[#C9A84C]">{formatMoney(item.mrr)}</p>
                   </div>
-                  <p className="font-mono text-sm text-[#6b7d6c]">{item.count} lojas</p>
-                  <p className="font-mono text-sm font-bold text-[#C9A84C]">{formatMoney(item.mrr)}</p>
-                </div>
-              )) : (
-                <p className="px-5 py-8 text-sm text-[#6b7d6c]">Sem orgs para calcular MRR.</p>
+                ))
+              ) : (
+                <p className="px-5 py-8 text-sm text-[#6b7d6c]">Sem organizações para calcular MRR.</p>
               )}
             </div>
           </div>
@@ -164,23 +176,27 @@ export default async function AgencyBillingPage() {
               <h2 className="font-mono text-xs uppercase tracking-[1px] text-[#6b7d6c]">Pagamentos pendentes</h2>
             </div>
             <div className="divide-y divide-[#1e2820]">
-              {pendingRows.length ? pendingRows.map((row) => {
-                const tone = statusTone(row);
-                return (
-                  <div key={row.id} className="grid gap-3 px-5 py-4 md:grid-cols-[1fr_auto_auto] md:items-center">
-                    <div>
-                      <p className="font-mono text-sm uppercase text-[#e8f0e9]">{row.name}</p>
-                      <p className="mt-1 text-xs text-[#6b7d6c]">{row.slug} / plano {row.plan_id || "sem dados"}</p>
+              {pendingRows.length ? (
+                pendingRows.map((row) => {
+                  const tone = statusTone(row);
+                  return (
+                    <div key={row.id} className="grid gap-3 px-5 py-4 md:grid-cols-[1fr_auto_auto] md:items-center">
+                      <div>
+                        <p className="font-mono text-sm uppercase text-[#e8f0e9]">{row.name}</p>
+                        <p className="mt-1 text-xs text-[#6b7d6c]">
+                          {row.slug} / plano {row.plan_id || "sem dados"}
+                        </p>
+                      </div>
+                      <span className={`w-fit border px-3 py-1 font-mono text-[10px] uppercase ${statusClass(tone)}`}>
+                        {row.kill_switch ? "kill switch" : row.status}
+                      </span>
+                      <Link href={`/agency/merchants/${row.id}`} className="font-mono text-[11px] uppercase tracking-[1px] text-[#C9A84C]">
+                        Abrir loja
+                      </Link>
                     </div>
-                    <span className={`w-fit border px-3 py-1 font-mono text-[10px] uppercase ${statusClass(tone)}`}>
-                      {row.kill_switch ? "kill switch" : row.status}
-                    </span>
-                    <Link href={`/agency/merchants/${row.id}`} className="font-mono text-[11px] uppercase tracking-[1px] text-[#C9A84C]">
-                      Abrir loja
-                    </Link>
-                  </div>
-                );
-              }) : (
+                  );
+                })
+              ) : (
                 <p className="px-5 py-8 text-sm text-[#6b7d6c]">Nenhum pagamento pendente identificado nos sinais atuais.</p>
               )}
             </div>
@@ -189,18 +205,22 @@ export default async function AgencyBillingPage() {
 
         <aside className="space-y-6 bg-[#0f1410] p-6">
           <div className="rounded-none border border-[#1e2820] bg-[#141a15] p-5">
-            <h2 className="font-mono text-xs uppercase tracking-[1px] text-[#6b7d6c]">Historico de receita</h2>
+            <h2 className="font-mono text-xs uppercase tracking-[1px] text-[#6b7d6c]">Histórico de receita</h2>
             <div className="mt-5 space-y-3">
-              {revenueRows.length ? revenueRows.slice(0, 12).map((row, index) => (
-                <div key={`${row.org_id}-${row.usage_date}-${index}`} className="flex items-center justify-between border-b border-[#1e2820] pb-3">
-                  <div>
-                    <p className="font-mono text-sm text-[#e8f0e9]">{formatMoney(Math.round((row.revenue_cents || 0) / 100))}</p>
-                    <p className="text-xs text-[#6b7d6c]">{formatDate(row.usage_date)}</p>
+              {revenueRows.length ? (
+                revenueRows.slice(0, 12).map((row, index) => (
+                  <div key={`${row.org_id}-${row.usage_date}-${index}`} className="flex items-center justify-between border-b border-[#1e2820] pb-3">
+                    <div>
+                      <p className="font-mono text-sm text-[#e8f0e9]">{formatMoney(Math.round((row.revenue_cents || 0) / 100))}</p>
+                      <p className="text-xs text-[#6b7d6c]">{formatDate(row.usage_date)}</p>
+                    </div>
+                    <span className="font-mono text-[10px] uppercase text-[#6b7d6c]">
+                      custo {formatMoney(Math.round((row.cost_cents || 0) / 100))}
+                    </span>
                   </div>
-                  <span className="font-mono text-[10px] uppercase text-[#6b7d6c]">custo {formatMoney(Math.round((row.cost_cents || 0) / 100))}</span>
-                </div>
-              )) : (
-                <p className="text-sm text-[#6b7d6c]">Sem linhas de org_usage_daily nos ultimos 30 dias.</p>
+                ))
+              ) : (
+                <p className="text-sm text-[#6b7d6c]">Sem linhas de org_usage_daily nos últimos 30 dias.</p>
               )}
             </div>
           </div>
@@ -209,7 +229,9 @@ export default async function AgencyBillingPage() {
             <h2 className="font-mono text-xs uppercase tracking-[1px] text-[#6b7d6c]">Radar financeiro</h2>
             <div className="mt-5 space-y-3">
               <p className="font-mono text-lg font-bold text-[#C9A84C]">{formatMoney(mrrTotal)}</p>
-              <p className="text-sm text-[#6b7d6c]">MRR calculado por plan_id das lojas ativas. Pagamentos pendentes usam status, kill switch e risco de billing porque nao ha tabela dedicada de invoices neste codigo.</p>
+              <p className="text-sm text-[#6b7d6c]">
+                MRR calculado por plan_id das lojas ativas. Os pagamentos pendentes usam status, kill switch e risco de billing porque não há tabela dedicada de invoices neste código.
+              </p>
             </div>
           </div>
         </aside>
