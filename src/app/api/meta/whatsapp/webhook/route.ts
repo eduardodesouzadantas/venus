@@ -182,42 +182,52 @@ export async function POST(request: Request) {
                 await admin.from("whatsapp_conversations").update({ status: "human_takeover" }).eq("id", finalConversationId);
                 nextConversationStatus = "human_takeover";
               } else {
-                const venusReply = await generateVenusReply(context);
+                const { data: recentVenus } = await admin
+                  .from("whatsapp_messages")
+                  .select("id")
+                  .eq("conversation_id", finalConversationId)
+                  .eq("sender", "venus")
+                  .gte("created_at", new Date(Date.now() - 30000).toISOString())
+                  .maybeSingle();
 
-                if (venusReply) {
-                  await fetch(`https://graph.facebook.com/v21.0/${process.env.WHATSAPP_PHONE_ID}/messages`, {
-                    method: "POST",
-                    headers: {
-                      Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
-                      "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                      messaging_product: "whatsapp",
-                      to: userPhone,
+                if (!recentVenus) {
+                  const venusReply = await generateVenusReply(context);
+
+                  if (venusReply) {
+                    await fetch(`https://graph.facebook.com/v21.0/${process.env.WHATSAPP_PHONE_ID}/messages`, {
+                      method: "POST",
+                      headers: {
+                        Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify({
+                        messaging_product: "whatsapp",
+                        to: userPhone,
+                        type: "text",
+                        text: { body: venusReply },
+                      }),
+                    });
+
+                    await admin.from("whatsapp_messages").insert({
+                      conversation_id: finalConversationId,
+                      org_slug: org.slug,
+                      sender: "venus",
+                      text: venusReply,
                       type: "text",
-                      text: { body: venusReply },
-                    }),
-                  });
+                      metadata: { generated_by: "venus_stylist", state: context.conversationState },
+                    });
 
-                  await admin.from("whatsapp_messages").insert({
-                    conversation_id: finalConversationId,
-                    org_slug: org.slug,
-                    sender: "venus",
-                    text: venusReply,
-                    type: "text",
-                    metadata: { generated_by: "venus_stylist", state: context.conversationState },
-                  });
+                    nextConversationLastMessage = venusReply;
+                    nextConversationLastUpdated = new Date().toISOString();
 
-                  nextConversationLastMessage = venusReply;
-                  nextConversationLastUpdated = new Date().toISOString();
-
-                  await admin
-                    .from("whatsapp_conversations")
-                    .update({
-                      last_message: venusReply,
-                      last_updated: nextConversationLastUpdated,
-                    })
-                    .eq("id", finalConversationId);
+                    await admin
+                      .from("whatsapp_conversations")
+                      .update({
+                        last_message: venusReply,
+                        last_updated: nextConversationLastUpdated,
+                      })
+                      .eq("id", finalConversationId);
+                  }
                 }
               }
             }

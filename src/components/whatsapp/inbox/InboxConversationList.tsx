@@ -3,13 +3,7 @@
 import React from "react";
 import { Search } from "lucide-react";
 import type { WhatsAppConversation } from "@/types/whatsapp";
-import {
-  formatCompactNumber,
-  getConversationPreview,
-  formatShortTime,
-  getAvatarStyle,
-  getConversationStatusMeta,
-} from "./inbox-utils";
+import { formatCompactNumber, formatShortTime, getAvatarStyle, getConversationStatusMeta } from "./inbox-utils";
 
 type InboxConversationListProps = {
   conversations: WhatsAppConversation[];
@@ -95,7 +89,7 @@ export function InboxConversationList({
                     </span>
                   </div>
                   <div className="mt-1 truncate text-[10px] text-[#888]">
-                    {getConversationPreview(conversation)}
+                    {conversation.lastMessage || "Nova conversa"}
                   </div>
                   <div className="mt-2 flex items-center gap-2">
                     <span className={`inline-flex items-center border px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-[0.28em] ${statusMeta.badge}`}>
