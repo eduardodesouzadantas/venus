@@ -26,6 +26,7 @@ type RequestBody = {
   branch_name?: string;
   merchant_group_id?: string;
   merchant_group_name?: string;
+  whatsapp_number?: string;
 };
 
 function normalize(value: unknown) {
@@ -42,7 +43,7 @@ function isMerchantRole(role: string) {
 
 function normalizePlanId(value: unknown) {
   const normalized = normalize(value).toLowerCase();
-  if (normalized === "freemium" || normalized === "starter" || normalized === "pro") {
+  if (normalized === "freemium" || normalized === "starter" || normalized === "pro" || normalized === "enterprise") {
     return normalized;
   }
   return "";
@@ -79,6 +80,8 @@ function planLabel(planId: string) {
       return "Starter";
     case "pro":
       return "Pro";
+    case "enterprise":
+      return "Enterprise";
     default:
       return planId;
   }
@@ -103,6 +106,7 @@ export async function POST(request: Request) {
   const branchMode = normalize(body.branch_mode) || "existing";
   const merchantGroupId = normalize(body.merchant_group_id);
   const merchantGroupName = normalize(body.merchant_group_name);
+  const whatsappNumber = normalize(body.whatsapp_number);
   const agencyOrgId = await resolveCallerAgencyOrgId(body.agency_org_id);
 
   if (!email || !password || !orgSlug) {
@@ -223,6 +227,17 @@ export async function POST(request: Request) {
     });
 
     const loginUrl = new URL("/b2b/login", request.url).toString();
+    if (whatsappNumber) {
+      const { error: whatsappError } = await admin
+        .from("orgs")
+        .update({ whatsapp_number: whatsappNumber, updated_at: new Date().toISOString() })
+        .eq("id", tenantCore.org.id);
+
+      if (whatsappError) {
+        throw new Error(`Failed to update org WhatsApp: ${whatsappError.message}`);
+      }
+    }
+
     let welcomeEmail: MerchantWelcomeEmailResult = {
       sent: false,
       provider: "none" as const,

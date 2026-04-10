@@ -10,14 +10,20 @@ type RouteContext = {
   }>;
 };
 
-type OrgAction = "activate" | "suspend" | "toggle_kill_switch";
+type OrgAction = "activate" | "suspend" | "toggle_kill_switch" | "soft_delete";
 
 function readAction(value: FormDataEntryValue | null): OrgAction | null {
   const raw = typeof value === "string" ? value.trim() : "";
-  if (raw === "activate" || raw === "suspend" || raw === "toggle_kill_switch") {
+  if (raw === "activate" || raw === "suspend" || raw === "toggle_kill_switch" || raw === "soft_delete") {
     return raw;
   }
   return null;
+}
+
+function readRedirect(value: FormDataEntryValue | null) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw.startsWith("/agency")) return "/agency";
+  return raw;
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
@@ -34,8 +40,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     await updateAgencyOrgState(orgId, action, agencySession.user.id);
     revalidatePath("/agency");
+    revalidatePath("/agency/billing");
+    revalidatePath(`/agency/orgs/${orgId}`);
+    revalidatePath(`/agency/merchants/${orgId}`);
 
-    return NextResponse.redirect(new URL("/agency", request.url));
+    return NextResponse.redirect(new URL(readRedirect(formData.get("redirect_to")), request.url));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Agency action failed";
     const status = message === "Agency access denied" ? 403 : 400;

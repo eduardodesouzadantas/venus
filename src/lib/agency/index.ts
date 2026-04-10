@@ -68,10 +68,11 @@ export interface AgencySession {
 const ORG_SELECT_COLUMNS =
   "id, slug, name, group_id, branch_name, logo_url, primary_color, whatsapp_number, status, kill_switch, plan_id, limits, owner_user_id, created_at, updated_at";
 
-const AGENCY_MUTATION_EVENTS: Record<"activate" | "suspend" | "toggle_kill_switch", (current: TenantRecord) => string> = {
+const AGENCY_MUTATION_EVENTS: Record<"activate" | "suspend" | "toggle_kill_switch" | "soft_delete", (current: TenantRecord) => string> = {
   activate: () => "agency.org_activated",
   suspend: () => "agency.org_suspended",
   toggle_kill_switch: (current) => (current.kill_switch ? "agency.kill_switch_disabled" : "agency.kill_switch_enabled"),
+  soft_delete: () => "agency.org_soft_deleted",
 };
 
 function normalize(value: unknown) {
@@ -449,7 +450,7 @@ export async function getAgencyOrgMetrics(orgId: string): Promise<AgencyOrgMetri
 
 export async function updateAgencyOrgState(
   orgId: string,
-  action: "activate" | "suspend" | "toggle_kill_switch",
+  action: "activate" | "suspend" | "toggle_kill_switch" | "soft_delete",
   actorUserId: string
 ) {
   const normalizedOrgId = normalize(orgId);
@@ -484,6 +485,11 @@ export async function updateAgencyOrgState(
     nextPatch.status = "suspended";
   }
 
+  if (action === "soft_delete") {
+    nextPatch.status = "blocked";
+    nextPatch.kill_switch = true;
+  }
+
   if (action === "toggle_kill_switch") {
     nextPatch.kill_switch = !org.kill_switch;
   }
@@ -493,7 +499,7 @@ export async function updateAgencyOrgState(
     throw new Error(`Failed to update org: ${updateError.message}`);
   }
 
-  const nextKillSwitch = action === "toggle_kill_switch" ? !org.kill_switch : org.kill_switch;
+  const nextKillSwitch = action === "toggle_kill_switch" ? !org.kill_switch : action === "soft_delete" ? true : org.kill_switch;
   const eventType = AGENCY_MUTATION_EVENTS[action](org);
   const dedupeKey = `agency:${normalizedOrgId}:${action}:${Date.now()}`;
 
@@ -506,7 +512,7 @@ export async function updateAgencyOrgState(
     payload: {
       org_id: normalizedOrgId,
       org_slug: org.slug,
-      status: action === "activate" ? "active" : action === "suspend" ? "suspended" : org.status,
+      status: action === "activate" ? "active" : action === "suspend" ? "suspended" : action === "soft_delete" ? "blocked" : org.status,
       kill_switch: nextKillSwitch,
       action,
     },

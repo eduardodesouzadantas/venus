@@ -1,542 +1,219 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import type { ReactNode } from "react";
-import {
-  AlertCircle,
-  BarChart3,
-  Coins,
-  RefreshCw,
-  ShieldCheck,
-  TrendingUp,
-} from "lucide-react";
 
-import { Heading } from "@/components/ui/Heading";
-import { Text } from "@/components/ui/Text";
-import { VenusButton } from "@/components/ui/VenusButton";
-import { ExportActions } from "@/components/agency/ExportActions";
-import { createClient } from "@/lib/supabase/server";
-import { isAgencyRole, isMerchantRole, resolveTenantContext } from "@/lib/tenant/core";
-import { listAgencyPlaybookRows, type AgencyPlaybookRow } from "@/lib/billing/playbooks";
-import { normalizeAgencyTimeRange, type AgencyTimeRange } from "@/lib/agency/time-range";
-import { buildAgencyOrgDetailHref } from "@/lib/agency/navigation";
+import { listAgencyBillingRows, type AgencyBillingRow } from "@/lib/billing";
+import { resolveAgencySession } from "@/lib/agency";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { queryWithTimeout } from "@/lib/supabase/query-timeout";
 
 export const dynamic = "force-dynamic";
 
-function formatCurrency(cents: number) {
+const PLAN_MRR: Record<string, number> = {
+  freemium: 0,
+  free: 0,
+  starter: 297,
+  pro: 697,
+  growth: 697,
+  scale: 997,
+  enterprise: 1997,
+};
+
+type RevenueHistoryRow = {
+  usage_date: string | null;
+  org_id: string | null;
+  revenue_cents: number | null;
+  cost_cents: number | null;
+};
+
+function planPrice(planId: string | null | undefined) {
+  return PLAN_MRR[(planId || "starter").toLowerCase()] ?? PLAN_MRR.starter;
+}
+
+function formatMoney(value: number) {
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: "BRL",
-  }).format(cents / 100);
+    maximumFractionDigits: 0,
+  }).format(value);
 }
 
 function formatDate(value: string | null) {
   if (!value) return "Sem dados";
-  return new Intl.DateTimeFormat("pt-BR", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(new Date(value));
+  return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(new Date(value));
 }
 
-function formatCount(value: number | null) {
-  if (value === null) return "Sem dados";
-  return value.toLocaleString("pt-BR");
+function statusTone(row: AgencyBillingRow) {
+  if (row.kill_switch || row.status === "blocked") return "red";
+  if (row.status === "suspended" || row.billing_risk === "high") return "amber";
+  return "green";
 }
 
-function badge(kind: "active" | "suspended" | "blocked" | "plan" | "risk-low" | "risk-medium" | "risk-high" | "neutral") {
-  switch (kind) {
-    case "active":
-      return "bg-green-500/10 text-green-400 border-green-500/20";
-    case "suspended":
-      return "bg-yellow-500/10 text-yellow-300 border-yellow-500/20";
-    case "blocked":
-      return "bg-red-500/10 text-red-400 border-red-500/20";
-    case "risk-high":
-      return "bg-red-500/10 text-red-400 border-red-500/20";
-    case "risk-medium":
-      return "bg-yellow-500/10 text-yellow-300 border-yellow-500/20";
-    case "risk-low":
-      return "bg-green-500/10 text-green-400 border-green-500/20";
-    case "plan":
-      return "bg-white/5 text-white/70 border-white/10";
-    default:
-      return "bg-white/5 text-white/50 border-white/10";
-  }
+function statusClass(tone: "green" | "amber" | "red" | "gold") {
+  if (tone === "red") return "text-[#ff4444] border-[#ff4444]/30 bg-[#ff4444]/10";
+  if (tone === "amber") return "text-[#ffaa00] border-[#ffaa00]/30 bg-[#ffaa00]/10";
+  if (tone === "gold") return "text-[#C9A84C] border-[#C9A84C]/30 bg-[#C9A84C]/10";
+  return "text-[#00ff88] border-[#00ff88]/30 bg-[#00ff88]/10";
 }
 
-function softCapBadge(kind: "ok" | "warning" | "critical" | "no_data") {
-  if (kind === "critical") return "risk-high";
-  if (kind === "warning") return "risk-medium";
-  if (kind === "ok") return "risk-low";
-  return "neutral";
-}
-
-function softCapLabel(kind: "ok" | "warning" | "critical" | "no_data") {
-  if (kind === "critical") return "Crítico";
-  if (kind === "warning") return "Atenção";
-  if (kind === "ok") return "Saudável";
-  return "Sem dados";
-}
-
-function softCapChipText(label: string, usage: number | null, cap: number | null, pct: number | null) {
-  const usageText = usage === null ? "Sem dados" : usage.toLocaleString("pt-BR");
-  const capText = cap === null ? "Sem dados" : cap.toLocaleString("pt-BR");
-  const pctText = pct === null ? "sem base" : `${Math.round(pct)}%`;
-  return `${label} ${usageText}/${capText} (${pctText})`;
-}
-
-function statusKind(row: AgencyPlaybookRow) {
-  if (row.kill_switch || row.status === "blocked") return "blocked";
-  if (row.status === "suspended") return "suspended";
-  return "active";
-}
-
-function riskKind(value: "low" | "medium" | "high") {
-  if (value === "high") return "risk-high";
-  if (value === "medium") return "risk-medium";
-  return "risk-low";
-}
-
-function guidanceKind(value: "info" | "warning" | "critical") {
-  if (value === "critical") return "risk-high";
-  if (value === "warning") return "risk-medium";
-  return "risk-low";
-}
-
-function rangeLabel(range: AgencyTimeRange) {
-  switch (range) {
-    case "7d":
-      return "7 dias";
-    case "30d":
-      return "30 dias";
-    case "90d":
-      return "90 dias";
-    default:
-      return "Tudo";
-  }
-}
-
-function buildHref(pathname: string, params: Record<string, string | number | undefined>) {
-  const searchParams = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
-    if (value === undefined || value === "") continue;
-    searchParams.set(key, String(value));
-  }
-  const query = searchParams.toString();
-  return query ? `${pathname}?${query}` : pathname;
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
+function Kpi({ label, value, sub, tone }: { label: string; value: string; sub: string; tone: "green" | "amber" | "red" | "gold" }) {
   return (
-    <div className="p-4 rounded-3xl bg-black/40 border border-white/5 space-y-1">
-      <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">{label}</Text>
-      <Heading as="h4" className="text-xl tracking-tighter">
+    <div className="bg-[#0f1410] p-5">
+      <p className="font-mono text-[9px] uppercase tracking-[1px] text-[#6b7d6c]">{label}</p>
+      <p className={`mt-2 font-mono text-2xl font-bold ${tone === "green" ? "text-[#00ff88]" : tone === "amber" ? "text-[#ffaa00]" : tone === "red" ? "text-[#ff4444]" : "text-[#C9A84C]"}`}>
         {value}
-      </Heading>
+      </p>
+      <p className="mt-1 text-xs text-[#6b7d6c]">{sub}</p>
     </div>
   );
 }
 
-export default async function AgencyBillingPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
-}) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const context = resolveTenantContext(user);
-
-  if (!user) {
-    redirect("/login");
+function buildBreakdown(rows: AgencyBillingRow[]) {
+  const map = new Map<string, { count: number; mrr: number }>();
+  for (const row of rows) {
+    const plan = (row.plan_id || "starter").toLowerCase();
+    const current = map.get(plan) || { count: 0, mrr: 0 };
+    current.count += 1;
+    current.mrr += row.status === "active" && !row.kill_switch ? planPrice(plan) : 0;
+    map.set(plan, current);
   }
+  return Array.from(map.entries()).sort((left, right) => right[1].mrr - left[1].mrr);
+}
 
-  if (context.role && isMerchantRole(context.role)) {
-    redirect("/merchant");
-  }
+async function loadRevenueHistory() {
+  const admin = createAdminClient();
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const result = await queryWithTimeout(
+    admin
+      .from("org_usage_daily")
+      .select("usage_date, org_id, revenue_cents, cost_cents")
+      .gte("usage_date", thirtyDaysAgo)
+      .order("usage_date", { ascending: false })
+      .limit(60),
+    { data: [], error: null }
+  );
 
-  if (!context.role || !isAgencyRole(context.role)) {
-    redirect("/login");
-  }
+  if (result.error) return [];
+  return (result.data || []) as RevenueHistoryRow[];
+}
 
-  const resolved = await searchParams;
-  const range = normalizeAgencyTimeRange(Array.isArray(resolved.range) ? resolved.range[0] : resolved.range, "all");
-
-  let rows: AgencyPlaybookRow[] = [];
+export default async function AgencyBillingPage() {
   try {
-    rows = await listAgencyPlaybookRows({ range });
-  } catch (error) {
-    return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center p-6">
-        <div className="max-w-lg w-full space-y-6">
-          <div className="p-8 rounded-[40px] bg-red-500/10 border border-red-500/20 space-y-4">
-            <div className="flex items-center gap-3 text-red-400">
-              <AlertCircle className="w-5 h-5" />
-              <Heading as="h1" className="text-xl uppercase tracking-tight">
-                Billing panel indisponível
-              </Heading>
-            </div>
-            <Text className="text-sm text-white/70">
-              Não foi possível carregar a visão real de uso e custo agora.
-            </Text>
-            <Text className="text-[10px] text-white/40 break-all">
-              {error instanceof Error ? error.message : "Erro desconhecido"}
-            </Text>
-            <Link href="/agency">
-              <VenusButton variant="outline" className="w-full mt-4">
-                Voltar ao agency
-              </VenusButton>
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
+    await resolveAgencySession();
+  } catch {
+    redirect("/login");
   }
 
-  const totalOrgs = rows.length;
-  const activeOrgs = rows.filter((row) => row.status === "active" && !row.kill_switch).length;
-  const highRiskOrgs = rows.filter((row) => row.billing_risk === "high").length;
-  const estimatedToday = rows.reduce((sum, row) => sum + row.estimated_cost_today_cents, 0);
-  const estimatedTotal = rows.reduce((sum, row) => sum + row.estimated_cost_total_cents, 0);
-  const latestUsageDate = rows.reduce<string | null>((current, row) => {
-    if (!row.usage_date) return current;
-    if (!current || row.usage_date > current) return row.usage_date;
-    return current;
-  }, null);
-  const attentionOrgs = rows.filter((row) => row.soft_cap_summary.overall_status === "warning").length;
-  const criticalOrgs = rows.filter((row) => row.soft_cap_summary.overall_status === "critical").length;
-  const exportParams = { range };
+  const [rows, revenueRows] = await Promise.all([
+    listAgencyBillingRows({ range: "all" }).catch(() => [] as AgencyBillingRow[]),
+    loadRevenueHistory().catch(() => [] as RevenueHistoryRow[]),
+  ]);
+
+  const activeRows = rows.filter((row) => row.status === "active" && !row.kill_switch);
+  const mrrTotal = activeRows.reduce((sum, row) => sum + planPrice(row.plan_id), 0);
+  const breakdown = buildBreakdown(rows);
+  const pendingRows = rows.filter((row) => row.status !== "active" || row.kill_switch || row.billing_risk === "high");
+  const revenueTotal = revenueRows.reduce((sum, row) => sum + Math.round((row.revenue_cents || 0) / 100), 0);
+  const costTotal = revenueRows.reduce((sum, row) => sum + Math.round((row.cost_cents || 0) / 100), 0);
 
   return (
-    <div className="min-h-screen bg-black text-white">
-      <div className="px-6 pt-10 pb-8 border-b border-white/5 sticky top-0 z-40 bg-black/80 backdrop-blur-2xl">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="space-y-2">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-[#D4AF37] flex items-center justify-center text-black font-serif font-bold shadow-[0_0_24px_rgba(212,175,55,0.35)]">
-                V
-              </div>
-              <div>
-                <Text className="text-[10px] uppercase font-bold tracking-[0.5em] text-[#D4AF37]">
-                  Agency Billing / Usage
-                </Text>
-                <Heading as="h1" className="text-3xl uppercase tracking-tighter">
-                  Visão Econômica Real
-                </Heading>
-              </div>
+    <main className="min-h-screen bg-[#080c0a] text-[#e8f0e9]">
+      <section className="sticky top-0 z-40 border-b border-[#1e2820] bg-[#0f1410]/95 px-6 py-5 backdrop-blur">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[2px] text-[#C9A84C]">INOVACORTEX / FINANCEIRO</p>
+            <h1 className="mt-1 font-mono text-2xl font-bold uppercase tracking-tight">Agency Billing Control</h1>
+          </div>
+          <Link href="/agency" className="font-mono text-[11px] uppercase tracking-[1px] text-[#C9A84C]">
+            Voltar ao overview
+          </Link>
+        </div>
+      </section>
+
+      <section className="grid gap-[1px] bg-[#1e2820] md:grid-cols-4">
+        <Kpi label="MRR total" value={formatMoney(mrrTotal)} sub={`${activeRows.length} lojas ativas`} tone="gold" />
+        <Kpi label="Planos pagos" value={String(activeRows.filter((row) => planPrice(row.plan_id) > 0).length)} sub="base ativa monetizada" tone="green" />
+        <Kpi label="Pendencias" value={String(pendingRows.length)} sub="inadimplencia, risco ou bloqueio" tone={pendingRows.length ? "amber" : "green"} />
+        <Kpi label="Receita 30d" value={formatMoney(revenueTotal)} sub={`custo registrado ${formatMoney(costTotal)}`} tone="gold" />
+      </section>
+
+      <section className="grid gap-[1px] bg-[#1e2820] lg:grid-cols-[1fr_360px]">
+        <div className="space-y-6 bg-[#080c0a] p-6">
+          <div className="rounded-none border border-[#1e2820] bg-[#0f1410]">
+            <div className="flex items-center justify-between border-b border-[#1e2820] px-5 py-4">
+              <h2 className="font-mono text-xs uppercase tracking-[1px] text-[#6b7d6c]">Breakdown por plano</h2>
+              <span className="font-mono text-[10px] uppercase tracking-[1px] text-[#C9A84C]">{rows.length} lojas</span>
             </div>
-            <Text className="text-sm text-white/50 max-w-2xl">
-              Uso e custo estimado por org, com base em dados reais do tenant core, catálogo, CRM e WhatsApp.
-            </Text>
-          </div>
-          <div className="flex flex-wrap gap-3 items-center">
-            <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badge("plan")}`}>
-              Janela {rangeLabel(range)}
-            </span>
-            <Link href="/agency">
-              <VenusButton variant="outline" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold border-white/10">
-                Governança
-              </VenusButton>
-            </Link>
-            <Link href={buildHref("/agency/playbooks", { range })}>
-              <VenusButton variant="outline" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold border-white/10">
-                Playbooks
-              </VenusButton>
-            </Link>
-            <ExportActions
-              csvHref={buildHref("/api/agency/billing/export", { ...exportParams, format: "csv" })}
-              jsonHref={buildHref("/api/agency/billing/export", { ...exportParams, format: "json" })}
-            />
-            <Link href={buildHref("/agency/billing", exportParams)}>
-              <VenusButton variant="solid" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold bg-white text-black">
-                <RefreshCw className="w-3 h-3 mr-2" />
-                Atualizar
-              </VenusButton>
-            </Link>
-          </div>
-        </div>
-      </div>
-
-      <div className="px-6 pt-6">
-        <section className="p-5 rounded-[28px] bg-white/[0.03] border border-white/5 space-y-4">
-          <Heading as="h2" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">
-            Filtro temporal
-          </Heading>
-          <form className="grid grid-cols-1 md:grid-cols-3 gap-3" method="get">
-            <label className="space-y-2">
-              <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Período</Text>
-              <select name="range" defaultValue={range} className="w-full rounded-2xl bg-black/40 border border-white/10 px-4 py-3 text-sm text-white">
-                <option value="all">Tudo</option>
-                <option value="7d">7 dias</option>
-                <option value="30d">30 dias</option>
-                <option value="90d">90 dias</option>
-              </select>
-            </label>
-            <div className="flex items-end">
-              <VenusButton type="submit" variant="solid" className="h-12 px-6 rounded-full uppercase tracking-[0.35em] text-[9px] font-bold bg-white text-black w-full">
-                Aplicar
-              </VenusButton>
+            <div className="divide-y divide-[#1e2820]">
+              {breakdown.length ? breakdown.map(([plan, item]) => (
+                <div key={plan} className="grid grid-cols-[1fr_auto_auto] items-center gap-4 px-5 py-4">
+                  <div className="flex items-center gap-3">
+                    <span className="h-2 w-2 rounded-full bg-[#00ff88]" />
+                    <p className="font-mono text-sm uppercase text-[#e8f0e9]">{plan}</p>
+                  </div>
+                  <p className="font-mono text-sm text-[#6b7d6c]">{item.count} lojas</p>
+                  <p className="font-mono text-sm font-bold text-[#C9A84C]">{formatMoney(item.mrr)}</p>
+                </div>
+              )) : (
+                <p className="px-5 py-8 text-sm text-[#6b7d6c]">Sem orgs para calcular MRR.</p>
+              )}
             </div>
-          </form>
-        </section>
-      </div>
-
-      <div className="px-6 py-8 space-y-10">
-        <div className="grid grid-cols-2 xl:grid-cols-6 gap-4">
-          <Metric label="Orgs" value={totalOrgs.toString()} />
-          <Metric label="Ativas" value={activeOrgs.toString()} />
-          <Metric label="Alto risco" value={highRiskOrgs.toString()} />
-          <Metric label="Uso estimado hoje" value={formatCurrency(estimatedToday)} />
-          <Metric label="Uso estimado na janela" value={formatCurrency(estimatedTotal)} />
-          <Metric label="Ultima atividade na janela" value={latestUsageDate || "Sem dados"} />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="p-5 rounded-[28px] bg-white/[0.03] border border-white/5 space-y-2">
-            <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Em atenção</Text>
-            <Heading as="h3" className="text-2xl tracking-tighter">{attentionOrgs.toString()}</Heading>
-            <Text className="text-[10px] uppercase tracking-widest text-white/35">orgs em warning nos soft caps</Text>
-          </div>
-          <div className="p-5 rounded-[28px] bg-white/[0.03] border border-white/5 space-y-2">
-            <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Críticas</Text>
-            <Heading as="h3" className="text-2xl tracking-tighter">{criticalOrgs.toString()}</Heading>
-            <Text className="text-[10px] uppercase tracking-widest text-white/35">orgs em critical nos soft caps</Text>
-          </div>
-        </div>
-
-        <section className="space-y-4">
-          <div className="space-y-1">
-            <Heading as="h2" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">
-              Orgs com leitura real na janela
-            </Heading>
-            <Text className="text-sm text-white/40">
-              Custo estimado é heurístico e explícito, para base de controle e limites futuros.
-            </Text>
           </div>
 
-          <div className="space-y-4">
-            {rows.map((row) => {
-              const usage = row.usage_date;
-              const totalCost = formatCurrency(row.estimated_cost_total_cents);
-              const todayCost = formatCurrency(row.estimated_cost_today_cents);
-              const statusLabel = row.kill_switch ? "blocked" : row.status;
-              const softCaps = row.soft_cap_summary;
-              const topAlerts = softCaps.top_alerts.slice(0, 3);
-              const guidance = row.guidance_summary;
-
-              return (
-                <div key={row.id} className="p-6 rounded-[32px] bg-white/[0.03] border border-white/5 space-y-6">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <Heading as="h3" className="text-2xl uppercase tracking-tighter">
-                          {row.name}
-                        </Heading>
-                        <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badge(statusKind(row))}`}>
-                          {statusLabel}
-                        </span>
-                        <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badge("plan")}`}>
-                          Plano {row.plan_id || "sem dados"}
-                        </span>
-                        <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badge(riskKind(row.billing_risk))}`}>
-                          Risco {row.billing_risk}
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap gap-4 text-[10px] uppercase tracking-widest text-white/35">
-                        <span>slug: {row.slug}</span>
-                        <span>org_id: {row.id}</span>
-                        <span>criado: {formatDate(row.created_at || null)}</span>
-                        <span>última atividade: {formatDate(row.last_activity_at)}</span>
-                      </div>
+          <div className="rounded-none border border-[#1e2820] bg-[#0f1410]">
+            <div className="border-b border-[#1e2820] px-5 py-4">
+              <h2 className="font-mono text-xs uppercase tracking-[1px] text-[#6b7d6c]">Pagamentos pendentes</h2>
+            </div>
+            <div className="divide-y divide-[#1e2820]">
+              {pendingRows.length ? pendingRows.map((row) => {
+                const tone = statusTone(row);
+                return (
+                  <div key={row.id} className="grid gap-3 px-5 py-4 md:grid-cols-[1fr_auto_auto] md:items-center">
+                    <div>
+                      <p className="font-mono text-sm uppercase text-[#e8f0e9]">{row.name}</p>
+                      <p className="mt-1 text-xs text-[#6b7d6c]">{row.slug} / plano {row.plan_id || "sem dados"}</p>
                     </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 min-w-[280px]">
-                      <Metric label="Membros" value={row.total_members.toString()} />
-                      <Metric label="Produtos na janela" value={row.total_products.toString()} />
-                      <Metric label="Leads na janela" value={row.total_leads.toString()} />
-                      <Metric label="Saved results na janela" value={row.total_saved_results.toString()} />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-                    <div className="p-4 rounded-3xl bg-black/40 border border-white/5 space-y-1">
-                      <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Uso do dia</Text>
-                      <Heading as="h4" className="text-xl tracking-tighter">
-                        {usage || "Sem dados"}
-                      </Heading>
-                      <Text className="text-[10px] text-white/35 uppercase tracking-widest">
-                        msgs {formatCount(row.messages_sent)} · tokens {formatCount(row.ai_tokens)}
-                      </Text>
-                    </div>
-                    <div className="p-4 rounded-3xl bg-black/40 border border-white/5 space-y-1">
-                      <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">WhatsApp na janela</Text>
-                      <Heading as="h4" className="text-xl tracking-tighter">
-                        {row.total_whatsapp_messages === null || row.total_whatsapp_conversations === null
-                          ? "Sem dados"
-                          : `${row.total_whatsapp_conversations} conv · ${row.total_whatsapp_messages} msgs`}
-                      </Heading>
-                      <Text className="text-[10px] text-white/35 uppercase tracking-widest">
-                        eventos {row.tenant_events_count.toLocaleString("pt-BR")}
-                      </Text>
-                    </div>
-                    <div className="p-4 rounded-3xl bg-black/40 border border-white/5 space-y-1">
-                      <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Custo hoje</Text>
-                      <Heading as="h4" className="text-xl tracking-tighter">
-                        {todayCost}
-                      </Heading>
-                      <Text className="text-[10px] text-white/35 uppercase tracking-widest">
-                        AI {formatCurrency(row.estimated_ai_cost_today_cents)} · CRM {formatCurrency(row.estimated_crm_cost_today_cents)}
-                      </Text>
-                    </div>
-                    <div className="p-4 rounded-3xl bg-black/40 border border-white/5 space-y-1">
-                      <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Custo acumulado na janela</Text>
-                      <Heading as="h4" className="text-xl tracking-tighter">
-                        {totalCost}
-                      </Heading>
-                      <Text className="text-[10px] text-white/35 uppercase tracking-widest">
-                        catálogo {formatCurrency(row.estimated_catalog_cost_total_cents)} · WhatsApp {formatCurrency(row.estimated_whatsapp_cost_total_cents)}
-                      </Text>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.3em] text-white/45">
-                    <span className={`px-3 py-1 rounded-full border ${badge(softCapBadge(softCaps.overall_status))}`}>
-                      Soft cap {softCapLabel(softCaps.overall_status)}
+                    <span className={`w-fit border px-3 py-1 font-mono text-[10px] uppercase ${statusClass(tone)}`}>
+                      {row.kill_switch ? "kill switch" : row.status}
                     </span>
-                    <span className={`px-3 py-1 rounded-full border ${badge(softCapBadge(softCaps.usage_health === "high" ? "critical" : softCaps.usage_health === "medium" ? "warning" : "ok"))}`}>
-                      Health {softCaps.usage_health}
-                    </span>
-                    <span className={`px-3 py-1 rounded-full border ${badge(softCapBadge(softCaps.billing_risk === "high" ? "critical" : softCaps.billing_risk === "medium" ? "warning" : "ok"))}`}>
-                      Billing {softCaps.billing_risk}
-                    </span>
-                    <span className={`px-3 py-1 rounded-full border ${badge(guidanceKind(guidance.guidance_level))}`}>
-                      Guidance {guidance.title}
-                    </span>
-                  </div>
-
-                  <div className="p-4 rounded-3xl bg-black/40 border border-white/5 space-y-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="space-y-1">
-                        <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">Playbook</Text>
-                        <Heading as="h4" className="text-xl tracking-tighter">{row.playbook_summary.title}</Heading>
-                      </div>
-                      <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badge(guidanceKind(row.playbook_summary.guidance_level))}`}>
-                        {row.playbook_summary.guidance_level}
-                      </span>
-                    </div>
-                    <Text className="text-sm text-white/55">{row.playbook_summary.summary}</Text>
-                    <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
-                      Próxima revisão: {row.playbook_summary.next_review_window}
-                    </Text>
-                    <div className="flex flex-wrap gap-2">
-                      {row.playbook_summary.steps.slice(0, 2).map((step) => (
-                        <span
-                          key={`${row.id}-step-${step.id}`}
-                          className="px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border bg-white/5 text-white/70 border-white/10"
-                        >
-                          {step.label}
-                        </span>
-                      ))}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {row.playbook_summary.light_automations.slice(0, 1).map((automation) => (
-                        <form key={`${row.id}-${automation.action_key}`} action={`/api/admin/orgs/${row.id}/playbook`} method="post">
-                          <input type="hidden" name="action" value={automation.action_key} />
-                          <input type="hidden" name="redirect_to" value="/agency/billing" />
-                          <VenusButton
-                            type="submit"
-                            variant="outline"
-                            className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-white/10"
-                          >
-                            {automation.label}
-                          </VenusButton>
-                        </form>
-                      ))}
-                      <Link href={buildAgencyOrgDetailHref(row.id, { from: "billing", range })}>
-                        <VenusButton variant="glass" className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-white/10">
-                          Ver playbook
-                        </VenusButton>
-                      </Link>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.3em] text-white/45">
-                    {topAlerts.map((alert) => (
-                      <span
-                        key={`${row.id}-${alert.key}`}
-                        className={`px-3 py-1 rounded-full border ${badge(softCapBadge(alert.status))}`}
-                      >
-                        {softCapChipText(alert.label, alert.usage, alert.cap, alert.usage_pct)}
-                      </span>
-                    ))}
-                  </div>
-
-                  <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
-                    {row.plan_soft_cap_message}
-                  </Text>
-                  <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
-                    Próximo: {guidance.next_step}
-                  </Text>
-
-                  <div className="flex flex-wrap gap-2">
-                    <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badge("neutral")}`}>
-                      Uso {row.usage_health}
-                    </span>
-                    <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badge("neutral")}`}>
-                      Uso diário limite {formatCurrency(row.plan_budget_daily_cents)}
-                    </span>
-                    <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badge("neutral")}`}>
-                      Base mensal {formatCurrency(row.plan_budget_monthly_cents)}
-                    </span>
-                    <span className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${badge("neutral")}`}>
-                      Usage source {row.usage_source}
-                    </span>
-                    <Link href={buildAgencyOrgDetailHref(row.id, { from: "billing", range })}>
-                      <VenusButton variant="glass" className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-white/10">
-                        Ver detalhe
-                      </VenusButton>
+                    <Link href={`/agency/merchants/${row.id}`} className="font-mono text-[11px] uppercase tracking-[1px] text-[#C9A84C]">
+                      Abrir loja
                     </Link>
                   </div>
+                );
+              }) : (
+                <p className="px-5 py-8 text-sm text-[#6b7d6c]">Nenhum pagamento pendente identificado nos sinais atuais.</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <aside className="space-y-6 bg-[#0f1410] p-6">
+          <div className="rounded-none border border-[#1e2820] bg-[#141a15] p-5">
+            <h2 className="font-mono text-xs uppercase tracking-[1px] text-[#6b7d6c]">Historico de receita</h2>
+            <div className="mt-5 space-y-3">
+              {revenueRows.length ? revenueRows.slice(0, 12).map((row, index) => (
+                <div key={`${row.org_id}-${row.usage_date}-${index}`} className="flex items-center justify-between border-b border-[#1e2820] pb-3">
+                  <div>
+                    <p className="font-mono text-sm text-[#e8f0e9]">{formatMoney(Math.round((row.revenue_cents || 0) / 100))}</p>
+                    <p className="text-xs text-[#6b7d6c]">{formatDate(row.usage_date)}</p>
+                  </div>
+                  <span className="font-mono text-[10px] uppercase text-[#6b7d6c]">custo {formatMoney(Math.round((row.cost_cents || 0) / 100))}</span>
                 </div>
-              );
-            })}
+              )) : (
+                <p className="text-sm text-[#6b7d6c]">Sem linhas de org_usage_daily nos ultimos 30 dias.</p>
+              )}
+            </div>
           </div>
-        </section>
 
-        <section className="p-6 rounded-[32px] bg-[#D4AF37]/5 border border-[#D4AF37]/20 flex items-start gap-4">
-          <ShieldCheck className="w-5 h-5 text-[#D4AF37] flex-shrink-0 mt-1" />
-          <div className="space-y-2">
-            <Heading as="h4" className="text-sm uppercase tracking-[0.35em]">
-              Heurística explícita
-            </Heading>
-            <Text className="text-sm text-white/60">
-              AI = R$ 1,50 por saved result; catálogo = R$ 0,20 por produto; CRM = R$ 0,08 por lead;
-              WhatsApp = R$ 0,02 por mensagem e R$ 0,05 por conversa; eventos de plataforma = R$ 0,01 por tenant_event.
-            </Text>
-            <Text className="text-xs text-white/40">
-              Os valores são estimados por unidade real persistida, apenas para visibilidade operacional e futura definição de limites.
-            </Text>
+          <div className="rounded-none border border-[#1e2820] bg-[#141a15] p-5">
+            <h2 className="font-mono text-xs uppercase tracking-[1px] text-[#6b7d6c]">Radar financeiro</h2>
+            <div className="mt-5 space-y-3">
+              <p className="font-mono text-lg font-bold text-[#C9A84C]">{formatMoney(mrrTotal)}</p>
+              <p className="text-sm text-[#6b7d6c]">MRR calculado por plan_id das lojas ativas. Pagamentos pendentes usam status, kill switch e risco de billing porque nao ha tabela dedicada de invoices neste codigo.</p>
+            </div>
           </div>
-        </section>
-
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <InfoTile label="Uso real" value="org_usage_daily + tenant_events + entidades operacionais" icon={<BarChart3 className="w-5 h-5 text-[#D4AF37]" />} />
-          <InfoTile label="Custo estimado" value="somatório por unidade real persistida" icon={<Coins className="w-5 h-5 text-[#D4AF37]" />} />
-          <InfoTile label="Base para limites" value="plan_id + daily budget + monthly budget" icon={<TrendingUp className="w-5 h-5 text-[#D4AF37]" />} />
-        </section>
-      </div>
-    </div>
-  );
-}
-
-function InfoTile({ label, value, icon }: { label: string; value: string; icon: ReactNode }) {
-  return (
-    <div className="p-5 rounded-[28px] bg-white/[0.03] border border-white/5 flex items-start gap-3">
-      <div className="mt-1">{icon}</div>
-      <div className="space-y-1">
-        <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">{label}</Text>
-        <Text className="text-sm text-white/60">{value}</Text>
-      </div>
-    </div>
+        </aside>
+      </section>
+    </main>
   );
 }
