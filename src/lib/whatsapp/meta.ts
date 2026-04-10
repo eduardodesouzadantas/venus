@@ -6,12 +6,8 @@ export type MetaWhatsAppIntegrationRecord = {
   org_id: string;
   phone_number_id: string;
   business_account_id: string;
-  access_token_encrypted: string;
   display_phone_number: string | null;
-  verified_name: string | null;
-  quality_rating: string | null;
   connected_at: string | null;
-  last_verified_at: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -213,7 +209,7 @@ export async function loadMetaIntegrationByPhoneNumberId(
   const { data, error } = await supabase
     .from("whatsapp_meta_integrations")
     .select(
-      "id, org_id, phone_number_id, business_account_id, access_token_encrypted, display_phone_number, verified_name, quality_rating, connected_at, last_verified_at, created_at, updated_at"
+      "id, org_id, phone_number_id, business_account_id, display_phone_number, connected_at, created_at, updated_at"
     )
     .eq("phone_number_id", phoneNumberId)
     .maybeSingle();
@@ -225,6 +221,6 @@ export async function loadMetaIntegrationByPhoneNumberId(
   return (data as MetaWhatsAppIntegrationRecord | null) || null;
 }
 
-export function decryptStoredMetaIntegrationToken(record: Pick<MetaWhatsAppIntegrationRecord, "access_token_encrypted">) {
+export function decryptStoredMetaIntegrationToken(record: { access_token_encrypted: string }) {
   return decryptMetaToken(record.access_token_encrypted);
 }
