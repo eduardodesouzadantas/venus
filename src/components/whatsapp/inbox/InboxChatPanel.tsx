@@ -117,7 +117,7 @@ export function InboxChatPanel({
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
         <div className="space-y-5">
           {groupedMessages.map((group, index) => {
-            const meta = MESSAGE_STYLE_META[group.sender];
+            const meta = MESSAGE_STYLE_META[group.sender] ?? MESSAGE_STYLE_META.user;
             return (
               <div key={`${group.sender}-${index}`} className={`flex flex-col ${meta.alignClass}`}>
                 <div className={`mb-1 px-1 text-[9px] uppercase tracking-[0.45em] ${meta.labelClass}`}>
@@ -214,4 +214,3 @@ export function InboxChatPanel({
     </main>
   );
 }
-

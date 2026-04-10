@@ -43,28 +43,47 @@ export const STATUS_META: Record<
   },
 };
 
-export const MESSAGE_STYLE_META: Record<
-  WhatsAppMessage["sender"],
-  { label: string; labelClass: string; bubbleClass: string; borderClass: string; alignClass: string }
-> = {
+type MessageStyleMeta = {
+  label: string;
+  labelClass: string;
+  bubbleClass: string;
+  borderClass: string;
+  alignClass: string;
+};
+
+export const MESSAGE_STYLE_META: Record<string, MessageStyleMeta> = {
   user: {
     label: "CLIENTE",
     labelClass: "text-[#555]",
-    bubbleClass: "bg-[#1a1a1a] text-[#F0F0F0]",
+    bubbleClass: "bg-[#111] text-[#F0F0F0]",
     borderClass: "border-l-[#333]",
     alignClass: "items-start",
   },
   ai: {
     label: "VENUS IA",
-    labelClass: "text-[#555]",
-    bubbleClass: "bg-[#1a1f14] text-[#E8FFE8]",
+    labelClass: "text-[#00FF88]",
+    bubbleClass: "bg-[#0d1a0d] text-[#E8FFE8]",
+    borderClass: "border-l-[#00FF88]",
+    alignClass: "items-end",
+  },
+  venus: {
+    label: "VENUS IA",
+    labelClass: "text-[#00FF88]",
+    bubbleClass: "bg-[#0d1a0d] text-[#E8FFE8]",
     borderClass: "border-l-[#00FF88]",
     alignClass: "items-end",
   },
   merchant: {
-    label: "VOCE",
-    labelClass: "text-[#555]",
-    bubbleClass: "bg-[#1f1a0a] text-[#FFF8E8]",
+    label: "VOCÊ",
+    labelClass: "text-[#C9A84C]",
+    bubbleClass: "bg-[#1a160a] text-[#FFF8E8]",
+    borderClass: "border-l-[#C9A84C]",
+    alignClass: "items-end",
+  },
+  agent: {
+    label: "VOCÊ",
+    labelClass: "text-[#C9A84C]",
+    bubbleClass: "bg-[#1a160a] text-[#FFF8E8]",
     borderClass: "border-l-[#C9A84C]",
     alignClass: "items-end",
   },

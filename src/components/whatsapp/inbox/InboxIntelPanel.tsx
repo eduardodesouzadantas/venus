@@ -45,24 +45,18 @@ function MissionControlGauge({ value }: { value: number }) {
   const stroke = 6;
   const circumference = 2 * Math.PI * radius;
   const dashOffset = circumference - (normalized / 100) * circumference;
+  const strokeColor = normalized < 40 ? "#00FF88" : normalized <= 70 ? "#C9A84C" : "#FF3B3B";
 
   return (
     <div className="relative h-24 w-24">
       <svg viewBox="0 0 96 96" className="h-24 w-24 -rotate-90">
         <circle cx="48" cy="48" r={radius} fill="none" stroke="#222" strokeWidth={stroke} />
-        <defs>
-          <linearGradient id="urgency-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#00FF88" />
-            <stop offset="55%" stopColor="#C9A84C" />
-            <stop offset="100%" stopColor="#FF3B3B" />
-          </linearGradient>
-        </defs>
         <circle
           cx="48"
           cy="48"
           r={radius}
           fill="none"
-          stroke="url(#urgency-gradient)"
+          stroke={strokeColor}
           strokeWidth={stroke}
           strokeLinecap="round"
           strokeDasharray={circumference}
@@ -70,8 +64,8 @@ function MissionControlGauge({ value }: { value: number }) {
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="font-mono text-[18px] tracking-[0.08em] text-[#C9A84C]">
-          {formatCompactNumber(Math.round(normalized))}
+        <span className="font-mono text-[18px] tracking-[0.08em]" style={{ color: strokeColor }}>
+          {Math.round(normalized)}%
         </span>
         <span className="text-[8px] uppercase tracking-[0.35em] text-white/25">urgency</span>
       </div>
@@ -127,7 +121,8 @@ export function InboxIntelPanel({
   }
 
   const statusMeta = getConversationStatusMeta(conversation.status);
-  const urgencyValue = Math.min(100, Math.max(0, Math.round(conversation.user.intentScore)));
+  const urgencySource = salesCopilotPlan?.stats.intentScore ?? conversation.user.intentScore;
+  const urgencyValue = Math.min(100, Math.max(0, Math.round(urgencySource)));
   const currentMode = salesCopilotPlan?.stage === "close" ? "HORA DE FECHAR" : "SUPER SELLER";
   const topAngle = smartReplyRanking?.hasData ? smartReplyRanking.bestAngle?.toUpperCase() ?? "SEM DADOS" : "SEM DADOS";
 
@@ -146,20 +141,20 @@ export function InboxIntelPanel({
               </div>
             </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[8px] uppercase tracking-[0.35em] text-white/30">INTENT SCORE</span>
-                <span className="font-mono text-[15px] text-[#C9A84C]">
-                  {formatCompactNumber(Math.round(conversation.user.intentScore))}%
-                </span>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[8px] uppercase tracking-[0.35em] text-white/30">INTENT SCORE</span>
+                  <span className="font-mono text-[15px] text-[#C9A84C]">
+                    {Math.round(conversation.user.intentScore)}%
+                  </span>
+                </div>
+                <div className="h-[4px] overflow-hidden bg-[#1a1a1a]">
+                  <div
+                    className="h-full bg-gradient-to-r from-[#00FF88] via-[#C9A84C] to-[#FF3B3B]"
+                    style={{ width: `${Math.max(0, Math.min(100, conversation.user.intentScore))}%` }}
+                  />
+                </div>
               </div>
-              <div className="h-1.5 overflow-hidden bg-[#1a1a1a]">
-                <div
-                  className="h-full bg-gradient-to-r from-[#00FF88] via-[#C9A84C] to-[#FF3B3B]"
-                  style={{ width: `${Math.max(0, Math.min(100, conversation.user.intentScore))}%` }}
-                />
-              </div>
-            </div>
 
             <div className="flex flex-wrap gap-2">
               <span className={`inline-flex border px-2 py-1 text-[8px] font-bold uppercase tracking-[0.28em] ${statusMeta.badge}`}>
