@@ -42,10 +42,10 @@ function sanitizeIntegration(record: Awaited<ReturnType<typeof loadMetaIntegrati
     phone_number_id: record.phone_number_id,
     business_account_id: record.business_account_id,
     display_phone_number: record.display_phone_number,
-    verified_name: record.verified_name,
-    quality_rating: record.quality_rating,
     connected_at: record.connected_at,
-    last_verified_at: record.last_verified_at,
+    verified_name: null,
+    quality_rating: null,
+    last_verified_at: null,
   };
 }
 

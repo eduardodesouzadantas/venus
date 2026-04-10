@@ -12,6 +12,13 @@ export type MetaWhatsAppIntegrationRecord = {
   updated_at?: string | null;
 };
 
+type MetaWhatsAppIntegrationAuthRecord = MetaWhatsAppIntegrationRecord & {
+  access_token_encrypted: string;
+  verified_name: string | null;
+  quality_rating: string | null;
+  last_verified_at: string | null;
+};
+
 export type MetaWhatsAppConnectionInput = {
   accessToken: string;
   businessAccountId: string;
@@ -199,7 +206,7 @@ export async function loadMetaIntegrationByOrgId(
     throw error;
   }
 
-  return (data as MetaWhatsAppIntegrationRecord | null) || null;
+  return (data as MetaWhatsAppIntegrationAuthRecord | null) || null;
 }
 
 export async function loadMetaIntegrationByPhoneNumberId(
@@ -221,6 +228,6 @@ export async function loadMetaIntegrationByPhoneNumberId(
   return (data as MetaWhatsAppIntegrationRecord | null) || null;
 }
 
-export function decryptStoredMetaIntegrationToken(record: { access_token_encrypted: string }) {
+export function decryptStoredMetaIntegrationToken(record: Pick<MetaWhatsAppIntegrationAuthRecord, "access_token_encrypted">) {
   return decryptMetaToken(record.access_token_encrypted);
 }
