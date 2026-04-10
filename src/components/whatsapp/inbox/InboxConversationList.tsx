@@ -60,6 +60,7 @@ export function InboxConversationList({
             const isActive = activeConversationId === conversation.id;
             const statusMeta = getConversationStatusMeta(conversation.status);
             const initial = conversation.user.name.charAt(0).toUpperCase();
+            const preview = conversation.lastMessage || "Nova conversa";
 
             return (
               <button
@@ -88,9 +89,7 @@ export function InboxConversationList({
                       {formatShortTime(conversation.lastUpdated)}
                     </span>
                   </div>
-                  <div className="mt-1 truncate text-[10px] text-[#888]">
-                    {conversation.lastMessage || "Nova conversa"}
-                  </div>
+                  <div className="mt-1 truncate text-[10px] text-[#888]">{preview}</div>
                   <div className="mt-2 flex items-center gap-2">
                     <span className={`inline-flex items-center border px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-[0.28em] ${statusMeta.badge}`}>
                       {statusMeta.label}

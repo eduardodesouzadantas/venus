@@ -190,7 +190,9 @@ export async function POST(request: Request) {
                   .gte("created_at", new Date(Date.now() - 30000).toISOString())
                   .maybeSingle();
 
-                if (!recentVenus) {
+                if (recentVenus) {
+                  console.log("[VENUS] resposta recente detectada — skip");
+                } else {
                   const venusReply = await generateVenusReply(context);
 
                   if (venusReply) {
