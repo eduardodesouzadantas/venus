@@ -1,5 +1,6 @@
 "use client";
 
+import type { ChangeEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
@@ -45,6 +46,30 @@ function normalizeTag(value: string) {
   return value.trim().replace(/\s+/g, " ");
 }
 
+function normalizeAccentless(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function normalizeCategory(value: string) {
+  const normalized = normalizeAccentless(value);
+  if (normalized.includes("acessor")) return "acessorio";
+  return "roupa";
+}
+
+function normalizeStyleValue(value: string) {
+  const normalized = normalizeAccentless(value);
+  if (normalized.includes("alfai")) return "alfaiataria";
+  if (normalized.includes("street")) return "streetwear";
+  if (normalized.includes("lux")) return "festa";
+  if (normalized.includes("festa")) return "festa";
+  if (normalized.includes("casual")) return "casual";
+  return "casual";
+}
+
 function sizeLabel(value: SizeType) {
   switch (value) {
     case "clothing":
@@ -55,21 +80,6 @@ function sizeLabel(value: SizeType) {
       return "Calçados";
     default:
       return "Tamanho único";
-  }
-}
-
-function styleLabel(value: string) {
-  switch (value) {
-    case "alfaiataria":
-      return "Alfaiataria";
-    case "casual":
-      return "Casual";
-    case "streetwear":
-      return "Streetwear";
-    case "festa":
-      return "Festa";
-    default:
-      return value;
   }
 }
 
@@ -120,7 +130,7 @@ export function ProductEnrichmentForm({
   errorMessage,
 }: ProductEnrichmentFormProps) {
   const [file, setFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string>("");
+  const [previewUrl, setPreviewUrl] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisStep, setAnalysisStep] = useState(0);
   const [name, setName] = useState("");
@@ -132,7 +142,8 @@ export function ProductEnrichmentForm({
   const [tagInput, setTagInput] = useState("");
   const [sizeType, setSizeType] = useState<SizeType>("clothing");
   const [quantities, setQuantities] = useState<Record<string, string>>({});
-  const previewUrlRef = useRef<string>("");
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const previewUrlRef = useRef("");
 
   const sizes = useMemo(() => SIZE_PRESETS[sizeType], [sizeType]);
 
@@ -155,6 +166,7 @@ export function ProductEnrichmentForm({
 
   const updateFile = (nextFile: File | null) => {
     setFile(nextFile);
+    setAnalysisError(null);
     if (previewUrlRef.current) {
       URL.revokeObjectURL(previewUrlRef.current);
       previewUrlRef.current = "";
@@ -164,7 +176,7 @@ export function ProductEnrichmentForm({
     setPreviewUrl(nextUrl);
   };
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const nextFile = event.target.files?.[0] || null;
     updateFile(nextFile);
   };
@@ -173,6 +185,7 @@ export function ProductEnrichmentForm({
     if (!file || analyzing) return;
 
     setAnalyzing(true);
+    setAnalysisError(null);
     const timer = window.setInterval(() => {
       setAnalysisStep((current) => (current + 1) % ANALYSIS_STEPS.length);
     }, 1000);
@@ -194,19 +207,23 @@ export function ProductEnrichmentForm({
 
       const payload = (await response.json().catch(() => null)) as EnrichmentResponse | null;
       if (!response.ok || !payload) {
-        throw new Error((payload && typeof payload === "object" && "error" in payload && typeof payload.error === "string" && payload.error) || "Falha ao analisar a peça");
+        throw new Error(
+          (payload && typeof payload === "object" && "error" in payload && typeof payload.error === "string" && payload.error) ||
+            "Falha ao analisar a peça"
+        );
       }
 
       if (payload.name) setName(payload.name);
-      if (payload.category) setCategory(payload.category);
+      if (payload.category) setCategory(normalizeCategory(payload.category));
       if (payload.dominant_color) setPrimaryColor(payload.dominant_color);
-      if (payload.style) setStyle(payload.style);
+      if (payload.style) setStyle(normalizeStyleValue(payload.style));
       if (payload.emotional_copy) setEmotionalCopy(payload.emotional_copy.slice(0, 300));
       if (Array.isArray(payload.tags)) {
         setTags(payload.tags.map(normalizeTag).filter(Boolean).slice(0, 8));
       }
     } catch (error) {
       console.error("[PRODUCT_ENRICHMENT]", error);
+      setAnalysisError(error instanceof Error ? error.message : "Falha ao analisar a peça");
     } finally {
       window.clearInterval(timer);
       setAnalysisStep(0);
@@ -244,7 +261,10 @@ export function ProductEnrichmentForm({
     <div className="min-h-screen bg-black text-white p-6 md:p-10">
       <div className="mx-auto max-w-6xl space-y-8">
         <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <Link href={backHref} className="inline-flex items-center gap-3 rounded-full border border-white/10 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.3em] text-white/45 transition-colors hover:bg-white/5 hover:text-white">
+          <Link
+            href={backHref}
+            className="inline-flex items-center gap-3 rounded-full border border-white/10 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.3em] text-white/45 transition-colors hover:bg-white/5 hover:text-white"
+          >
             <ArrowLeft size={14} />
             {backLabel}
           </Link>
@@ -254,7 +274,13 @@ export function ProductEnrichmentForm({
           </div>
         </header>
 
-        <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+        {errorMessage ? (
+          <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+            {errorMessage}
+          </div>
+        ) : null}
+
+        <form action={createProduct} encType="multipart/form-data" className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
           <section className="space-y-6 rounded-[36px] border border-white/5 bg-white/[0.02] p-5 md:p-7">
             <div className="space-y-2">
               <Text className="text-[10px] uppercase tracking-[0.35em] text-[#D4AF37]">Nova peça</Text>
@@ -264,17 +290,22 @@ export function ProductEnrichmentForm({
               <Text className="max-w-2xl text-sm text-white/50">{subtitle}</Text>
             </div>
 
-            {errorMessage ? (
-              <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">
-                {errorMessage}
-              </div>
-            ) : null}
-
             <div className="space-y-4">
               <div className="rounded-[34px] border border-dashed border-white/10 bg-black/30 p-5">
-                <input id="product-file" name="image_file" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" className="hidden" form="product-form" onChange={handleFileChange} />
+                <input
+                  id="product-file"
+                  name="image_file"
+                  type="file"
+                  accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+
                 {!previewUrl ? (
-                  <label htmlFor="product-file" className="flex min-h-[260px] cursor-pointer flex-col items-center justify-center gap-4 rounded-[28px] border border-dashed border-white/10 bg-white/[0.02] text-center transition-colors hover:bg-white/[0.04]">
+                  <label
+                    htmlFor="product-file"
+                    className="flex min-h-[260px] cursor-pointer flex-col items-center justify-center gap-4 rounded-[28px] border border-dashed border-white/10 bg-white/[0.02] text-center transition-colors hover:bg-white/[0.04]"
+                  >
                     <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/5 text-white/30">
                       <ImageIcon size={28} />
                     </div>
@@ -289,16 +320,27 @@ export function ProductEnrichmentForm({
                       <img src={previewUrl} alt="Preview da peça" className="h-[300px] w-full object-cover" />
                     </div>
                     <div className="flex flex-wrap gap-3">
-                      <label htmlFor="product-file" className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.24em] text-white/50 hover:text-white">
+                      <label
+                        htmlFor="product-file"
+                        className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.24em] text-white/50 hover:text-white"
+                      >
                         Trocar imagem
                       </label>
-                      <VenusButton type="button" onClick={applyEnrichment} disabled={analyzing} variant="solid" className="h-10 rounded-full bg-[#D4AF37] px-5 text-[10px] font-bold uppercase tracking-[0.24em] text-black">
+                      <VenusButton
+                        type="button"
+                        onClick={applyEnrichment}
+                        disabled={analyzing}
+                        variant="solid"
+                        className="h-10 rounded-full bg-[#D4AF37] px-5 text-[10px] font-bold uppercase tracking-[0.24em] text-black"
+                      >
                         {analyzing ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
                         {analyzing ? ANALYSIS_STEPS[analysisStep] : "Analisar com IA"}
                       </VenusButton>
                     </div>
                   </div>
                 )}
+
+                {analysisError ? <div className="mt-4 text-xs text-[#ff4444]">{analysisError}</div> : null}
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
@@ -360,7 +402,9 @@ export function ProductEnrichmentForm({
               <div className="mb-4 flex items-center justify-between">
                 <div>
                   <Text className="text-[9px] uppercase tracking-[0.35em] text-[#D4AF37]">IA de venda</Text>
-                  <Heading as="h2" className="mt-1 text-xl uppercase tracking-tight">Copy emocional</Heading>
+                  <Heading as="h2" className="mt-1 text-xl uppercase tracking-tight">
+                    Copy emocional
+                  </Heading>
                 </div>
                 <CheckCircle2 size={18} className="text-[#00ff88]" />
               </div>
@@ -379,7 +423,11 @@ export function ProductEnrichmentForm({
               <div className="mt-6 space-y-3">
                 <div className="flex items-center justify-between">
                   <Text className="text-[9px] uppercase tracking-[0.3em] text-white/35">Tags</Text>
-                  <button type="button" onClick={addTag} className="inline-flex items-center gap-1 rounded-full border border-white/10 px-3 py-2 text-[9px] font-bold uppercase tracking-[0.24em] text-white/45 hover:text-white">
+                  <button
+                    type="button"
+                    onClick={addTag}
+                    className="inline-flex items-center gap-1 rounded-full border border-white/10 px-3 py-2 text-[9px] font-bold uppercase tracking-[0.24em] text-white/45 hover:text-white"
+                  >
                     <Plus size={12} />
                     Adicionar
                   </button>
@@ -400,7 +448,12 @@ export function ProductEnrichmentForm({
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {tags.map((tag) => (
-                    <button key={tag} type="button" onClick={() => removeTag(tag)} className="inline-flex items-center gap-2 rounded-full border border-[#D4AF37]/15 bg-[#D4AF37]/8 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#D4AF37]">
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => removeTag(tag)}
+                      className="inline-flex items-center gap-2 rounded-full border border-[#D4AF37]/15 bg-[#D4AF37]/8 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#D4AF37]"
+                    >
                       {tag}
                       <X size={10} />
                     </button>
@@ -412,7 +465,9 @@ export function ProductEnrichmentForm({
             <section className="rounded-[36px] border border-white/5 bg-white/[0.02] p-5 md:p-7">
               <div className="mb-4 space-y-1">
                 <Text className="text-[9px] uppercase tracking-[0.35em] text-[#D4AF37]">Estoque e tamanhos</Text>
-                <Heading as="h2" className="text-xl uppercase tracking-tight">Grade de estoque</Heading>
+                <Heading as="h2" className="text-xl uppercase tracking-tight">
+                  Grade de estoque
+                </Heading>
               </div>
 
               <div className="space-y-4">
@@ -458,9 +513,7 @@ export function ProductEnrichmentForm({
                             onChange={(event) => updateQuantity(size, event.target.value)}
                             className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none transition-colors focus:border-[#D4AF37]/40"
                           />
-                          <div className="min-w-20 text-right text-[9px] uppercase tracking-[0.24em] text-white/30">
-                            unidades
-                          </div>
+                          <div className="min-w-20 text-right text-[9px] uppercase tracking-[0.24em] text-white/30">unidades</div>
                           <StockDot quantity={quantity} />
                         </div>
                       );
@@ -473,7 +526,9 @@ export function ProductEnrichmentForm({
             <section className="rounded-[36px] border border-white/5 bg-white/[0.02] p-5 md:p-7">
               <div className="mb-4 space-y-1">
                 <Text className="text-[9px] uppercase tracking-[0.35em] text-[#D4AF37]">Publicação</Text>
-                <Heading as="h2" className="text-xl uppercase tracking-tight">Salvar inventário</Heading>
+                <Heading as="h2" className="text-xl uppercase tracking-tight">
+                  Salvar inventário
+                </Heading>
               </div>
 
               <div className="space-y-3">
@@ -487,25 +542,25 @@ export function ProductEnrichmentForm({
                 </div>
 
                 <input type="hidden" name="type" value={category} />
+                <input type="hidden" name="type" value={category} />
                 <input type="hidden" name="tags_json" value={JSON.stringify(tags)} />
                 <input
                   type="hidden"
                   name="variants_json"
-                  value={JSON.stringify(sizes.map((size) => ({
-                    size,
-                    quantity: Number(quantities[size] || 0),
-                    sku: `${sizeType}-${size}`.toLowerCase(),
-                    active: true,
-                  })))}
+                  value={JSON.stringify(
+                    sizes.map((size) => ({
+                      size,
+                      quantity: Number(quantities[size] || 0),
+                      sku: `${sizeType}-${size}`.toLowerCase(),
+                      active: true,
+                    }))
+                  )}
                 />
                 <input type="hidden" name="size_type" value={sizeType} />
                 <input type="hidden" name="return_to" value={returnTo} />
-                <input type="hidden" name="emotional_copy" value={emotionalCopy} />
-                <input type="hidden" name="tags" value={JSON.stringify(tags)} />
-                <input type="hidden" name="dominant_color" value={primaryColor} />
               </div>
 
-              <form id="product-form" action={createProduct} encType="multipart/form-data" className="mt-6">
+              <div className="mt-6">
                 <VenusButton
                   type="submit"
                   disabled={!file}
@@ -514,10 +569,10 @@ export function ProductEnrichmentForm({
                 >
                   Salvar produto
                 </VenusButton>
-              </form>
+              </div>
             </section>
           </aside>
-        </div>
+        </form>
       </div>
     </div>
   );

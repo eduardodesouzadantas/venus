@@ -1,136 +1,115 @@
 import OpenAI from "openai";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-// TODO: configurar nome "Venus — [nome da loja]" no Meta Business Manager
+import type { VenusContext, VenusIntent } from "./types";
 
-export interface VenusContext {
-  orgName: string;
-  orgSlug: string;
-  clientName: string;
-  clientPhone: string;
-  archetype?: string;
-  palette?: string;
-  fitPreference?: string;
-  mainIntention?: string;
-  styleBlock?: string;
-  productName?: string;
-  productCategory?: string;
-  productStyle?: string;
-  productPriceRange?: string;
-  availableSize?: string;
-  inStock?: boolean;
-  catalogSummary?: string;
-  conversationHistory: Array<{ sender: string; text: string }>;
-  conversationState:
-    | "first_message"
-    | "curiosity"
-    | "interest"
-    | "objection"
-    | "price_objection"
-    | "ready_to_buy"
-    | "needs_human"
-    | "general";
+const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
+
+function normalize(value: string) {
+  return value.trim();
 }
 
-export async function generateVenusReply(ctx: VenusContext): Promise<string> {
-  const systemPrompt = buildSystemPrompt(ctx);
-  const messages = buildMessages(ctx);
+function buildStateInstruction(state: VenusIntent): string {
+  const instructions: Record<VenusIntent, string> = {
+    primeira_mensagem: `primeira_mensagem: abra reconhecendo o perfil.`,
+    curiosidade: `curiosidade: conecte a peça ao arquétipo do cliente.`,
+    interesse: `interesse: reduza fricção e ofereça o próximo passo.`,
+    objecao: `objecao: valide a hesitação e reposicione a peça.`,
+    preco: `preco: nunca desconte; ofereça alternativa ou contexto de valor.`,
+    compra: `compra: facilite o fechamento e celebre em uma linha.`,
+    humano: `humano: transfira com contexto completo para a equipe.`,
+    sumiu: `sumiu: reengaje com contexto relevante e sem pressão.`,
+  };
+
+  return instructions[state];
+}
+
+function buildHistorySummary(ctx: VenusContext) {
+  const recent = ctx.history.slice(-6);
+  if (!recent.length) {
+    return "sem histórico relevante";
+  }
+
+  return recent
+    .map((entry) => {
+      const role = normalize(entry.sender).toLowerCase() === "venus" ? "venus" : "cliente";
+      return `${role}: ${entry.text}`;
+    })
+    .join(" | ");
+}
+
+function buildSystemPrompt(ctx: VenusContext): string {
+  return `Você é Venus, personal stylist da ${ctx.orgName}.
+Tem 15 anos de experiência em consultoria de imagem.
+
+CONTEXTO DO CLIENTE:
+- Nome: ${ctx.clientName}
+- Arquétipo: ${ctx.archetype}
+- Paleta: ${ctx.palette}
+- Fit: ${ctx.fit}
+- Intenção: ${ctx.intention}
+- Peça de interesse: ${ctx.productName || ctx.look || "não definida"}${ctx.productSize ? ` — Tamanho ${ctx.productSize}` : ""}
+- Estoque: ${ctx.stockSummary}
+- Histórico: ${buildHistorySummary(ctx)}
+- Catálogo: ${ctx.catalogSummary || "sem catálogo relevante"}
+
+COMO FALAR:
+- Linguagem elegante, direta, emocional — nunca robótica
+- Máximo 3 linhas por mensagem no WhatsApp
+- Nunca diga: certamente, claro!, com prazer, posso te ajudar?
+- Máximo 1 emoji por mensagem
+- Baseie cada resposta no arquétipo e contexto do cliente
+
+ESTADO DETECTADO: ${buildStateInstruction(ctx.state)}
+
+Estados possíveis e como agir:
+- primeira_mensagem: abra reconhecendo o perfil
+- curiosidade: conecte a peça ao arquétipo
+- interesse: reduza fricção, ofereça próximo passo
+- objecao: valide e reposicione
+- preco: nunca desconte, ofereça alternativa
+- compra: facilite, celebre, plante próxima semente
+- humano: transfira com contexto completo
+- sumiu: reengajamento com contexto relevante`;
+}
+
+function buildHistoryMessages(ctx: VenusContext, message: string) {
+  const normalizedCurrent = normalize(message).toLowerCase();
+  const history = [...ctx.history];
+
+  if (history.length > 0) {
+    const last = history[history.length - 1];
+    const lastText = normalize(last.text).toLowerCase();
+    if (last.sender !== "venus" && lastText === normalizedCurrent) {
+      history.pop();
+    }
+  }
+
+  return history.slice(-8).map((entry) => ({
+    role: (normalize(entry.sender).toLowerCase() === "venus" ? "assistant" : "user") as "user" | "assistant",
+    content: entry.text,
+  }));
+}
+
+export async function generateReply(context: VenusContext, message: string): Promise<string> {
+  if (!openai) {
+    return "";
+  }
 
   const response = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     max_tokens: 200,
-    temperature: 0.85,
+    temperature: 0.75,
     messages: [
-      { role: "system", content: systemPrompt },
-      ...messages,
+      { role: "system", content: buildSystemPrompt(context) },
+      ...buildHistoryMessages(context, message),
+      {
+        role: "user",
+        content: `MENSAGEM ATUAL DO CLIENTE: ${message}`,
+      },
     ],
   });
 
   return response.choices[0]?.message?.content?.trim() || "";
 }
 
-function buildSystemPrompt(ctx: VenusContext): string {
-  const hasOnboarding = ctx.archetype || ctx.mainIntention;
-  const hasProduct = ctx.productName;
-
-  return `Você é Venus, personal stylist da ${ctx.orgName}.
-
-Você tem 15 anos de experiência em consultoria de imagem e moda.
-Você conhece profundamente visagismo, teoria das cores, paletas sazonais,
-arquétipos de estilo, proporções corporais e psicologia da moda.
-Atende moda feminina, masculina e gênero neutro com igual maestria.
-
-${hasOnboarding ? `PERFIL DO CLIENTE:
-- Nome: ${ctx.clientName}
-- Arquétipo de estilo: ${ctx.archetype || "Em descoberta"}
-- Paleta: ${ctx.palette || "Versátil"}
-- Fit preferido: ${ctx.fitPreference || "A definir"}
-- Intenção principal: ${ctx.mainIntention || "Renovar o guarda-roupa"}
-- Bloqueio identificado: ${ctx.styleBlock || "Nenhum identificado"}`
-: `CLIENTE: ${ctx.clientName} — ainda não fez o perfil completo no app.`}
-
-${hasProduct ? `PRODUTO EM FOCO:
-- Peça: ${ctx.productName}
-- Categoria: ${ctx.productCategory || ""}
-- Estilo: ${ctx.productStyle || ""}
-- Faixa de preço: ${ctx.productPriceRange || ""}
-- Em estoque: ${ctx.inStock ? "Sim" : "Não — ofereça alternativa"}` : ""}
-
-${ctx.catalogSummary ? `CATÁLOGO DISPONÍVEL DA LOJA:\n${ctx.catalogSummary}` : ""}
-
-ESTADO ATUAL DA CONVERSA: ${getStateInstruction(ctx.conversationState)}
-
-COMO VOCÊ FALA:
-- Linguagem elegante, direta, emocional — nunca robótica
-- Frases curtas — máximo 3 linhas por resposta no WhatsApp
-- Nunca liste produtos como catálogo — apresente como curadoria pessoal
-- Nunca diga "posso te ajudar?" — você já está ajudando
-- Use o nome do cliente com naturalidade — não em toda mensagem
-- Máximo 1 emoji por mensagem e só quando reforçar emoção real
-- Nunca use: "certamente", "claro!", "com prazer", "olá!", "oi!"
-- Não responda com mais de 4 linhas em um único balão
-- Fale sobre roupa com emoção, não com especificação técnica
-  Ex: não "blazer slim fit alfaiataria" — mas "a peça que faz você
-  entrar numa sala e as pessoas perceberem antes de você falar"
-
-NUNCA:
-- Invente estoque que não existe
-- Fale de produtos fora do catálogo da loja
-- Pareça automação ou robô
-- Seja genérica
-
-SEMPRE:
-- Baseie cada recomendação no arquétipo e contexto do cliente
-- Mantenha o fio condutor — não mude de assunto sem motivo
-- Quando o cliente comprar: celebre brevemente e plante a próxima semente`;
-}
-
-function getStateInstruction(state: VenusContext["conversationState"]): string {
-  const instructions: Record<VenusContext["conversationState"], string> = {
-    first_message: `PRIMEIRA MENSAGEM — Abra reconhecendo o perfil sem ser genérica. 
-      Conecte o produto ao arquétipo do cliente imediatamente.
-      Ex: "Vi que você busca mais presença. Essa peça é exatamente isso — estrutura sem esforço."`,
-    curiosity: `CURIOSIDADE — Responda com contexto de estilo, não especificação técnica.
-      Conecte a peça ao arquétipo e ao momento de vida do cliente.`,
-    interest: `INTERESSE DETECTADO — Reduza fricção ao máximo.
-      Ofereça o próximo passo mais simples. Ex: "Tenho o M disponível agora. Quer garantir?"`,
-    objection: `OBJEÇÃO — Não force. Valide a hesitação, reposicione.
-      Ex: "Faz sentido querer ter certeza. Me conta — você usaria mais para X ou Y?"`,
-    price_objection: `OBJEÇÃO DE PREÇO — Nunca desconte. Reposicione o valor.
-      Ou ofereça alternativa do catálogo com mesmo resultado visual.`,
-    ready_to_buy: `PRONTO PARA COMPRAR — Seja direta e facilite.
-      Dê o próximo passo claro e simples. Celebre a escolha brevemente.`,
-    needs_human: `PEDE HUMANO — Transfira com contexto e calor humano.
-      "Vou chamar a equipe da loja. Eles já sabem o que você está buscando."`,
-    general: `CONVERSA GERAL — Mantenha o tom de consultora. 
-      Guie sutilmente de volta para a descoberta do estilo e produtos.`,
-  };
-  return instructions[state];
-}
-
-function buildMessages(ctx: VenusContext) {
-  return ctx.conversationHistory.slice(-8).map((msg) => ({
-    role: (msg.sender === "user" ? "user" : "assistant") as "user" | "assistant",
-    content: msg.text,
-  }));
-}
+export const generateVenusReply = generateReply;

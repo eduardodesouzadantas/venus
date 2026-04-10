@@ -1,70 +1,261 @@
-import { VenusContext } from "./VenusStylist";
+import { createAdminClient } from "@/lib/supabase/admin";
+import type { VenusContext, VenusConversationMessage } from "./types";
 
-export async function loadConversationContext(
-  admin: any,
-  orgId: string,
-  orgSlug: string,
-  orgName: string,
-  userPhone: string,
-  userName: string,
-  conversationId: string
-): Promise<VenusContext> {
-  const { data: messages } = await admin
-    .from("whatsapp_messages")
-    .select("sender, text, created_at")
-    .eq("conversation_id", conversationId)
-    .order("created_at", { ascending: false })
-    .limit(8);
+function normalize(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
 
-  const history = (messages || []).reverse().map((m: any) => ({
-    sender: m.sender,
-    text: m.text,
-  }));
+function asRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
 
-  const { data: lead } = await admin
-    .from("leads")
-    .select("name, metadata, intent_score")
-    .eq("org_id", orgId)
-    .eq("whatsapp_key", userPhone)
-    .maybeSingle();
+function collectRecords(row: Record<string, unknown>) {
+  return [row, asRecord(row.metadata), asRecord(row.payload), asRecord(row.data), asRecord(row.context), asRecord(row.onboarding)];
+}
 
-  const { data: savedResult } = await admin
-    .from("saved_results")
-    .select("payload")
-    .eq("org_id", orgId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+function readNestedString(value: unknown, path: string[]) {
+  let cursor: unknown = value;
+  for (const key of path) {
+    if (!cursor || typeof cursor !== "object" || Array.isArray(cursor)) {
+      return "";
+    }
+    cursor = (cursor as Record<string, unknown>)[key];
+  }
+  return normalize(cursor);
+}
 
-  const { data: products } = await admin
-    .from("products")
-    .select("name, category, style, price_range, primary_color")
-    .eq("org_id", orgId)
-    .limit(5);
+function pickString(row: Record<string, unknown>, paths: string[][]) {
+  const candidates = collectRecords(row);
+  for (const candidate of candidates) {
+    for (const path of paths) {
+      const direct = path.length === 1 ? normalize(candidate[path[0]]) : readNestedString(candidate, path);
+      if (direct) {
+        return direct;
+      }
+    }
+  }
+  return "";
+}
 
-  const catalogSummary =
-    products?.map((p: any) => `• ${p.name} (${p.category || ""}) — ${p.style || ""} — ${p.price_range || ""}`).join("\n") || "";
+function collectFromRows(rows: Array<Record<string, unknown> | null | undefined>, paths: string[][]) {
+  for (const row of rows) {
+    if (!row) continue;
+    const value = pickString(row, paths);
+    if (value) {
+      return value;
+    }
+  }
+  return "";
+}
 
-  const meta = (lead?.metadata || {}) as Record<string, any>;
-  const payload = (savedResult?.payload || {}) as Record<string, any>;
+function formatCatalogLine(product: Record<string, unknown>, stock: number) {
+  const name = normalize(product.name) || "Produto sem nome";
+  const category = normalize(product.category) || "produto";
+  const style = normalize(product.style) || "estilo indefinido";
+  const color = normalize(product.primary_color) || "";
+  const emotionalCopy = normalize(product.emotional_copy);
+  const tags = Array.isArray(product.tags) ? product.tags.map((tag) => normalize(tag)).filter(Boolean).slice(0, 5) : [];
+
+  const parts = [`• ${name}`, category, style, `estoque ${stock}`];
+
+  if (color) {
+    parts.push(color);
+  }
+
+  if (tags.length) {
+    parts.push(`tags ${tags.join(", ")}`);
+  }
+
+  if (emotionalCopy) {
+    parts.push(emotionalCopy.slice(0, 120));
+  }
+
+  return parts.join(" — ");
+}
+
+function buildStockSummary(productName: string, productSize: string, productStock: number) {
+  if (!productName) {
+    return "Sem peça destacada no momento.";
+  }
+
+  const sizePart = productSize ? `Tamanho ${productSize}` : "Tamanho não informado";
+  if (productStock > 5) {
+    return `${productName} — ${sizePart} — estoque saudável com ${productStock} unidades.`;
+  }
+  if (productStock > 0) {
+    return `${productName} — ${sizePart} — estoque reduzido com ${productStock} unidades.`;
+  }
+  return `${productName} — ${sizePart} — sem estoque disponível agora.`;
+}
+
+export async function loadContext(phone_number: string, org_id: string): Promise<VenusContext> {
+  const admin = createAdminClient();
+
+  const { data: org } = await admin.from("orgs").select("id, slug, name").eq("id", org_id).maybeSingle();
+  if (!org) {
+    throw new Error("org_not_found");
+  }
+
+  let onboardingData: Record<string, unknown> | null = null;
+  try {
+    const { data } = await admin
+      .from("onboarding_sessions")
+      .select("*")
+      .eq("org_id", org_id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    onboardingData = asRecord(data);
+  } catch {
+    onboardingData = null;
+  }
+
+  let savedPayload: Record<string, unknown> | null = null;
+  try {
+    const { data } = await admin
+      .from("saved_results")
+      .select("payload, created_at")
+      .eq("org_id", org_id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    savedPayload = asRecord(data?.payload);
+  } catch {
+    savedPayload = null;
+  }
+
+  let productsRows: Array<Record<string, unknown>> = [];
+  try {
+    const { data } = await admin
+      .from("products")
+      .select("id, name, category, style, primary_color, emotional_copy, tags, size_type, created_at")
+      .eq("org_id", org_id)
+      .order("created_at", { ascending: false })
+      .limit(10);
+    productsRows = (data || []) as Array<Record<string, unknown>>;
+  } catch {
+    productsRows = [];
+  }
+
+  let conversationData: Record<string, unknown> | null = null;
+  try {
+    const { data } = await admin
+      .from("whatsapp_conversations")
+      .select("id, user_name, user_phone, user_context, status, last_message, created_at")
+      .eq("org_slug", normalize(org.slug))
+      .eq("user_phone", phone_number)
+      .maybeSingle();
+    conversationData = asRecord(data);
+  } catch {
+    conversationData = null;
+  }
+
+  const conversationId = normalize(conversationData?.id);
+
+  let messages: VenusConversationMessage[] = [];
+  if (conversationId) {
+    try {
+      const { data } = await admin
+        .from("whatsapp_messages")
+        .select("sender, text, created_at")
+        .eq("conversation_id", conversationId)
+        .order("created_at", { ascending: true })
+        .limit(10);
+      messages = ((data || []) as Array<Record<string, unknown>>).map((message) => ({
+        sender: normalize(message.sender) || "user",
+        text: normalize(message.text),
+        created_at: normalize(message.created_at) || null,
+      }));
+    } catch {
+      messages = [];
+    }
+  }
+
+  const onboarding = onboardingData || {};
+  const saved = savedPayload || {};
+
+  const clientName =
+    collectFromRows([asRecord(conversationData?.user_context), onboarding, saved], [["name"], ["client_name"], ["customer_name"], ["user_name"]]) ||
+    normalize(conversationData?.user_name) ||
+    "Cliente Venus";
+
+  const archetype = collectFromRows([onboarding, asRecord(onboarding.payload), asRecord(onboarding.metadata), saved], [["archetype"], ["user_archetype"], ["profile", "archetype"], ["payload", "archetype"]]);
+  const palette = collectFromRows([onboarding, asRecord(onboarding.payload), asRecord(onboarding.metadata), saved], [["palette"], ["paletteFamily"], ["palette", "name"], ["profile", "palette"]]);
+  const fit = collectFromRows([onboarding, asRecord(onboarding.payload), asRecord(onboarding.metadata), saved], [["fit"], ["fitPreference"], ["fit_preference"], ["profile", "fit"]]);
+  const intention = collectFromRows([onboarding, asRecord(onboarding.payload), asRecord(onboarding.metadata), saved], [["intention"], ["mainIntention"], ["main_intention"], ["goal"], ["profile", "intention"]]);
+
+  const look = collectFromRows([saved, asRecord(onboarding.payload), onboarding], [["look"], ["product_name"], ["productName"], ["product"], ["focus_product"], ["product_interest"]]);
+  const productName = collectFromRows([saved, asRecord(onboarding.payload), onboarding], [["product_name"], ["productName"], ["focus_product"], ["product_interest"], ["look"]]);
+  const productCategory = collectFromRows([saved, asRecord(onboarding.payload), onboarding], [["product_category"], ["productCategory"], ["category"]]);
+  const productStyle = collectFromRows([saved, asRecord(onboarding.payload), onboarding], [["product_style"], ["productStyle"], ["style"]]);
+  const productColor = collectFromRows([saved, asRecord(onboarding.payload), onboarding], [["product_color"], ["dominant_color"], ["color"], ["primary_color"]]);
+  const productSize = collectFromRows([saved, asRecord(onboarding.payload), onboarding], [["size"], ["product_size"], ["productSize"], ["variant_size"]]);
+
+  const focusedProductName = normalize(productName || look).toLowerCase();
+  const stockByProductId = new Map<string, number>();
+
+  if (productsRows.length > 0) {
+    const ids = productsRows.map((product) => normalize(product.id)).filter(Boolean);
+    if (ids.length > 0) {
+      try {
+        const { data } = await admin
+          .from("product_variants")
+          .select("product_id, size, quantity, active")
+          .eq("org_id", org_id)
+          .in("product_id", ids);
+
+        for (const row of (data || []) as Array<Record<string, unknown>>) {
+          const productId = normalize(row.product_id);
+          if (!productId || row.active === false) continue;
+          const quantity = Number(row.quantity || 0);
+          stockByProductId.set(productId, (stockByProductId.get(productId) || 0) + (Number.isFinite(quantity) ? quantity : 0));
+        }
+      } catch {
+        // Sem variantes ainda.
+      }
+    }
+  }
+
+  let productStock = 0;
+  const catalogLines = productsRows.map((product) => {
+    const productId = normalize(product.id);
+    const stock = stockByProductId.get(productId) || 0;
+    if (focusedProductName && normalize(product.name).toLowerCase().includes(focusedProductName)) {
+      productStock = stock;
+    }
+    return formatCatalogLine(product, stock);
+  });
+
+  if (!productStock && productsRows[0]) {
+    productStock = stockByProductId.get(normalize(productsRows[0].id)) || 0;
+  }
+
+  const resolvedProductName = productName || normalize(productsRows[0]?.name) || "";
+  const resolvedProductSize = productSize || normalize((productsRows[0] as Record<string, unknown> | undefined)?.size_type) || "";
+  const stockSummary = buildStockSummary(resolvedProductName, resolvedProductSize, productStock);
 
   return {
-    orgName,
-    orgSlug,
-    clientName: lead?.name || userName,
-    clientPhone: userPhone,
-    archetype: meta.archetype || payload.archetype,
-    palette: meta.palette || payload.palette,
-    fitPreference: meta.fit_preference || payload.fitPreference,
-    mainIntention: meta.main_intention || payload.mainIntention,
-    styleBlock: meta.style_block || payload.styleBlock,
-    productName: payload.product_name || payload.productName,
-    productCategory: payload.product_category || payload.category,
-    productStyle: payload.product_style || payload.style,
-    productPriceRange: payload.price_range,
-    inStock: true,
-    catalogSummary,
-    conversationHistory: history,
-    conversationState: "general",
+    orgId: normalize(org.id),
+    orgSlug: normalize(org.slug),
+    orgName: normalize(org.name) || normalize(org.slug),
+    clientName,
+    clientPhone: phone_number,
+    archetype: archetype || "Em descoberta",
+    palette: palette || "Paleta aberta",
+    fit: fit || "A definir",
+    intention: intention || "Sem intenção registrada",
+    look: look || resolvedProductName,
+    productName: resolvedProductName,
+    productCategory: productCategory || normalize(productsRows[0]?.category) || "",
+    productStyle: productStyle || normalize(productsRows[0]?.style) || "",
+    productColor: productColor || normalize(productsRows[0]?.primary_color) || "",
+    productSize: resolvedProductSize,
+    productStock,
+    stockSummary,
+    catalogSummary: catalogLines.join("\n"),
+    history: messages,
+    state: "curiosidade",
   };
 }
+
+export const loadConversationContext = loadContext;

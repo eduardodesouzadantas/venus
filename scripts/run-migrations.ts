@@ -7,6 +7,7 @@ dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 const MIGRATIONS = [
   "docs/org_branding.sql",
   "docs/merchant_groups.sql",
+  "docs/products_enrichment.sql",
   "docs/product_variants.sql",
   "docs/tryon_events.sql",
   "docs/share_system.sql",
