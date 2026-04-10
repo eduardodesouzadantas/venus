@@ -150,7 +150,7 @@ export function InboxIntelPanel({
                   {Math.round(conversation.user.intentScore)}%
                 </span>
               </div>
-              <div className="h-[4px] overflow-hidden bg-[#1a1a1a]">
+              <div className="mt-[6px] h-[3px] overflow-hidden bg-[#1a1a1a]">
                 <div
                   className="h-full bg-gradient-to-r from-[#00FF88] via-[#C9A84C] to-[#FF3B3B]"
                   style={{ width: `${Math.max(0, Math.min(100, conversation.user.intentScore))}%` }}

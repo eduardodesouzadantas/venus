@@ -10,7 +10,6 @@ import {
   getConversationStatusMeta,
   groupMessages,
   formatShortTime,
-  MESSAGE_STYLE_META,
 } from "./inbox-utils";
 
 type InboxChatPanelProps = {
@@ -69,6 +68,39 @@ export function InboxChatPanel({
   const groupedMessages = groupMessages(conversation.messages);
   const headerStatusMeta = getConversationStatusMeta(conversation.status);
 
+  const getMessageStyle = (sender: string) => {
+    if (sender === "venus" || sender === "ai") {
+      return {
+        label: "VENUS IA",
+        labelColor: "#00FF88",
+        background: "#0a1a0a",
+        borderLeft: "2px solid #00FF88",
+        color: "#b8ffb8",
+        alignClass: "items-end",
+      };
+    }
+
+    if (sender === "merchant" || sender === "agent") {
+      return {
+        label: "VOCÊ",
+        labelColor: "#C9A84C",
+        background: "#1a1500",
+        borderLeft: "2px solid #C9A84C",
+        color: "#fff0c0",
+        alignClass: "items-end",
+      };
+    }
+
+    return {
+      label: "CLIENTE",
+      labelColor: "#555",
+      background: "#141414",
+      borderLeft: "2px solid #2a2a2a",
+      color: "#e0e0e0",
+      alignClass: "items-start",
+    };
+  };
+
   return (
     <main className="flex min-h-0 flex-1 flex-col border-r border-white/5 bg-[#0a0a0a]">
       <header className="flex items-center justify-between gap-4 border-b border-white/8 bg-[#111] px-5 py-4">
@@ -117,23 +149,32 @@ export function InboxChatPanel({
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
         <div className="space-y-5">
           {groupedMessages.map((group, index) => {
-            const meta = MESSAGE_STYLE_META[group.sender] ?? MESSAGE_STYLE_META.user;
+            const meta = getMessageStyle(group.sender);
             return (
               <div key={`${group.sender}-${index}`} className={`flex flex-col ${meta.alignClass}`}>
-                <div className={`mb-1 px-1 text-[9px] uppercase tracking-[0.45em] ${meta.labelClass}`}>
+                <div className="mb-1 px-1 text-[9px] uppercase tracking-[0.15em]" style={{ color: meta.labelColor }}>
                   {meta.label}
                 </div>
                 <div className="w-full max-w-[82%] space-y-2">
                   {group.messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`border-l-2 ${meta.borderClass} ${meta.bubbleClass} rounded-none px-4 py-4`}
-                    >
-                      <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed">
-                        {message.text}
-                      </p>
-                      <div className="mt-2 text-right text-[10px] uppercase tracking-[0.25em] text-[#444]">
-                        {formatShortTime(message.timestamp)}
+                    <div key={message.id} className="flex flex-col">
+                      <div
+                        className="border-l-2 rounded-none px-4 py-3"
+                        style={{
+                          background: meta.background,
+                          borderLeft: meta.borderLeft,
+                          color: meta.color,
+                          borderRadius: 0,
+                          padding: "12px 16px",
+                          marginBottom: "2px",
+                        }}
+                      >
+                        <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed" style={{ color: meta.color }}>
+                          {message.text}
+                        </p>
+                        <div className="mt-2 text-right text-[10px] uppercase tracking-[0.25em] text-[#444]">
+                          {formatShortTime(message.timestamp)}
+                        </div>
                       </div>
                     </div>
                   ))}
