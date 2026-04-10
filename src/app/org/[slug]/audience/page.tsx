@@ -295,7 +295,7 @@ export default async function MerchantAudiencePage({ params }: { params: Promise
         <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between rounded-[32px] border border-[#1e2820] bg-[#0f1410] p-5">
           <div className="space-y-2">
             <Text className="text-[10px] uppercase tracking-[0.4em] text-[#C9A84C]">Mission control / audiência</Text>
-            <div className="font-mono text-[18px] font-medium tracking-tight text-[#e8f0e9]">Audiência</div>
+            <div className="font-mono text-[18px] font-medium tracking-tight text-[#e8f0e9]">AUDIÊNCIA — PERFIS E ORIGENS</div>
             <Text className="text-xs text-[#6b7d6c]">Leitura das sessões de onboarding por org_id.</Text>
           </div>
 

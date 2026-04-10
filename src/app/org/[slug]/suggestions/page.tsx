@@ -247,7 +247,7 @@ export default async function MerchantSuggestionsPage({ params }: { params: Prom
         <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between rounded-[32px] border border-[#1e2820] bg-[#0f1410] p-5">
           <div className="space-y-2">
             <Text className="text-[10px] uppercase tracking-[0.4em] text-[#C9A84C]">Strategic Advisor</Text>
-            <div className="font-mono text-[18px] font-medium tracking-tight text-[#e8f0e9]">Sugestões IA</div>
+            <div className="font-mono text-[18px] font-medium tracking-tight text-[#e8f0e9]">SUGESTÕES IA — PLANO DE AÇÃO</div>
             <Text className="text-xs text-[#6b7d6c]">Lista operacional com prioridade e recomendação.</Text>
           </div>
 

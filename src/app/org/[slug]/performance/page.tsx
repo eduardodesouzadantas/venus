@@ -290,9 +290,9 @@ export default async function MerchantPerformancePage({ params }: { params: Prom
 
       <main className="flex-1 overflow-y-auto p-6 md:p-8">
         <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between rounded-[32px] border border-[#1e2820] bg-[#0f1410] p-5">
-          <div className="space-y-2">
+            <div className="space-y-2">
             <Text className="text-[10px] uppercase tracking-[0.4em] text-[#C9A84C]">Mission control / performance</Text>
-            <div className="font-mono text-[18px] font-medium tracking-tight text-[#e8f0e9]">Performance</div>
+            <div className="font-mono text-[18px] font-medium tracking-tight text-[#e8f0e9]">PERFORMANCE — TRY-ONS E CONVERSÃO</div>
             <Text className="text-xs text-[#6b7d6c]">Leitura dos últimos 30 dias com base em tryon_events e crm_leads.</Text>
           </div>
 
