@@ -3,6 +3,7 @@ import "server-only";
 import { listAgencyOrgRows } from "@/lib/agency";
 import { normalizeAgencyTimeRange, resolveAgencyTimeRangeWindow, type AgencyTimeRange } from "@/lib/agency/time-range";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { queryWithTimeout } from "@/lib/supabase/query-timeout";
 import type { AgencyOrgRow } from "@/lib/agency";
 import {
   buildOrgSoftCapSummary,
@@ -147,12 +148,30 @@ async function listAgencyBillingRowsWithFilters(filters: AgencyBillingFilters): 
     whatsappConversationsResult,
     whatsappMessagesResult,
   ] = await Promise.all([
-    admin.from("products").select("org_id, created_at").order("created_at", { ascending: false }).limit(50),
-    admin.from("leads").select("org_id, created_at, updated_at, last_interaction_at").order("created_at", { ascending: false }).limit(50),
-    admin.from("saved_results").select("org_id, created_at").order("created_at", { ascending: false }).limit(50),
-    admin.from("tenant_events").select("org_id, created_at").order("created_at", { ascending: false }).limit(50),
-    admin.from("whatsapp_conversations").select("org_slug, created_at").order("created_at", { ascending: false }).limit(50),
-    admin.from("whatsapp_messages").select("org_slug, created_at").order("created_at", { ascending: false }).limit(50),
+    queryWithTimeout(
+      admin.from("products").select("org_id, created_at").order("created_at", { ascending: false }).limit(50),
+      { data: [], error: null }
+    ),
+    queryWithTimeout(
+      admin.from("leads").select("org_id, created_at, updated_at, last_interaction_at").order("created_at", { ascending: false }).limit(50),
+      { data: [], error: null }
+    ),
+    queryWithTimeout(
+      admin.from("saved_results").select("org_id, created_at").order("created_at", { ascending: false }).limit(50),
+      { data: [], error: null }
+    ),
+    queryWithTimeout(
+      admin.from("tenant_events").select("org_id, created_at").order("created_at", { ascending: false }).limit(50),
+      { data: [], error: null }
+    ),
+    queryWithTimeout(
+      admin.from("whatsapp_conversations").select("org_slug, created_at").order("created_at", { ascending: false }).limit(50),
+      { data: [], error: null }
+    ),
+    queryWithTimeout(
+      admin.from("whatsapp_messages").select("org_slug, created_at").order("created_at", { ascending: false }).limit(50),
+      { data: [], error: null }
+    ),
   ]);
 
   if (productsResult.error) throw new Error(`Failed to load billing products: ${productsResult.error.message}`);

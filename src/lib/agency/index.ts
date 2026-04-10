@@ -4,6 +4,7 @@ import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createEmptyLeadStatusCounts, isLeadStatus, type LeadStatus } from "@/lib/leads";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { queryWithTimeout } from "@/lib/supabase/query-timeout";
 import { collectOperationalSignalSummary, type OperationalSignalEventRow, type OperationalSignalSummary } from "@/lib/agency/operational-signals";
 import { buildOperationalAgingSummary, type AgencyAgingSummary, type AgencyAgingLeadLike } from "@/lib/agency/aging-summary";
 import { resolveAgencyTimeRangeWindow, type AgencyTimeRange } from "@/lib/agency/time-range";
@@ -178,19 +179,46 @@ async function loadAgencySnapshot() {
     whatsappConversationsResult,
     whatsappMessagesResult,
   ] = await Promise.all([
-    admin.from("orgs").select(ORG_SELECT_COLUMNS).order("created_at", { ascending: false }).limit(50),
-    admin.from("org_members").select("org_id, user_id, role, status, created_at, updated_at").order("created_at", { ascending: false }).limit(50),
-    admin.from("products").select("org_id, created_at").order("created_at", { ascending: false }).limit(50),
-    admin.from("leads").select("org_id, status, next_follow_up_at, last_interaction_at, created_at, updated_at").order("created_at", { ascending: false }).limit(50),
-    admin.from("saved_results").select("org_id, created_at, updated_at").order("created_at", { ascending: false }).limit(50),
-    admin
-      .from("org_usage_daily")
-      .select("org_id, usage_date, ai_tokens, ai_requests, messages_sent, events_count, revenue_cents, cost_cents, leads, updated_at")
-      .order("usage_date", { ascending: false })
-      .limit(50),
-    admin.from("tenant_events").select("org_id, created_at, event_type").order("created_at", { ascending: false }).limit(50),
-    admin.from("whatsapp_conversations").select("org_slug, created_at").order("created_at", { ascending: false }).limit(50),
-    admin.from("whatsapp_messages").select("org_slug, created_at").order("created_at", { ascending: false }).limit(50),
+    queryWithTimeout(
+      admin.from("orgs").select(ORG_SELECT_COLUMNS).order("created_at", { ascending: false }).limit(50),
+      { data: [], error: null }
+    ),
+    queryWithTimeout(
+      admin.from("org_members").select("org_id, user_id, role, status, created_at, updated_at").order("created_at", { ascending: false }).limit(50),
+      { data: [], error: null }
+    ),
+    queryWithTimeout(
+      admin.from("products").select("org_id, created_at").order("created_at", { ascending: false }).limit(50),
+      { data: [], error: null }
+    ),
+    queryWithTimeout(
+      admin.from("leads").select("org_id, status, next_follow_up_at, last_interaction_at, created_at, updated_at").order("created_at", { ascending: false }).limit(50),
+      { data: [], error: null }
+    ),
+    queryWithTimeout(
+      admin.from("saved_results").select("org_id, created_at, updated_at").order("created_at", { ascending: false }).limit(50),
+      { data: [], error: null }
+    ),
+    queryWithTimeout(
+      admin
+        .from("org_usage_daily")
+        .select("org_id, usage_date, ai_tokens, ai_requests, messages_sent, events_count, revenue_cents, cost_cents, leads, updated_at")
+        .order("usage_date", { ascending: false })
+        .limit(50),
+      { data: [], error: null }
+    ),
+    queryWithTimeout(
+      admin.from("tenant_events").select("org_id, created_at, event_type").order("created_at", { ascending: false }).limit(50),
+      { data: [], error: null }
+    ),
+    queryWithTimeout(
+      admin.from("whatsapp_conversations").select("org_slug, created_at").order("created_at", { ascending: false }).limit(50),
+      { data: [], error: null }
+    ),
+    queryWithTimeout(
+      admin.from("whatsapp_messages").select("org_slug, created_at").order("created_at", { ascending: false }).limit(50),
+      { data: [], error: null }
+    ),
   ]);
 
   if (orgsResult.error) {
@@ -474,11 +502,7 @@ export async function getAgencyOperationalFrictionSummary(range: AgencyTimeRange
     query.gte("created_at", `${window.dateFrom}T00:00:00`);
   }
 
-  const { data, error } = await query;
-
-  if (error) {
-    return collectOperationalSignalSummary([]);
-  }
+  const { data } = await queryWithTimeout(query, { data: [], error: null });
 
   return collectOperationalSignalSummary((data || []) as OperationalSignalEventRow[]);
 }
