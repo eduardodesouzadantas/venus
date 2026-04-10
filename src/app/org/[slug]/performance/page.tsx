@@ -264,14 +264,13 @@ export default async function MerchantPerformancePage({ params }: { params: Prom
     <div className="min-h-screen bg-[#080c0a] text-[#e8f0e9] flex">
       <aside className="w-72 flex-shrink-0 border-r border-[#1e2820] bg-[#0f1410] sticky top-0 h-screen p-5 flex flex-col gap-6">
         <div className="rounded-[28px] border border-[#1e2820] bg-[#141a15] p-4">
-          <Text className="text-[9px] uppercase tracking-[0.35em] text-[#6b7d6c]">Painel do lojista</Text>
+          <Text className="text-[9px] uppercase tracking-[0.35em] text-[#C9A84C]">Venus Engine</Text>
           <div className="mt-2 flex items-center justify-between gap-3">
-            <Heading as="h2" className="text-lg tracking-[0.25em] uppercase text-[#C9A84C]">
-              {displayName}
+            <Heading as="h2" className="text-sm tracking-[0.2em] uppercase text-[#e8f0e9] truncate max-w-[160px]">
+              {org.name ? org.name.slice(0, 16) + (org.name.length > 16 ? "..." : "") : (org.slug?.slice(0, 16) || slug)}
             </Heading>
             <StatusDot tone={org.status === "active" && !org.kill_switch ? "green" : org.status === "blocked" ? "red" : "amber"} />
           </div>
-          <Text className="mt-2 text-[10px] text-[#6b7d6c]">{org.slug}</Text>
         </div>
 
         <nav className="flex-1 space-y-2">
@@ -290,23 +289,19 @@ export default async function MerchantPerformancePage({ params }: { params: Prom
       </aside>
 
       <main className="flex-1 overflow-y-auto p-6 md:p-8">
-        <header className="mb-6 flex flex-col gap-5 rounded-[32px] border border-[#1e2820] bg-[#0f1410] p-5 md:flex-row md:items-end md:justify-between">
+        <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between rounded-[32px] border border-[#1e2820] bg-[#0f1410] p-5">
           <div className="space-y-2">
             <Text className="text-[10px] uppercase tracking-[0.4em] text-[#C9A84C]">Mission control / performance</Text>
-            <Heading as="h1" className="text-3xl md:text-4xl uppercase tracking-tighter leading-none">
-              Try-ons, conversão e produtos mais testados
-            </Heading>
-            <Text className="max-w-2xl text-sm text-[#6b7d6c]">
-              Leitura dos últimos 30 dias com base em `tryon_events` e `crm_leads` da mesma org.
-            </Text>
+            <div className="font-mono text-[18px] font-medium tracking-tight text-[#e8f0e9]">Performance</div>
+            <Text className="text-xs text-[#6b7d6c]">Leitura dos últimos 30 dias com base em tryon_events e crm_leads.</Text>
           </div>
 
-          <div className="flex flex-wrap gap-3">
-            <div className="rounded-full border border-[#1e2820] bg-[#141a15] px-4 py-3 text-[10px] uppercase tracking-[0.3em] text-[#00ff88]">
-              <span className="mr-2 inline-flex h-2 w-2 rounded-full bg-[#00ff88] align-middle" />
-              Tempo real
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-1.5 rounded-full border border-[#1e2820] bg-[#141a15] px-4 py-2 text-[10px] uppercase tracking-[0.25em] text-[#00ff88]">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#00ff88] animate-pulse" />
+              <span>● TEMPO REAL</span>
             </div>
-            <div className="rounded-full border border-[#1e2820] bg-[#141a15] px-4 py-3 text-[10px] uppercase tracking-[0.3em] text-[#C9A84C]">
+            <div className="rounded-full border border-[#1e2820] bg-[#141a15] px-4 py-2 text-[10px] uppercase tracking-[0.25em] text-[#C9A84C]">
               {formatNumber(data.tryonsCount)} try-ons
             </div>
           </div>
