@@ -1,263 +1,105 @@
 import { WhatsAppConversation, SmartReplySuggestion } from "@/types/whatsapp";
+import {
+  buildFashionConsultationSnapshot,
+  buildFashionConsultativeReply,
+  type FashionReplyAngle,
+  type FashionReplyTone,
+} from "@/lib/whatsapp/fashion-consultant";
 
-type ReplyTone = "direct" | "consultive" | "exploratory";
+const ANGLE_PRIORITY: FashionReplyAngle[] = ["closing", "price", "fit", "objection", "desire", "follow_up"];
 
-type LookSummaryItem = {
-  id: string;
-  name: string;
-  intention: string;
-  type: string;
-  explanation: string;
-  whenToWear: string;
-};
-
-/**
- * Heuristic-based Smart Replies Generator for Venus Engine.
- * It keeps the current angles, but adapts tone and references using the hydrated customer context.
- */
 export function generateSmartReplies(conversation: WhatsAppConversation): SmartReplySuggestion[] {
   const lastMsg = conversation.messages[conversation.messages.length - 1];
-  if (!lastMsg || lastMsg.sender !== "user") return [];
+  if (!lastMsg || lastMsg.sender !== "user") return [] as SmartReplySuggestion[];
 
   const text = lastMsg.text.toLowerCase();
-  const { intentScore, styleIdentity, name, imageGoal, lookSummary } = conversation.user;
-  const firstName = name.split(" ")[0];
-  const topLook = lookSummary?.[0];
-  const secondLook = lookSummary?.[1];
-  const tone = getReplyTone(intentScore);
-  const goalLine = buildGoalLine(imageGoal, styleIdentity);
-  const lookLine = buildLookLine(topLook, secondLook, styleIdentity);
+  const snapshot = buildFashionConsultationSnapshot(conversation);
+  const tone = getReplyTone(snapshot.intentScore);
 
-  // 1. Detect Core Intent Signals
-  const isDoubtfulPrice = ["quanto", "preco", "valor", "pagar", "desconto", "parcela", "custar", "esta"].some((w) => text.includes(w));
-  const isDoubtfulFit = ["tamanho", "combina", "perfil", "cor", "veste", "corpo", "ombro", "cai"].some((w) => text.includes(w));
-  const isReadyToClose =
-    ["fechar", "comprar", "quero", "agora", "link", "fechamento", "manda", "pagina"].some((w) => text.includes(w)) || intentScore > 85;
+  const isDoubtfulPrice = hasAny(text, ["quanto", "preco", "valor", "pagar", "desconto", "parcela", "custar"]);
+  const isDoubtfulFit = hasAny(text, ["tamanho", "combina", "perfil", "cor", "veste", "corpo", "ombro", "cai"]);
+  const isReadyToClose = hasAny(text, ["fechar", "comprar", "quero", "agora", "link", "fechamento", "manda", "pagina"]) || snapshot.intentScore > 85;
+  const needsSupport = snapshot.intentScore < 45 && snapshot.tryOnCount === 0 && snapshot.viewedProductsCount === 0;
 
   const suggestions: SmartReplySuggestion[] = [];
 
-  // --- ANGLE 1: CLOSING ---
-  if (isReadyToClose) {
-    suggestions.push({
-      id: "close-1",
-      label: "Focar em Link",
-      angle: "closing",
-      text: buildClosingReply({
-        tone,
-        firstName,
-        styleIdentity,
-        goalLine,
-        lookLine,
-        direct: true,
-      }),
-      recommendedFor: "Alta Intencao",
-      confidence: 0.95,
-    });
-  } else {
-    suggestions.push({
-      id: "close-2",
-      label: "Decisao Estrategica",
-      angle: "closing",
-      text: buildClosingReply({
-        tone,
-        firstName,
-        styleIdentity,
-        goalLine,
-        lookLine,
-        direct: false,
-      }),
-      recommendedFor: "Avanco de Funil",
-      confidence: 0.85,
-    });
-  }
+  suggestions.push({
+    id: isReadyToClose ? "close-strong" : "close-guided",
+    label: isReadyToClose ? "Fechar com clareza" : "Conduzir para decisao",
+    angle: "closing",
+    text: buildFashionConsultativeReply(snapshot, "closing", tone),
+    recommendedFor: isReadyToClose ? "Alta intenção" : "Avanco de funil",
+    confidence: isReadyToClose ? 0.96 : 0.88,
+  });
 
-  // --- ANGLE 2: OBJECTION ---
   if (isDoubtfulPrice) {
     suggestions.push({
-      id: "obj-price",
-      label: "Valor vs Oportunidade",
+      id: "price-objection",
+      label: "Valor com criterio",
       angle: "price",
-      text: buildPriceReply({
-        tone,
-        firstName,
-        styleIdentity,
-        goalLine,
-        lookLine,
-      }),
-      recommendedFor: "Duvida de Preco",
-      confidence: 0.9,
+      text: buildFashionConsultativeReply(snapshot, "price", tone),
+      recommendedFor: "Dúvida de preco",
+      confidence: 0.93,
     });
   } else if (isDoubtfulFit) {
     suggestions.push({
-      id: "obj-fit",
-      label: "Ajuste e Caimento",
+      id: "fit-objection",
+      label: "Caimento e segurança",
       angle: "fit",
-      text: buildFitReply({
-        tone,
-        firstName,
-        styleIdentity,
-        goalLine,
-        lookLine,
-      }),
-      recommendedFor: "Duvida de Tamanho",
-      confidence: 0.92,
+      text: buildFashionConsultativeReply(snapshot, "fit", tone),
+      recommendedFor: "Dúvida de caimento",
+      confidence: 0.94,
     });
   } else {
     suggestions.push({
-      id: "obj-gen",
-      label: "Reducao de Inseguranca",
+      id: "general-objection",
+      label: needsSupport ? "Qualificar melhor" : "Quebrar insegurança",
       angle: "objection",
-      text: buildObjectionReply({
-        tone,
-        firstName,
-        styleIdentity,
-        goalLine,
-        lookLine,
-      }),
-      recommendedFor: "Hesitacao",
-      confidence: 0.8,
+      text: buildFashionConsultativeReply(snapshot, "objection", tone),
+      recommendedFor: needsSupport ? "Construir contexto" : "Hesitação",
+      confidence: needsSupport ? 0.8 : 0.87,
     });
   }
 
-  // --- ANGLE 3: DESIRE ---
   suggestions.push({
-    id: intentScore > 60 ? "des-high" : "des-gen",
-    label: intentScore > 60 ? "Impacto Imediato" : "Mudar a Percepcao",
+    id: snapshot.intentScore > 60 ? "desire-high" : "desire-consultative",
+    label: snapshot.intentScore > 60 ? "Aumentar desejo" : "Dar contexto",
     angle: "desire",
-    text: buildDesireReply({
-      tone,
-      firstName,
-      styleIdentity,
-      goalLine,
-      lookLine,
-    }),
-    recommendedFor: intentScore > 60 ? "Urgencia Estetica" : "Desejo",
-    confidence: intentScore > 60 ? 0.88 : 0.75,
+    text: buildFashionConsultativeReply(snapshot, "desire", tone),
+    recommendedFor: snapshot.intentScore > 60 ? "Urgência estética" : "Construção de valor",
+    confidence: snapshot.intentScore > 60 ? 0.9 : 0.78,
   });
 
-  return suggestions;
+  if (snapshot.intentScore < 35 || conversation.status === "follow_up") {
+    suggestions.push({
+      id: "follow-up",
+      label: "Retomar com contexto",
+      angle: "objection",
+      text: buildFashionConsultativeReply(snapshot, "follow_up", tone),
+      recommendedFor: "Reativação",
+      confidence: 0.82,
+    });
+  }
+
+  return orderAndTrimReplies(suggestions);
 }
 
-function getReplyTone(intentScore: number): ReplyTone {
+function getReplyTone(intentScore: number): FashionReplyTone {
   if (intentScore >= 80) return "direct";
   if (intentScore >= 50) return "consultive";
   return "exploratory";
 }
 
-function buildGoalLine(imageGoal?: string, styleIdentity?: string) {
-  if (imageGoal && styleIdentity) {
-    return `${imageGoal.toLowerCase()} sem perder a leitura de ${styleIdentity.toLowerCase()}`;
-  }
-
-  if (imageGoal) return imageGoal.toLowerCase();
-  if (styleIdentity) return styleIdentity.toLowerCase();
-  return "a leitura certa para esse momento";
+function hasAny(text: string, tokens: string[]) {
+  return tokens.some((token) => text.includes(token));
 }
 
-function buildLookLine(
-  topLook?: LookSummaryItem,
-  secondLook?: LookSummaryItem,
-  styleIdentity?: string
-) {
-  if (topLook?.name) {
-    const intention = topLook.intention ? ` para ${topLook.intention.toLowerCase()}` : "";
-    return `o look ${topLook.name}${intention}`;
-  }
-
-  if (secondLook?.name) {
-    return `a alternativa ${secondLook.name} como apoio para a linha de ${styleIdentity || "imagem"}`;
-  }
-
-  return styleIdentity ? `a linha de ${styleIdentity.toLowerCase()}` : "a linha sugerida";
-}
-
-function buildClosingReply(params: {
-  tone: ReplyTone;
-  firstName: string;
-  styleIdentity?: string;
-  goalLine: string;
-  lookLine: string;
-  direct: boolean;
-}) {
-  if (params.direct || params.tone === "direct") {
-    return `Perfeito, ${params.firstName}. Pelo que vimos, ${params.lookLine} conversa muito com ${params.goalLine}. Vou liberar o link agora para seguir sem travar a decisao.`;
-  }
-
-  if (params.tone === "consultive") {
-    return `Faz sentido, ${params.firstName}. O que eu selecionei antes já conversa com ${params.goalLine} e mantém coerencia com ${params.styleIdentity || "seu perfil"}. Se quiser, eu te envio o link da melhor opcao agora.`;
-  }
-
-  return `Boa leitura, ${params.firstName}. Antes de fechar, vale olhar ${params.lookLine} como uma forma mais segura de chegar em ${params.goalLine}. Se quiser, eu te passo o link e te guio no proximo passo.`;
-}
-
-function buildPriceReply(params: {
-  tone: ReplyTone;
-  firstName: string;
-  styleIdentity?: string;
-  goalLine: string;
-  lookLine: string;
-}) {
-  if (params.tone === "direct") {
-    return `Entendo seu foco no investimento, ${params.firstName}. Aqui a leitura não é só de produto: ${params.lookLine} foi escolhido para entregar ${params.goalLine}. Se fizer sentido, eu te mostro a melhor condição agora.`;
-  }
-
-  if (params.tone === "consultive") {
-    return `Totalmente justo pensar no valor, ${params.firstName}. O ponto aqui é que ${params.lookLine} conversa com ${params.goalLine} e mantém a imagem consistente. Posso te explicar a melhor forma de avançar sem exagero?`;
-  }
-
-  return `Faz sentido olhar o investimento com calma, ${params.firstName}. A proposta de ${params.lookLine} foi pensada para preservar ${params.goalLine} e evitar uma compra desalinhada. Se quiser, eu detalho a melhor opcao.`;
-}
-
-function buildFitReply(params: {
-  tone: ReplyTone;
-  firstName: string;
-  styleIdentity?: string;
-  goalLine: string;
-  lookLine: string;
-}) {
-  if (params.tone === "direct") {
-    return `Sobre caimento, ${params.firstName}: ${params.lookLine} foi selecionado para sustentar ${params.goalLine} com mais precisao. Ele ajuda a organizar a leitura do corpo sem perder naturalidade.`;
-  }
-
-  if (params.tone === "consultive") {
-    return `A duvida de caimento é normal, ${params.firstName}. O que eu trouxe antes já respeita ${params.goalLine} e conversa com a sua leitura de estilo. Se quiser, eu detalho como isso veste melhor no corpo.`;
-  }
-
-  return `Sem pressa, ${params.firstName}. Antes de seguir, faz sentido olhar com calma se ${params.lookLine} realmente sustenta ${params.goalLine}. Se quiser, eu te mostro a leitura completa.`;
-}
-
-function buildObjectionReply(params: {
-  tone: ReplyTone;
-  firstName: string;
-  styleIdentity?: string;
-  goalLine: string;
-  lookLine: string;
-}) {
-  if (params.tone === "direct") {
-    return `Entendo, ${params.firstName}. O ponto aqui é simples: ${params.lookLine} foi escolhido para reforcar ${params.goalLine}. Isso evita erro e deixa a imagem mais segura.`;
-  }
-
-  if (params.tone === "consultive") {
-    return `Faz sentido ter cautela, ${params.firstName}. A leitura que eu trouxe antes respeita ${params.goalLine} e conversa com ${params.styleIdentity || "seu perfil"}. Se quiser, eu explico o raciocinio por trás.`;
-  }
-
-  return `Perfeito observar isso com calma, ${params.firstName}. O que eu selecionei tem a proposta de sustentar ${params.goalLine} sem te empurrar um catálogo generico. Posso te mostrar o porquê da escolha?`;
-}
-
-function buildDesireReply(params: {
-  tone: ReplyTone;
-  firstName: string;
-  styleIdentity?: string;
-  goalLine: string;
-  lookLine: string;
-}) {
-  if (params.tone === "direct") {
-    return `Olha a diferenca, ${params.firstName}: ${params.lookLine} já passa ${params.goalLine} com mais presença. Se quiser esse impacto, eu sigo com voce agora.`;
-  }
-
-  if (params.tone === "consultive") {
-    return `Tem bastante potencial aqui, ${params.firstName}. ${params.lookLine} entrega uma leitura mais coerente com ${params.goalLine} e mantém o visual mais forte. Quer que eu detalhe a proposta?`;
-  }
-
-  return `Vale considerar com calma, ${params.firstName}. A proposta de ${params.lookLine} ajuda a construir ${params.goalLine} de um jeito mais natural. Se quiser, eu te mostro como isso se traduz na imagem.`;
+function orderAndTrimReplies(replies: SmartReplySuggestion[]) {
+  return replies
+    .sort((left, right) => {
+      const leftIndex = ANGLE_PRIORITY.indexOf(left.angle as FashionReplyAngle);
+      const rightIndex = ANGLE_PRIORITY.indexOf(right.angle as FashionReplyAngle);
+      return leftIndex - rightIndex;
+    })
+    .slice(0, 4);
 }

@@ -12,6 +12,76 @@ export interface WhatsAppMessage {
   metadata?: any;
 }
 
+export interface WhatsAppLookItemContext {
+  id: string;
+  name: string;
+  brand?: string;
+  price?: string;
+  role?: string;
+  direction?: string;
+  visualWeight?: string;
+  formality?: string;
+  bodyEffect?: string;
+  faceEffect?: string;
+  premiumTitle?: string;
+  baseDescription?: string;
+  persuasiveDescription?: string;
+  impactLine?: string;
+  functionalBenefit?: string;
+  socialEffect?: string;
+  contextOfUse?: string;
+  styleTags?: string[];
+  categoryTags?: string[];
+  fitTags?: string[];
+  colorTags?: string[];
+  targetProfile?: string[];
+  useCases?: string[];
+  category?: string;
+  useCase?: string;
+  tryOnUrl?: string;
+  bundleCandidates?: string[];
+  authorityRationale?: string;
+  conversionCopy?: string;
+  sellerSuggestions?: {
+    pairsBestWith: string[];
+    idealFor: string;
+    buyerProfiles: string[];
+    bestContext: string;
+  };
+}
+
+export interface WhatsAppLookSummary {
+  id: string;
+  name: string;
+  intention: string;
+  type: string;
+  explanation: string;
+  whenToWear: string;
+  role?: string;
+  direction?: string;
+  visualWeight?: string;
+  formality?: string;
+  bodyEffect?: string;
+  faceEffect?: string;
+  styleTags?: string[];
+  categoryTags?: string[];
+  fitTags?: string[];
+  colorTags?: string[];
+  targetProfile?: string[];
+  useCases?: string[];
+  category?: string;
+  useCase?: string;
+  authorityRationale?: string;
+  conversionCopy?: string;
+  sellerSuggestions?: {
+    pairsBestWith: string[];
+    idealFor: string;
+    buyerProfiles: string[];
+    bestContext: string;
+  };
+  items?: WhatsAppLookItemContext[];
+}
+
 export interface UserContext {
   name: string;
   phone: string;
@@ -21,20 +91,14 @@ export interface UserContext {
   lastLookId: string;
   tryOnCount: number;
   orgSlug?: string;
+  styleDirection?: string;
   imageGoal?: string;
   paletteFamily?: string;
   fit?: string;
   metal?: string;
   source?: "manual" | "handoff" | "automation" | "saved_result";
   lastHandoffId?: string;
-  lookSummary?: Array<{
-    id: string;
-    name: string;
-    intention: string;
-    type: string;
-    explanation: string;
-    whenToWear: string;
-  }>;
+  lookSummary?: WhatsAppLookSummary[];
 }
 
 export interface WhatsAppConversation {

@@ -1,70 +1,107 @@
 import { OnboardingData } from "@/types/onboarding";
 import { ResultPayload, LookData } from "@/types/result";
 
+function normalizeText(value: unknown): string {
+  return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
+}
+
+function normalizeDirection(value: string | undefined): "Masculina" | "Feminina" | "Neutra" {
+  const text = normalizeText(value).toLowerCase();
+  if (text.includes("femin")) return "Feminina";
+  if (text.includes("mascul")) return "Masculina";
+  return "Neutra";
+}
+
+function buildDirectionTags(direction: "Masculina" | "Feminina" | "Neutra") {
+  if (direction === "Masculina") {
+    return {
+      dominantStyle: "Linha masculina precisa",
+      firstLook: "Blazer estruturado",
+      secondLook: "Camisa limpa",
+      thirdLook: "Calça reta",
+      accessory: "Relógio de presença",
+    };
+  }
+
+  if (direction === "Feminina") {
+    return {
+      dominantStyle: "Linha feminina precisa",
+      firstLook: "Blazer estruturado",
+      secondLook: "Blusa limpa",
+      thirdLook: "Calça de cintura alta",
+      accessory: "Metal delicado",
+    };
+  }
+
+  return {
+    dominantStyle: "Linha neutra precisa",
+    firstLook: "Base neutra",
+    secondLook: "Camada refinada",
+    thirdLook: "Peça de contraste",
+    accessory: "Metal minimalista",
+  };
+}
+
 // MOCKED ENGINES
 // Em produção, isso serializará os dados do Onboarding e as URLs de foto no Supabase
 // para disparar uma Server Action ou Edge Function consumindo a OpenAI.
 
 export async function generateResultMock(data: OnboardingData): Promise<ResultPayload> {
-  // Simulamos delay de rede
   await new Promise((resolve) => setTimeout(resolve, 800));
 
   const goal = data.intent.imageGoal || "Elegância";
   const metal = data.colors.metal || "Prateado";
   const fit = data.body.fit || "Slim";
-
-  // Heuristic mock builder
-  const dominantStyle = goal === "Autoridade" ? "Alfaiataria Imponente" 
-                      : goal === "Criatividade" ? "Vanguarda Urbana"
-                      : "Clássico Contemporâneo";
+  const direction = normalizeDirection(data.intent.styleDirection);
+  const directionTags = buildDirectionTags(direction);
 
   const looks: LookData[] = [
     {
       id: "1",
-      name: "Upgrade Diário",
-      intention: "Elevar sua base de conforto diária com zero atrito.",
+      name: "Leitura de Base",
+      intention: "Entrar com mais clareza e menos ruído.",
       type: "Híbrido Seguro",
       items: [
-        { id: "i1", brand: "Seu Acervo", name: "Base Neutra (Sua foto)", photoUrl: "" },
-        { id: "i2", brand: "Oficina Reserva", name: "Sobretudo Modal", photoUrl: "" }
+        { id: "i1", brand: "Seu Acervo", name: directionTags.firstLook, photoUrl: "" },
+        { id: "i2", brand: "Oficina Reserva", name: direction === "Feminina" ? "Blazer leve" : "Sobretudo modal", photoUrl: "" },
       ],
-      accessories: [`Relógio ${metal}`],
-      explanation: `Mantemos a sua essência casual que vi na foto, mas adicionamos sofisticação térmica via B2B. O Fit ${fit} amarra a proposta.`,
-      whenToWear: "Dias de escritório casual intenso."
+      accessories: [directionTags.accessory],
+      explanation: `A leitura respeita a linha ${direction.toLowerCase()} e usa o fit ${fit} como base de coerência.`,
+      whenToWear: "Dias de rotina e encontros com baixa fricção.",
     },
     {
       id: "2",
-      name: "Assinatura Magnética",
-      intention: `Projetar alta ${goal} num relance.`,
+      name: "Assinatura",
+      intention: `Projetar ${goal} com presença controlada.`,
       type: "Híbrido Premium",
       items: [
-        { id: "i3", brand: "Seu Acervo", name: "Calça Principal", photoUrl: "" },
-        { id: "i4", brand: "Osklen", name: "Tricot Premium Gola Alta", photoUrl: "" },
-        { id: "i5", brand: "Vert", name: "Sneaker Monochrome", photoUrl: "" }
+        { id: "i3", brand: "Seu Acervo", name: directionTags.secondLook, photoUrl: "" },
+        { id: "i4", brand: "B2B Brand", name: direction === "Feminina" ? "Sandália de impacto" : "Tricot premium gola alta", photoUrl: "" },
+        { id: "i5", brand: "Vert", name: "Acabamento monocromático", photoUrl: "" },
       ],
-      accessories: ["Bolsa Estruturada", `Micro-jóias em ${metal}`],
-      explanation: "A Peça B2B foca toda luminosidade no seu rosto, acentuando traços. O tênis segura o conforto.",
-      whenToWear: "Reuniões críticas ou jantares importantes."
+      accessories: [directionTags.accessory, `Micro-jóias em ${metal}`],
+      explanation: `A composição sobe ${goal.toLowerCase()} sem sair da linha ${direction.toLowerCase()} e sem perder conforto.`,
+      whenToWear: "Reuniões críticas ou jantares importantes.",
     },
     {
       id: "3",
-      name: "Ruptura Segura",
-      intention: "Sair da zona de conforto com rede de segurança da inteligência.",
+      name: "Contraste Guiado",
+      intention: "Sair do óbvio com direção clara.",
       type: "Expansão Direcionada",
       items: [
-        { id: "i6", brand: "B2B Brand", name: "Conjunto Monocromático", photoUrl: "" }
+        { id: "i6", brand: "B2B Brand", name: directionTags.thirdLook, photoUrl: "" },
       ],
-      accessories: ["Óculos Statement"],
-      explanation: "Ignoramos seu acervo para dar um choque estético 100% guiado pela cor.",
-      whenToWear: "Eventos sociais de alto luxo."
-    }
+      accessories: ["Óculos statement"],
+      explanation: `O ponto de impacto preserva a linha ${direction.toLowerCase()} e amplia o repertório sem misturar direção.`,
+      whenToWear: "Eventos sociais e momentos de maior intenção.",
+    },
   ];
 
   return {
     hero: {
-      dominantStyle,
-      subtitle: `A maestria da ${goal} atrelada ao seu estilo de vida.`,
-      coverImageUrl: "" // Placeholder a ser renderizado na UI css
+      dominantStyle: `${directionTags.dominantStyle} • ${goal}`,
+      subtitle: `A maestria da ${goal} atrelada à linha ${direction.toLowerCase()} e ao seu estilo de vida.`,
+      coverImageUrl: "",
     },
     palette: {
       family: "Inverno Frio Contrastante",
@@ -75,28 +112,28 @@ export async function generateResultMock(data: OnboardingData): Promise<ResultPa
         { hex: "#631A2B", name: "Bordô Imperial" },
       ],
       metal: metal,
-      contrast: "Alto"
+      contrast: "Alto",
     },
     diagnostic: {
-      currentPerception: "Roupas usadas para camuflagem e refúgio diário, gerando apagamento em eventos-chave.",
+      currentPerception: "Roupas usadas para camuflagem e refúgio diário, gerando apagamento em momentos-chave.",
       desiredGoal: `Projeção impecável de ${goal} através de modelagens intencionais.`,
-      gapSolution: `Cortaremos os excessos de padronagem, focando no Caimento ${fit} como vetor da imagem.`
+      gapSolution: `Cortaremos os excessos de padronagem e manteremos a linha ${direction.toLowerCase()} como eixo da imagem.`,
     },
     bodyVisagism: {
-      shoulders: `Estruture sempre, considerando seu desejo de Fit ${fit}.`,
-      face: data.body.faceLines === "Marcantes" ? "Decotes em V e Golas Assimétricas." : "Golas canoa e arredondadas favorecem.",
-      generalFit: `Como a queixa principal foi "${data.intent.mainPain}", usaremos a fluidez a nosso favor sem perder arquitetura firme.`
+      shoulders: `Estruture sempre, considerando seu desejo de fit ${fit}.`,
+      face: data.body.faceLines === "Marcantes" ? "Decotes em V e golas assimétricas." : "Golas canoa e arredondadas favorecem.",
+      generalFit: `Como a queixa principal foi "${data.intent.mainPain}", usaremos a fluidez a nosso favor sem perder arquitetura firme.`,
     },
     accessories: {
       scale: "Minimalista Direcionado",
-      focalPoint: "Pulsos e Terço superior do peito.",
-      advice: "Acessórios limpos. Evite argolas gigantes. Prefira a precisão do metal polido."
+      focalPoint: "Pulsos e terço superior do peito",
+      advice: "Acessórios limpos. Evite excesso visual. Prefira a precisão do metal polido.",
     },
     looks,
     toAvoid: [
       "Sobreposição de mais de 3 texturas diferentes no mesmo look.",
-      "Calçados com bicos redondos (matam sua intenção de autoridade).",
-      "Modelagens que engessam as articulações."
-    ]
+      "Calçados que enfraquecem a intenção da linha escolhida.",
+      "Modelagens que engessam as articulações.",
+    ],
   };
 }

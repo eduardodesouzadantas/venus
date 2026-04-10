@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { WhatsAppConversation, WhatsAppMessage, ConversationStatus, PriorityLevel } from "@/types/whatsapp";
@@ -112,7 +112,7 @@ export const WhatsAppProvider = ({ children }: { children: React.ReactNode }) =>
 
     const handleStorage = (event: StorageEvent) => {
       if (!event.key) return;
-      if (event.key === "venus_session" || event.key.startsWith("venus_whatsapp_tenant_session")) {
+      if (event.key.startsWith("venus_whatsapp_tenant_session")) {
         void supabase.realtime.setAuth().catch((error: unknown) => {
           console.warn("[WHATSAPP] Failed to refresh tenant auth after storage change", error);
         });
@@ -183,8 +183,8 @@ export const WhatsAppProvider = ({ children }: { children: React.ReactNode }) =>
     if (conv.user.tryOnCount > 2) score += 20;
 
     // Linguistic triggers
-    const highIntensity = ["comprar", "fechar", "preço", "pagar", "desconto", "agora", "quero"];
-    const hesitation = ["dúvida", "inseguro", "não sei", "tecido", "tamanho"];
+    const highIntensity = ["comprar", "fechar", "preÃ§o", "pagar", "desconto", "agora", "quero"];
+    const hesitation = ["dÃºvida", "inseguro", "nÃ£o sei", "tecido", "tamanho"];
     
     if (highIntensity.some(w => text.includes(w))) score += 50;
     if (hesitation.some(w => text.includes(w))) score += 30;
@@ -354,11 +354,11 @@ export const WhatsAppProvider = ({ children }: { children: React.ReactNode }) =>
   };
 
   const sendProductLink = async (productId: string, name: string) => {
-    await sendMessage(`Confira este item que recomendei: ${name}`, 'merchant', 'product_link');
+    await sendMessage(`Separei este item porque ele conversa com o seu perfil: ${name}. Se quiser, eu já te mostro a melhor forma de levar isso agora.`, 'merchant', 'product_link');
   };
 
   const sendBundlePush = async (lookId: string, lookName: string) => {
-    await sendMessage(`Preparei uma condição exclusiva para você levar o estilo "${lookName}" completo. Vamos fechar?`, 'merchant', 'bundle_push');
+    await sendMessage(`Preparei uma condição especial para você levar o estilo "${lookName}" completo. Posso deixar o próximo passo pronto agora?`, 'merchant', 'bundle_push');
   };
 
   const stats = {

@@ -11,11 +11,11 @@ export const VenusButton = React.forwardRef<HTMLButtonElement, VenusButtonProps>
       <button
         ref={ref}
         className={cn(
-          "inline-flex items-center justify-center rounded-full px-8 py-4 text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#D4AF37] disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98]",
-          variant === "solid" && "bg-white text-black hover:bg-white/90 shadow-[0_0_20px_rgba(255,255,255,0.1)]",
-          variant === "glass" && "bg-white/5 backdrop-blur-md border border-white/10 text-white hover:bg-white/10",
-          variant === "ghost" && "bg-transparent text-white/70 hover:text-white underline-offset-4 hover:underline",
-          variant === "outline" && "bg-transparent border border-[#D4AF37]/50 text-[#D4AF37] hover:bg-[#D4AF37]/5 hover:border-[#D4AF37]",
+          "inline-flex min-h-12 items-center justify-center rounded-full px-6 py-3.5 text-[12px] font-semibold uppercase tracking-[0.18em] transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#D4AF37] disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98] sm:px-8 sm:py-4",
+          variant === "solid" && "bg-[linear-gradient(180deg,#F1D77A_0%,#D4AF37_100%)] text-[#0A0A0A] shadow-[0_18px_40px_rgba(212,175,55,0.18)] hover:brightness-[1.03]",
+          variant === "glass" && "luxury-panel-soft text-white hover:bg-white/[0.08]",
+          variant === "ghost" && "bg-transparent text-white/65 hover:text-white underline-offset-4 hover:underline",
+          variant === "outline" && "bg-transparent border border-[#D4AF37]/35 text-[#D4AF37] hover:bg-[#D4AF37]/6 hover:border-[#D4AF37]/55",
           className
         )}
         {...props}

@@ -375,3 +375,11 @@ Foco:
 O estado atual ja e forte porque existe um nucleo real, coerente e auditavel. O risco agora nao e falta de feature basica. O risco e perder clareza estrategica e comecar a adicionar complexidade antes da hora.
 
 A proxima disciplina nao e construir mais. E preservar o que ja foi conquistado, consolidar a direcao e so entao expandir com intencao.
+
+## 10. Try-On E IA Visual
+
+- O fluxo de try-on agora tem provider OpenAI Responses, fallback de OpenAI Images, fallback Gemini e fallback local seguro.
+- A ordem de providers pode ser controlada por `TRYON_PROVIDER` ou `TRYON_PROVIDERS`.
+- A cadeia de modelos Gemini pode ser ajustada com `TRYON_GEMINI_MODEL` ou `TRYON_GEMINI_MODELS`.
+- A chave Gemini deve estar em `GEMINI_API_KEY` ou `GOOGLE_API_KEY`.
+- A confiabilidade final ainda depende de validacao real em device, fotos de entrada de boa qualidade e monitoramento de falha por provider.

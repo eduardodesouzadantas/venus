@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
@@ -8,36 +8,33 @@ import { EmotionalSlider } from "@/components/ui/EmotionalSlider";
 import { BottomNav } from "@/components/ui/BottomNav";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
 
+const STYLE_DIRECTIONS = ["Masculina", "Feminina", "Neutra"];
 const SATISFACTION_LABELS: Record<number, string> = {
-  0: "Desespero total",
-  2: "Nada funciona",
-  5: "Preciso melhorar",
-  8: "Estou no caminho",
-  10: "Domino meu estilo",
+  0: "Ainda me perco",
+  2: "Quero direção",
+  5: "Preciso refinar",
+  8: "Já estou no caminho",
+  10: "Meu estilo está claro",
 };
 
-const IMAGE_GOALS = ["Autoridade", "Elegância", "Atração", "Criatividade", "Discrição sofisticada"];
-const MAIN_PAINS = ["Falta de tempo", "Nada combina", "Compro por impulso"];
+const IMAGE_GOALS = ["Autoridade", "Elegância", "Presença", "Criatividade", "Discrição sofisticada"];
+const MAIN_PAINS = ["Falta de tempo", "Nada me representa", "Compro sem pensar"];
 
 export default function IntentPage() {
   const { data, updateData } = useOnboarding();
-  const { imageGoal, satisfaction, mainPain } = data.intent;
+  const { styleDirection, imageGoal, satisfaction, mainPain } = data.intent;
 
-  const isValid = imageGoal !== "" && mainPain !== "";
+  const isValid = styleDirection !== "" && imageGoal !== "" && mainPain !== "";
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#050505]">
-      
-      {/* Hero editorial de abertura */}
-      <div className="relative px-6 pt-14 pb-8 overflow-hidden">
-        {/* Luz de fundo */}
+    <div className="flex min-h-screen flex-col bg-[#050505]">
+      <div className="relative overflow-hidden px-5 pb-7 pt-12">
         <div
-          className="absolute -top-20 -right-20 w-60 h-60 rounded-full pointer-events-none"
+          className="pointer-events-none absolute -right-20 -top-20 h-60 w-60 rounded-full"
           style={{ background: "radial-gradient(circle, rgba(212,175,55,0.07) 0%, transparent 70%)" }}
         />
-        
-        {/* Step indicator */}
-        <div className="flex items-center gap-3 mb-8">
+
+        <div className="mb-7 flex items-center gap-3">
           <div className="flex gap-1.5">
             {[0, 1, 2].map((i) => (
               <div
@@ -50,37 +47,57 @@ export default function IntentPage() {
               />
             ))}
           </div>
-          <span className="text-[9px] tracking-[0.3em] text-white/25 uppercase font-bold">Passo 1 de 3</span>
+          <span className="text-[9px] font-bold uppercase tracking-[0.3em] text-white/25">Leitura 1 de 3</span>
         </div>
 
-        {/* Tag editorial */}
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 mb-5 rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/5">
-          <div className="w-1 h-1 rounded-full bg-[#D4AF37]" />
-          <span className="text-[9px] tracking-[0.3em] font-bold text-[#D4AF37] uppercase">Intenção</span>
+        <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/5 px-3 py-1.5">
+          <div className="h-1 w-1 rounded-full bg-[#D4AF37]" />
+          <span className="text-[9px] font-bold uppercase tracking-[0.3em] text-[#D4AF37]">Intenção</span>
         </div>
 
         <Heading
           as="h2"
-          style={{ fontFamily: "var(--font-playfair), serif", fontSize: "1.9rem", lineHeight: 1.15, letterSpacing: "-0.01em" }}
+          style={{ fontFamily: "var(--font-playfair), serif", fontSize: "1.9rem", lineHeight: 1.12, letterSpacing: "-0.01em" }}
         >
-          O que você quer que<br />
-          <span style={{ color: "#D4AF37" }}>o mundo veja</span> em você?
+          Antes do look,<br />
+          <span style={{ color: "#D4AF37" }}>vamos ler sua presença</span>.
         </Heading>
 
-        <Text className="mt-3 text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.4)", maxWidth: 300 }}>
-          Vamos calibrar sua assinatura visual antes de analisar seu corpo e estilo.
+        <Text className="mt-3 max-w-[20rem] text-sm leading-relaxed text-white/48">
+          A Venus usa essa calibragem para escolher peças que pareçam feitas para você, não para uma média genérica.
         </Text>
       </div>
 
-      {/* Formulário */}
-      <div className="flex-1 px-4 pb-40 space-y-3">
-        <GlassContainer className="space-y-6">
-          <div className="space-y-4">
+      <div className="flex-1 space-y-3 px-4 pb-40">
+        <GlassContainer className="space-y-4">
+          <div className="space-y-2">
             <div className="flex items-start gap-2">
-              <span className="text-[#D4AF37] text-xs font-bold tracking-widest mt-0.5">01</span>
-              <Heading as="h4" className="text-base leading-snug text-white/90">
-                Qual imagem você quer que suas roupas projetem?
-              </Heading>
+              <span className="mt-0.5 text-xs font-bold tracking-widest text-[#D4AF37]">00</span>
+              <div className="space-y-1">
+                <Heading as="h4" className="text-base leading-snug text-white/90">
+                  Qual linha sustenta melhor a sua imagem?
+                </Heading>
+                <Text className="text-sm text-white/55">Essa escolha guia a leitura para a direção certa antes de cruzar cor, corpo e rotina.</Text>
+              </div>
+            </div>
+            <PillSelector
+              options={STYLE_DIRECTIONS}
+              selected={styleDirection ? [styleDirection] : []}
+              onChange={(sel) => updateData("intent", { styleDirection: (sel[0] as "Masculina" | "Feminina" | "Neutra" | "") || "" })}
+            />
+          </div>
+        </GlassContainer>
+
+        <GlassContainer className="space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-start gap-2">
+              <span className="mt-0.5 text-xs font-bold tracking-widest text-[#D4AF37]">01</span>
+              <div className="space-y-1">
+                <Heading as="h4" className="text-base leading-snug text-white/90">
+                  Que leitura você quer que a roupa entregue?
+                </Heading>
+                <Text className="text-sm text-white/55">A IA usa isso para ajustar a curadoria ao tipo de presença que você quer sustentar.</Text>
+              </div>
             </div>
             <PillSelector
               options={IMAGE_GOALS}
@@ -90,29 +107,31 @@ export default function IntentPage() {
           </div>
         </GlassContainer>
 
-        <GlassContainer className="space-y-6">
-          <div className="space-y-4">
+        <GlassContainer className="space-y-4">
+          <div className="space-y-2">
             <div className="flex items-start gap-2">
-              <span className="text-[#D4AF37] text-xs font-bold tracking-widest mt-0.5">02</span>
-              <Heading as="h4" className="text-base leading-snug text-white/90">
-                Onde você se vê hoje?
-              </Heading>
+              <span className="mt-0.5 text-xs font-bold tracking-widest text-[#D4AF37]">02</span>
+              <div className="space-y-1">
+                <Heading as="h4" className="text-base leading-snug text-white/90">
+                  Onde você se reconhece hoje?
+                </Heading>
+                <Text className="text-sm text-white/55">Isso ajuda a Venus a medir o salto entre o agora e a versão que você quer mostrar.</Text>
+              </div>
             </div>
-            <EmotionalSlider
-              value={satisfaction}
-              onChange={(val) => updateData("intent", { satisfaction: val })}
-              labelMap={SATISFACTION_LABELS}
-            />
+            <EmotionalSlider value={satisfaction} onChange={(val) => updateData("intent", { satisfaction: val })} labelMap={SATISFACTION_LABELS} />
           </div>
         </GlassContainer>
 
-        <GlassContainer className="space-y-6">
-          <div className="space-y-4">
+        <GlassContainer className="space-y-4">
+          <div className="space-y-2">
             <div className="flex items-start gap-2">
-              <span className="text-[#D4AF37] text-xs font-bold tracking-widest mt-0.5">03</span>
-              <Heading as="h4" className="text-base leading-snug text-white/90">
-                O que sabota seu estilo hoje?
-              </Heading>
+              <span className="mt-0.5 text-xs font-bold tracking-widest text-[#D4AF37]">03</span>
+              <div className="space-y-1">
+                <Heading as="h4" className="text-base leading-snug text-white/90">
+                  O que mais gera ruído na sua imagem hoje?
+                </Heading>
+                <Text className="text-sm text-white/55">Marque o principal atrito para a curadoria ficar mais precisa e menos genérica.</Text>
+              </div>
             </div>
             <PillSelector
               options={MAIN_PAINS}
@@ -123,11 +142,7 @@ export default function IntentPage() {
         </GlassContainer>
       </div>
 
-      <BottomNav
-        nextHref="/onboarding/lifestyle"
-        backHref="/"
-        nextDisabled={!isValid}
-      />
+      <BottomNav nextHref="/onboarding/lifestyle" backHref="/" nextDisabled={!isValid} />
     </div>
   );
 }

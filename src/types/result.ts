@@ -5,6 +5,12 @@ export interface LookItem {
   brand: string;
   name: string;
   price?: string;
+  role?: string;
+  direction?: string;
+  visualWeight?: string;
+  formality?: string;
+  bodyEffect?: string;
+  faceEffect?: string;
   
   // High-conversion / AI-enriched fields
   premiumTitle?: string;

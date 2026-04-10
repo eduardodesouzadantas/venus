@@ -1,9 +1,24 @@
-import type { OnboardingData } from "@/types/onboarding";
+﻿import type { OnboardingData } from "@/types/onboarding";
 import type { LookData, ResultPayload } from "@/types/result";
+import type { VisualAnalysisPayload } from "@/types/visual-analysis";
+import { deriveEssenceProfile, type EssenceProfile } from "@/lib/result/essence";
 
 type GoalKey = "Autoridade" | "Elegância" | "Atração" | "Criatividade" | "Discrição sofisticada";
 
 type ResultSurface = {
+  essence: {
+    key: EssenceProfile["key"];
+    label: string;
+    summary: string;
+    confidenceLabel: string;
+    keySignals: string[];
+    styleDirection: EssenceProfile["styleDirection"];
+  };
+  desirePulse: {
+    title: string;
+    body: string;
+    bullets: string[];
+  };
   hero: ResultPayload["hero"];
   palette: ResultPayload["palette"];
   diagnostic: ResultPayload["diagnostic"];
@@ -118,6 +133,28 @@ function buildPalette(goalKey: GoalKey, metal: string): ResultPayload["palette"]
   }
 }
 
+function buildPaletteFromAnalysis(
+  analysis: VisualAnalysisPayload,
+  fallbackGoalKey: GoalKey,
+  fallbackMetal: string,
+): ResultPayload["palette"] {
+  const fallback = buildPalette(fallbackGoalKey, fallbackMetal);
+
+  return {
+    family: normalizeText(analysis.paletteFamily) || fallback.family,
+    description: normalizeText(analysis.paletteDescription) || fallback.description,
+    colors:
+      Array.isArray(analysis.colors) && analysis.colors.length > 0
+          ? analysis.colors.slice(0, 3).map((color) => ({
+            hex: normalizeText(color.hex) || "#111827",
+            name: normalizeText(color.name) || "Cor estratégica",
+          }))
+        : fallback.colors,
+    metal: normalizeText(analysis.metal) || fallback.metal,
+    contrast: normalizeText(analysis.contrast) || fallback.contrast,
+  };
+}
+
 function buildBodyVisagism(fit: string, faceLines: string): ResultPayload["bodyVisagism"] {
   const fitLabel = normalizeText(fit) || "Slim";
   const faceLabel = normalizeText(faceLines) || "Marcantes";
@@ -135,30 +172,31 @@ function buildBodyVisagism(fit: string, faceLines: string): ResultPayload["bodyV
   };
 }
 
-function buildDiagnostic(goal: string, mainPain: string, fit: string, faceLines: string): ResultPayload["diagnostic"] {
+function buildDiagnostic(goal: string, mainPain: string, fit: string, faceLines: string, essence: EssenceProfile): ResultPayload["diagnostic"] {
   const goalLabel = normalizeText(goal) || "elegância";
   const painLabel = normalizeText(mainPain) || "ruído visual";
   const fitLabel = normalizeText(fit) || "Slim";
   const faceLabel = normalizeText(faceLines) || "Marcantes";
+  const directionLabel = essence.styleDirection;
 
   return {
-    currentPerception: `Seu perfil pede menos ruído e mais estrutura. Hoje o ponto sensível é ${painLabel.toLowerCase()} e o caimento ${fitLabel.toLowerCase()}.`,
+    currentPerception: `Seu perfil pede menos ruído e mais estrutura. Hoje o ponto sensível é ${painLabel.toLowerCase()} e o caimento ${fitLabel.toLowerCase()}, mas a leitura já aponta para ${essence.label.toLowerCase()} na linha ${directionLabel.toLowerCase()}.`,
     desiredGoal: `Projetar ${goalLabel.toLowerCase()} de um jeito mais limpo, pessoal e consistente.`,
-    gapSolution: `Usar o catálogo real como eixo e sustentar ${goalLabel.toLowerCase()} com peças coerentes para seu rosto ${faceLabel.toLowerCase()}.`,
+    gapSolution: `Usar o catálogo real como eixo e sustentar ${goalLabel.toLowerCase()} com peças coerentes para seu rosto ${faceLabel.toLowerCase()}, sem perder a essência ${essence.label.toLowerCase()} nem a linha ${directionLabel.toLowerCase()}.`,
   };
 }
 
-function buildAccessories(goalKey: GoalKey, metal: string): ResultPayload["accessories"] {
+function buildAccessories(goalKey: GoalKey, metal: string, essence: EssenceProfile): ResultPayload["accessories"] {
   const metalLabel = normalizeText(metal) === "Dourado" ? "metais quentes" : "metais frios";
 
   return {
     scale: goalKey === "Atração" ? "Marcante" : goalKey === "Criatividade" ? "Moderada" : "Minimalista",
     focalPoint: "Punhos e parte superior do tronco",
-    advice: `Mantenha poucos pontos de atenção e deixe ${metalLabel} sustentarem a leitura sem competir com a peça principal.`,
+    advice: `Mantenha poucos pontos de atenção e deixe ${metalLabel} sustentarem a leitura sem competir com a peça principal e com a essência ${essence.label.toLowerCase()}.`,
   };
 }
 
-function buildHero(goalKey: GoalKey, goal: string, fit: string): ResultPayload["hero"] {
+function buildHero(goalKey: GoalKey, goal: string, fit: string, essence: EssenceProfile): ResultPayload["hero"] {
   const dominantStyle =
     goalKey === "Autoridade"
       ? "Autoridade limpa"
@@ -171,8 +209,8 @@ function buildHero(goalKey: GoalKey, goal: string, fit: string): ResultPayload["
             : "Elegância precisa";
 
   return {
-    dominantStyle,
-    subtitle: `Seu perfil pede ${normalizeText(goal).toLowerCase() || "elegância"} com leitura limpa, fit ${normalizeText(fit).toLowerCase() || "slim"} e uso real.`,
+    dominantStyle: `${essence.label} • ${dominantStyle}`,
+    subtitle: `Sua leitura cruza ${normalizeText(goal).toLowerCase() || "elegância"} com fit ${normalizeText(fit).toLowerCase() || "slim"}, rotina real e um eixo de ${essence.label.toLowerCase()} na linha ${essence.styleDirection.toLowerCase()}.`,
     coverImageUrl: "",
   };
 }
@@ -180,6 +218,7 @@ function buildHero(goalKey: GoalKey, goal: string, fit: string): ResultPayload["
 function buildLookItems(
   prefix: string,
   goalLabel: string,
+  essenceLabel: string,
   type: LookData["type"],
   images: string[],
 ): LookData["items"] {
@@ -193,7 +232,7 @@ function buildLookItems(
         premiumTitle: "Blazer estruturado",
         impactLine: "Organiza a leitura sem pesar.",
         functionalBenefit: "Entrega estrutura e simplifica a combinação.",
-        socialEffect: "Passa presença controlada.",
+        socialEffect: `Passa ${essenceLabel.toLowerCase()} com controle.`,
         contextOfUse: `Rotina, reunião leve e transição entre contextos ${goalLabel}.`,
       },
       {
@@ -204,7 +243,7 @@ function buildLookItems(
         premiumTitle: "Camisa limpa",
         impactLine: "Traz uma base clara para o look respirar.",
         functionalBenefit: "Mantém a composição fácil de usar.",
-        socialEffect: "Deixa a leitura mais segura e coerente.",
+        socialEffect: `Deixa a leitura mais segura e coerente para ${essenceLabel.toLowerCase()}.`,
         contextOfUse: "Camada fundamental sob a peça principal.",
       },
     ];
@@ -220,7 +259,7 @@ function buildLookItems(
         premiumTitle: "Camada refinada",
         impactLine: "Sobe a presença sem exagero.",
         functionalBenefit: "Eleva a leitura com controle.",
-        socialEffect: "Passa sofisticação mais evidente.",
+        socialEffect: `Passa sofisticação mais evidente para ${essenceLabel.toLowerCase()}.`,
         contextOfUse: `Reuniões decisivas e situações em que ${goalLabel} precisa aparecer.`,
       },
       {
@@ -231,7 +270,7 @@ function buildLookItems(
         premiumTitle: "Calça de base",
         impactLine: "Mantém o look firme e equilibrado.",
         functionalBenefit: "Sustenta a composição sem roubar atenção.",
-        socialEffect: "Ajuda a deixar a presença mais estável.",
+        socialEffect: `Ajuda a deixar a presença mais estável e alinhada com ${essenceLabel.toLowerCase()}.`,
         contextOfUse: "Par natural da camada superior.",
       },
     ];
@@ -246,7 +285,7 @@ function buildLookItems(
       premiumTitle: "Peça de destaque",
       impactLine: "Coloca um ponto de intenção no look.",
       functionalBenefit: "Amplia repertório sem perder coerência.",
-      socialEffect: "Cria presença com controle.",
+      socialEffect: `Cria presença com controle e reforça ${essenceLabel.toLowerCase()}.`,
       contextOfUse: `Momentos em que ${goalLabel} precisa sair do óbvio.`,
     },
     {
@@ -257,55 +296,56 @@ function buildLookItems(
       premiumTitle: "Acessório de foco",
       impactLine: "Fecha a composição com um ponto visual claro.",
       functionalBenefit: "Completa o conjunto sem competir com a peça principal.",
-      socialEffect: "Deixa o resultado mais intencional.",
+      socialEffect: `Deixa o resultado mais intencional para ${essenceLabel.toLowerCase()}.`,
       contextOfUse: "Acabamento visual e finalização do look.",
     },
   ];
 }
 
-function buildLooks(goal: string, fit: string): LookData[] {
+function buildLooks(goal: string, fit: string, lookNames: [string, string, string], essence: EssenceProfile): LookData[] {
   const goalLabel = normalizeText(goal).toLowerCase() || "elegância";
   const fitLabel = normalizeText(fit).toLowerCase() || "slim";
 
   return [
     {
       id: "surface-look-1",
-      name: "Base segura",
-      intention: `Entrada limpa com ${goalLabel} e baixo ruído.`,
+      name: lookNames[0] || essence.lookNames[0],
+      intention: `Entrada limpa com ${goalLabel} e leitura de ${essence.label.toLowerCase()}.`,
       type: "Híbrido Seguro",
-      items: buildLookItems("surface-look-1", `${goalLabel} com fit ${fitLabel}`, "Híbrido Seguro", LOOK_IMAGES[0]),
+      items: buildLookItems("surface-look-1", `${goalLabel} com fit ${fitLabel}`, essence.label, "Híbrido Seguro", LOOK_IMAGES[0]),
       accessories: ["Relógio minimalista"],
-      explanation: `A base segura a leitura do perfil e mantém o look fácil de usar no mundo real.`,
+      explanation: `A base segura a leitura do perfil e deixa a essência ${essence.label.toLowerCase()} fácil de reconhecer no mundo real.`,
       whenToWear: "Rotina, reunião leve e transição entre contextos.",
       popularityRank: 1,
       isDailyPick: true,
     },
     {
       id: "surface-look-2",
-      name: "Presença clara",
-      intention: `Mais presença sem perder coerência com ${goalLabel}.`,
+      name: lookNames[1] || essence.lookNames[1],
+      intention: `Mais presença sem perder coerência com ${goalLabel} e ${essence.label.toLowerCase()}.`,
       type: "Híbrido Premium",
-      items: buildLookItems("surface-look-2", `${goalLabel} com fit ${fitLabel}`, "Híbrido Premium", LOOK_IMAGES[1]),
+      items: buildLookItems("surface-look-2", `${goalLabel} com fit ${fitLabel}`, essence.label, "Híbrido Premium", LOOK_IMAGES[1]),
       accessories: ["Ponto metálico discreto"],
-      explanation: `A combinação sobe a presença sem sair do uso real nem parecer forçada.`,
+      explanation: `A combinação sobe a presença sem sair do uso real nem parecer forçada, mantendo ${essence.label.toLowerCase()} visível.`,
       whenToWear: "Reuniões decisivas e apresentações importantes.",
       popularityRank: 2,
     },
     {
       id: "surface-look-3",
-      name: "Contraste direcionado",
-      intention: `Um ponto de destaque com controle para ampliar o repertório.`,
+      name: lookNames[2] || essence.lookNames[2],
+      intention: `Um ponto de destaque com controle para ampliar ${essence.label.toLowerCase()} sem exagero.`,
       type: "Expansão Direcionada",
-      items: buildLookItems("surface-look-3", `${goalLabel} com fit ${fitLabel}`, "Expansão Direcionada", LOOK_IMAGES[2]),
+      items: buildLookItems("surface-look-3", `${goalLabel} com fit ${fitLabel}`, essence.label, "Expansão Direcionada", LOOK_IMAGES[2]),
       accessories: ["Óculos estruturado"],
-      explanation: `Um toque de contraste amplia a leitura sem transformar a proposta em algo artificial.`,
+      explanation: `Um toque de contraste amplia a leitura sem transformar a proposta em algo artificial e preserva a essência ${essence.label.toLowerCase()}.`,
       whenToWear: "Eventos sociais e momentos de maior intenção.",
       popularityRank: 3,
     },
   ];
 }
 
-export function buildResultSurface(data: OnboardingData): ResultSurface {
+export function buildResultSurface(data: OnboardingData, visualAnalysis?: VisualAnalysisPayload | null): ResultSurface {
+  const essence = deriveEssenceProfile(data);
   const goal = normalizeText(data.intent.imageGoal) || "Elegância";
   const goalKey = normalizeGoalKey(goal);
   const fit = normalizeText(data.body.fit) || "Slim";
@@ -313,46 +353,128 @@ export function buildResultSurface(data: OnboardingData): ResultSurface {
   const metal = normalizeText(data.colors.metal) || "Prateado";
   const mainPain = normalizeText(data.intent.mainPain) || "ruído visual";
 
-  const hero = buildHero(goalKey, goal, fit);
-  const palette = buildPalette(goalKey, metal);
-  const diagnostic = buildDiagnostic(goal, mainPain, fit, faceLines);
-  const bodyVisagism = buildBodyVisagism(fit, faceLines);
-  const accessories = buildAccessories(goalKey, metal);
-  const looks = buildLooks(goal, fit);
+  const resolvedEssence = visualAnalysis
+    ? {
+        key: essence.key,
+        label: normalizeText(visualAnalysis.essenceLabel) || essence.label,
+        summary: normalizeText(visualAnalysis.essenceSummary) || essence.summary,
+        confidenceLabel: normalizeText(visualAnalysis.confidenceLabel) || "Leitura visual por IA",
+        keySignals:
+          Array.isArray(visualAnalysis.keySignals) && visualAnalysis.keySignals.length > 0
+            ? visualAnalysis.keySignals.slice(0, 4).map((value) => normalizeText(value)).filter(Boolean)
+            : essence.keySignals,
+        styleDirection: visualAnalysis.styleDirection || essence.styleDirection,
+        lookNames:
+          Array.isArray(visualAnalysis.lookNames) && visualAnalysis.lookNames.length === 3
+            ? [
+                normalizeText(visualAnalysis.lookNames[0]) || essence.lookNames[0],
+                normalizeText(visualAnalysis.lookNames[1]) || essence.lookNames[1],
+                normalizeText(visualAnalysis.lookNames[2]) || essence.lookNames[2],
+              ]
+            : essence.lookNames,
+        toAvoid:
+          Array.isArray(visualAnalysis.toAvoid) && visualAnalysis.toAvoid.length > 0
+            ? visualAnalysis.toAvoid.slice(0, 3).map((value) => normalizeText(value)).filter(Boolean)
+            : essence.toAvoid,
+      }
+    : {
+        key: essence.key,
+        label: essence.label,
+        summary: essence.summary,
+        confidenceLabel: essence.confidenceLabel,
+        keySignals: essence.keySignals,
+        styleDirection: essence.styleDirection,
+        lookNames: essence.lookNames,
+        toAvoid: essence.toAvoid,
+      };
+
+  const hero = visualAnalysis
+    ? {
+        dominantStyle: normalizeText(visualAnalysis.hero.dominantStyle) || `${resolvedEssence.label} • ${goal}`,
+        subtitle: normalizeText(visualAnalysis.hero.subtitle) || buildHero(goalKey, goal, fit, essence).subtitle,
+        coverImageUrl: "",
+      }
+    : buildHero(goalKey, goal, fit, essence);
+
+  const palette = visualAnalysis
+    ? buildPaletteFromAnalysis(visualAnalysis, goalKey, metal)
+    : buildPalette(goalKey, metal);
+
+  const diagnostic = visualAnalysis
+    ? {
+        currentPerception:
+          normalizeText(visualAnalysis.diagnostic.currentPerception) ||
+          buildDiagnostic(goal, mainPain, fit, faceLines, essence).currentPerception,
+        desiredGoal:
+          normalizeText(visualAnalysis.diagnostic.desiredGoal) ||
+          buildDiagnostic(goal, mainPain, fit, faceLines, essence).desiredGoal,
+        gapSolution:
+          normalizeText(visualAnalysis.diagnostic.gapSolution) ||
+          buildDiagnostic(goal, mainPain, fit, faceLines, essence).gapSolution,
+      }
+    : buildDiagnostic(goal, mainPain, fit, faceLines, essence);
+
+  const bodyVisagism = visualAnalysis
+    ? {
+        shoulders:
+          normalizeText(visualAnalysis.bodyVisagism.shoulders) ||
+          buildBodyVisagism(fit, faceLines).shoulders,
+        face: normalizeText(visualAnalysis.bodyVisagism.face) || buildBodyVisagism(fit, faceLines).face,
+        generalFit:
+          normalizeText(visualAnalysis.bodyVisagism.generalFit) ||
+          buildBodyVisagism(fit, faceLines).generalFit,
+      }
+    : buildBodyVisagism(fit, faceLines);
+
+  const accessories = buildAccessories(goalKey, metal, essence);
+  const looks = buildLooks(goal, fit, resolvedEssence.lookNames as [string, string, string], essence);
 
   return {
+    essence: {
+      key: resolvedEssence.key,
+      label: resolvedEssence.label,
+      summary: resolvedEssence.summary,
+      confidenceLabel: resolvedEssence.confidenceLabel,
+      keySignals: resolvedEssence.keySignals,
+      styleDirection: resolvedEssence.styleDirection,
+    },
+    desirePulse: {
+      title: "Esse é o tipo de leitura que faz a loja inteira fazer sentido",
+      body: `Quando a essência acerta, o desejo deixa de ser por um look solto e vira vontade de explorar o acervo inteiro com a mesma lógica.`,
+      bullets: [
+        "A primeira leitura já parece feita para você.",
+        "O post vira prova social com marcação e CTA.",
+        "A loja ganha novos testes por atração natural.",
+      ],
+    },
     hero,
     palette,
     diagnostic,
     bodyVisagism,
     accessories,
     looks,
-    toAvoid: [
-      "Excesso de camadas sem função.",
-      "Combinações que disputam atenção ao mesmo tempo.",
-      "Peças sem relação com o catálogo real.",
-    ],
-    headline: `Seu perfil agora: ${hero.dominantStyle}`,
-    subheadline: hero.subtitle,
+    toAvoid: resolvedEssence.toAvoid,
+    headline: visualAnalysis?.source === "ai" ? `Essência captada pela foto: ${resolvedEssence.label}` : `Essência captada: ${resolvedEssence.label}`,
+    subheadline: resolvedEssence.summary,
     lookHierarchy: [
       {
         label: "Base",
-        title: "Look 1",
-        description: "Segura a leitura e deixa o perfil fácil de usar.",
+        title: resolvedEssence.lookNames[0],
+        description: "Segura a leitura e mostra o eixo central da sua presença.",
       },
       {
         label: "Apoio",
-        title: "Look 2",
-        description: "Sobe a presença sem perder coerência.",
+        title: resolvedEssence.lookNames[1],
+        description: "Sobe a presença sem perder coerência com sua essência.",
       },
       {
         label: "Destaque",
-        title: "Look 3",
-        description: "Abre contraste com controle para ampliar repertório.",
+        title: resolvedEssence.lookNames[2],
+        description: "Abre contraste com controle para ampliar repertório sem exagero.",
       },
     ],
     primaryCtaLabel: "Continuar no WhatsApp",
     secondaryCtaLabel: "Ver meus looks",
-    footerLabel: "Curadoria sincronizada com o catálogo real",
+    footerLabel: "Curadoria sincronizada com a sua essência e o catálogo real",
   };
 }

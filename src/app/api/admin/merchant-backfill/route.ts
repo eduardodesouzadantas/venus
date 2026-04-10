@@ -46,14 +46,14 @@ export async function POST(request: Request) {
   try {
     const report = await backfillMerchantAuthUsers(admin, {
       dryRun: body.dry_run ?? true,
-      defaultOrgSlug: body.default_org_slug || "maison-elite",
+      defaultOrgSlug: body.default_org_slug,
     });
 
     return NextResponse.json(
       {
         ok: true,
         dry_run: body.dry_run ?? true,
-        default_org_slug: body.default_org_slug || "maison-elite",
+        default_org_slug: body.default_org_slug || null,
         report,
       },
       {

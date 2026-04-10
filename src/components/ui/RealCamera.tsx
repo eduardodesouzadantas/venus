@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Camera, RefreshCw, Check, SwitchCamera, AlertCircle } from "lucide-react";
+import { RefreshCw, Check, SwitchCamera, AlertCircle } from "lucide-react";
 
 interface RealCameraProps {
   instruction: string;
@@ -13,7 +13,7 @@ interface RealCameraProps {
 export function RealCamera({ instruction, overlayType, onCaptured, showTimerOptions = false }: RealCameraProps) {
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
-  
+
   const [stream, setStream] = React.useState<MediaStream | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [facingMode, setFacingMode] = React.useState<"user" | "environment">("user");
@@ -21,26 +21,25 @@ export function RealCamera({ instruction, overlayType, onCaptured, showTimerOpti
   const [timer, setTimer] = React.useState<number | null>(null);
   const [isCapturing, setIsCapturing] = React.useState(false);
 
-  // Initialize Camera
   React.useEffect(() => {
     let currentStream: MediaStream | null = null;
-    
+
     async function startCamera() {
       try {
         setError(null);
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
           const constraints = {
             video: {
-              facingMode: facingMode,
+              facingMode,
               width: { ideal: 1280 },
-              height: { ideal: 720 }
+              height: { ideal: 720 },
             },
             audio: false,
           };
-          
+
           currentStream = await navigator.mediaDevices.getUserMedia(constraints);
           setStream(currentStream);
-          
+
           if (videoRef.current) {
             videoRef.current.srcObject = currentStream;
           }
@@ -55,16 +54,15 @@ export function RealCamera({ instruction, overlayType, onCaptured, showTimerOpti
 
     startCamera();
 
-    // Cleanup function
     return () => {
       if (currentStream) {
-        currentStream.getTracks().forEach(track => track.stop());
+        currentStream.getTracks().forEach((track) => track.stop());
       }
     };
   }, [facingMode]);
 
   const toggleCamera = () => {
-    setFacingMode(prev => prev === "user" ? "environment" : "user");
+    setFacingMode((prev) => (prev === "user" ? "environment" : "user"));
   };
 
   const capturePhoto = (delaySecs: number) => {
@@ -88,17 +86,16 @@ export function RealCamera({ instruction, overlayType, onCaptured, showTimerOpti
   const snap = () => {
     setTimer(null);
     setIsCapturing(false);
-    
+
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      
-      // Compute scaling to max 480px width to avoid massive base64 Strings crashing the Next.js Server Action
+
       const maxWidth = 480;
       const scale = Math.min(1, maxWidth / video.videoWidth);
       canvas.width = video.videoWidth * scale;
       canvas.height = video.videoHeight * scale;
-      
+
       const ctx = canvas.getContext("2d");
       if (ctx) {
         if (facingMode === "user") {
@@ -106,8 +103,7 @@ export function RealCamera({ instruction, overlayType, onCaptured, showTimerOpti
           ctx.scale(-1, 1);
         }
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        
-        // Low fidelity JPEG to prevent hitting 1MB Server limit
+
         const imageDataUrl = canvas.toDataURL("image/jpeg", 0.5);
         setCapturedImage(imageDataUrl);
       }
@@ -123,128 +119,133 @@ export function RealCamera({ instruction, overlayType, onCaptured, showTimerOpti
   };
 
   return (
-    <div className="relative w-full h-[70vh] bg-black border border-white/10 rounded-3xl overflow-hidden shadow-2xl flex flex-col">
-      {/* 1. Camera Viewfinder */}
-      <div className="flex-1 relative bg-[#1c1c1e] flex items-center justify-center overflow-hidden">
-        
-        {/* Error State */}
+    <div className="relative flex h-[72dvh] w-full max-w-[520px] flex-col overflow-hidden rounded-[28px] border border-white/10 bg-black shadow-2xl sm:h-[70vh] sm:rounded-3xl">
+      <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-[#1c1c1e]">
         {error && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center z-50 bg-black px-6 text-center">
-            <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
-            <p className="text-white/80 text-sm font-medium">{error}</p>
-            <p className="text-white/50 text-xs mt-2">Por favor, libere o acesso nas configurações do navegador e recarregue a página.</p>
+          <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black px-6 text-center">
+            <AlertCircle className="mb-4 h-10 w-10 text-red-500 sm:h-12 sm:w-12" />
+            <p className="text-sm font-medium text-white/80">{error}</p>
+            <p className="mt-2 text-xs text-white/50">Libere o acesso nas configurações do navegador e recarregue a página.</p>
           </div>
         )}
 
-        {/* Video feed */}
-        <video 
+        <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          className={`absolute inset-0 w-full h-full object-cover ${facingMode === "user" && !capturedImage ? 'scale-x-[-1]' : ''} ${capturedImage ? 'hidden' : 'block'}`}
+          className={`absolute inset-0 h-full w-full object-cover ${facingMode === "user" && !capturedImage ? "scale-x-[-1]" : ""} ${capturedImage ? "hidden" : "block"}`}
         />
-        
-        {/* Invisible Canvas for Snapshot */}
+
         <canvas ref={canvasRef} className="hidden" />
 
-        {/* Captured Image Display */}
         {capturedImage && (
-          <img 
-            src={capturedImage} 
-            alt="Captura" 
-            className={`absolute inset-0 w-full h-full object-cover ${facingMode === "user" ? 'scale-x-[-1]' : ''}`} 
+          <img
+            src={capturedImage}
+            alt="Captura"
+            className={`absolute inset-0 h-full w-full object-cover ${facingMode === "user" ? "scale-x-[-1]" : ""}`}
           />
         )}
 
         {!capturedImage && !error && (
           <>
-            {/* Overlays */}
             {overlayType === "face" && (
-              <div className="w-56 h-72 border-2 border-[#D4AF37] rounded-[100px] shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] z-10 transition-all duration-300 pointer-events-none" />
+              <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+                <div className="relative h-[15.5rem] w-[11rem] rounded-[88px] border-2 border-[#D4AF37] shadow-[0_0_0_9999px_rgba(0,0,0,0.62)] transition-all duration-300 sm:h-[18rem] sm:w-[13rem]">
+                  <div className="absolute left-1/2 top-3 h-4 w-4 -translate-x-1/2 rounded-full border border-[#D4AF37]/60 bg-[#D4AF37]/10" />
+                  <div className="absolute inset-x-4 bottom-4 rounded-[72px] border border-dashed border-[#D4AF37]/25" />
+                  <div className="absolute -left-0.5 top-1/2 h-10 w-1 -translate-y-1/2 rounded-full bg-[#D4AF37]/20" />
+                  <div className="absolute -right-0.5 top-1/2 h-10 w-1 -translate-y-1/2 rounded-full bg-[#D4AF37]/20" />
+                </div>
+              </div>
             )}
             {overlayType === "body" && (
-              <div className="w-full h-full flex flex-col justify-between absolute inset-0 py-8 px-4 z-10 shadow-[inset_0_0_100px_rgba(0,0,0,0.6)] pointer-events-none">
-                <div className="w-full border-t-2 border-dashed border-[#D4AF37]/90 text-center"><span className="text-xs text-[#D4AF37] bg-black/50 px-2 rounded-full absolute -top-2 left-1/2 -translate-x-1/2">Topo / Cabeça</span></div>
-                <div className="w-full border-t-2 border-dashed border-[#D4AF37]/90 text-center relative"><span className="text-xs text-[#D4AF37] bg-black/50 px-2 rounded-full absolute -top-2 left-1/2 -translate-x-1/2">Base / Pés</span></div>
+              <div className="pointer-events-none absolute inset-0 z-10 flex h-full w-full flex-col justify-between px-3 py-6 shadow-[inset_0_0_100px_rgba(0,0,0,0.6)] sm:px-4 sm:py-8">
+                <div className="w-full border-t-2 border-dashed border-[#D4AF37]/90 text-center">
+                  <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-black/50 px-2 text-xs text-[#D4AF37]">
+                    Topo / Cabeça
+                  </span>
+                </div>
+                <div className="relative w-full border-t-2 border-dashed border-[#D4AF37]/90 text-center">
+                  <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-black/50 px-2 text-xs text-[#D4AF37]">
+                    Base / Pés
+                  </span>
+                </div>
               </div>
             )}
 
-            {/* Timer Indication */}
             {timer !== null && timer > 0 && (
-              <div className="absolute inset-0 flex items-center justify-center z-50 bg-black/40 backdrop-blur-[2px]">
-                <div className="text-8xl font-serif text-white drop-shadow-[0_0_20px_rgba(255,255,255,1)] animate-ping">
+              <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
+                <div className="animate-ping font-serif text-7xl text-white drop-shadow-[0_0_20px_rgba(255,255,255,1)] sm:text-8xl">
                   {timer}
                 </div>
               </div>
             )}
-            
-            {/* Flip Camera Button */}
+
             {!isCapturing && (
-              <button 
+              <button
                 onClick={toggleCamera}
-                className="absolute top-4 right-4 z-20 w-10 h-10 bg-black/50 backdrop-blur-md rounded-full flex items-center justify-center text-white/80 border border-white/10 hover:bg-white/20 transition-all"
+                className="absolute right-3 top-3 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-black/50 text-white/80 backdrop-blur-md transition-all hover:bg-white/20 sm:right-4 sm:top-4 sm:h-10 sm:w-10"
               >
-                <SwitchCamera className="w-5 h-5" />
+                <SwitchCamera className="h-5 w-5" />
               </button>
             )}
           </>
         )}
       </div>
 
-      {/* 2. Controls Area */}
-      <div className="h-32 bg-[#121212] px-6 py-4 flex flex-col items-center justify-between border-t border-white/5 relative z-20">
-        {!capturedImage && (
-          <p className="text-white/70 text-sm mb-2">{instruction}</p>
-        )}
-        
+      <div className="relative z-20 flex min-h-[7.75rem] flex-col items-center justify-between border-t border-white/5 bg-[#121212] px-4 py-4 sm:h-32 sm:px-6">
+        {!capturedImage && <p className="mb-3 text-center text-[13px] leading-relaxed text-white/70 sm:mb-2 sm:text-sm">{instruction}</p>}
+
         {capturedImage ? (
-          <div className="flex w-full justify-between items-center px-4">
-            <button onClick={handleRetake} className="flex flex-col items-center gap-1 text-white/60 hover:text-white transition-colors">
-              <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center"><RefreshCw className="w-5 h-5"/></div>
+          <div className="flex w-full items-center justify-between px-2 sm:px-4">
+            <button onClick={handleRetake} className="flex flex-col items-center gap-1 text-white/60 transition-colors hover:text-white">
+              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 sm:h-12 sm:w-12">
+                <RefreshCw className="h-5 w-5" />
+              </div>
               <span className="text-xs">Refazer</span>
             </button>
 
-            <button onClick={handleConfirm} className="flex flex-col items-center gap-1 text-[#D4AF37] hover:text-[#D4AF37]/80 transition-colors">
-              <div className="w-16 h-16 rounded-full bg-[#D4AF37]/20 border-2 border-[#D4AF37] flex items-center justify-center shadow-[0_0_15px_rgba(212,175,55,0.4)]">
-                <Check className="w-8 h-8"/>
+            <button onClick={handleConfirm} className="flex flex-col items-center gap-1 text-[#D4AF37] transition-colors hover:text-[#D4AF37]/80">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-[#D4AF37] bg-[#D4AF37]/20 shadow-[0_0_15px_rgba(212,175,55,0.4)] sm:h-16 sm:w-16">
+                <Check className="h-7 w-7 sm:h-8 sm:w-8" />
               </div>
-              <span className="text-xs font-bold font-serif">Perfeito</span>
+              <span className="font-serif text-xs font-bold">Usar captura</span>
             </button>
           </div>
         ) : (
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4 sm:gap-6">
             {showTimerOptions ? (
               <>
-                <button 
+                <button
                   onClick={() => capturePhoto(3)}
                   disabled={isCapturing || !!error}
-                  className="w-12 h-12 flex flex-col items-center justify-center rounded-full bg-white/5 text-white/60 border border-white/10 hover:bg-white/10 disabled:opacity-50"
+                  className="flex h-11 w-11 flex-col items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/60 disabled:opacity-50 hover:bg-white/10 sm:h-12 sm:w-12"
                 >
                   <span className="text-sm font-medium">3s</span>
                 </button>
-                <button 
-                  onClick={() => capturePhoto(0)} 
+                <button
+                  onClick={() => capturePhoto(0)}
                   disabled={isCapturing || !!error}
-                  className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(255,255,255,0.3)] disabled:opacity-50 active:scale-95 transition-transform"
+                  className="flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-[0_0_20px_rgba(255,255,255,0.3)] transition-transform active:scale-95 disabled:opacity-50 sm:h-16 sm:w-16"
                 >
-                  <div className="w-14 h-14 border-2 border-black rounded-full" />
+                  <div className="h-12 w-12 rounded-full border-2 border-black sm:h-14 sm:w-14" />
                 </button>
-                <button 
+                <button
                   onClick={() => capturePhoto(10)}
                   disabled={isCapturing || !!error}
-                  className="w-12 h-12 flex flex-col items-center justify-center rounded-full bg-white/5 text-white/60 border border-white/10 hover:bg-white/10 disabled:opacity-50"
+                  className="flex h-11 w-11 flex-col items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/60 disabled:opacity-50 hover:bg-white/10 sm:h-12 sm:w-12"
                 >
                   <span className="text-sm font-medium">10s</span>
                 </button>
               </>
             ) : (
-              <button 
+              <button
                 onClick={() => capturePhoto(0)}
-                disabled={isCapturing || !!error} 
-                className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(255,255,255,0.3)] disabled:opacity-50 active:scale-95 transition-transform"
+                disabled={isCapturing || !!error}
+                className="flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-[0_0_20px_rgba(255,255,255,0.3)] transition-transform active:scale-95 disabled:opacity-50 sm:h-16 sm:w-16"
               >
-                <div className="w-14 h-14 border-2 border-black rounded-full" />
+                <div className="h-12 w-12 rounded-full border-2 border-black sm:h-14 sm:w-14" />
               </button>
             )}
           </div>

@@ -5,15 +5,19 @@ import { X, ShoppingBag, ArrowRight, PackageCheck, Star, Info, ChevronRight, Ext
 import { Heading } from "./Heading";
 import { Text } from "./Text";
 import { VenusButton } from "./VenusButton";
-import { LookData } from "@/types/result";
+import { LookData, LookItem } from "@/types/result";
+import { getWhatsAppHandoffPhone } from "@/lib/whatsapp/handoff";
 
 interface LookSelectionModalProps {
   look: LookData | null;
   onClose: () => void;
+  onSelectItem?: (item: LookItem) => void;
+  onRequestWhatsApp?: () => void;
 }
 
-export function LookSelectionModal({ look, onClose }: LookSelectionModalProps) {
+export function LookSelectionModal({ look, onClose, onSelectItem, onRequestWhatsApp }: LookSelectionModalProps) {
   const [isVisible, setIsVisible] = useState(false);
+  const whatsappPhone = getWhatsAppHandoffPhone();
 
   useEffect(() => {
     if (look) {
@@ -97,7 +101,11 @@ export function LookSelectionModal({ look, onClose }: LookSelectionModalProps) {
                    </div>
                 </div>
                 <div className="flex flex-col items-end gap-3">
-                   <button className="p-2 rounded-full border border-white/10 text-white/40 group-hover:text-[#D4AF37] group-hover:border-[#D4AF37] transition-all">
+                   <button
+                      type="button"
+                      onClick={() => onSelectItem?.(item)}
+                      className="p-2 rounded-full border border-white/10 text-white/40 group-hover:text-[#D4AF37] group-hover:border-[#D4AF37] transition-all"
+                   >
                       <ExternalLink size={14} />
                    </button>
                 </div>
@@ -129,9 +137,24 @@ export function LookSelectionModal({ look, onClose }: LookSelectionModalProps) {
               </div>
            </div>
 
-           <VenusButton variant="solid" className="w-full py-8 h-auto text-[11px] font-bold uppercase tracking-[0.3em] bg-white text-black shadow-[0_20px_50px_rgba(255,255,255,0.1)] rounded-full active:scale-[0.98] transition-all group">
+           <VenusButton
+              type="button"
+              variant="solid"
+              onClick={() => {
+                if (onRequestWhatsApp) {
+                  onRequestWhatsApp();
+                  return;
+                }
+
+                if (!whatsappPhone) return;
+
+                const message = encodeURIComponent(`Quero testar o look completo ${look.name} e ver como fica no meu perfil.`);
+                window.open(`https://wa.me/${whatsappPhone}?text=${message}`, "_blank", "noopener,noreferrer");
+              }}
+              className="w-full py-8 h-auto text-[11px] font-bold uppercase tracking-[0.3em] bg-white text-black shadow-[0_20px_50px_rgba(255,255,255,0.1)] rounded-full active:scale-[0.98] transition-all group"
+           >
               <span className="flex items-center justify-center gap-3">
-                Adquirir Look Completo
+                Ver no WhatsApp
                 <ShoppingBag className="w-5 h-5 group-hover:rotate-12 transition-transform" />
               </span>
            </VenusButton>

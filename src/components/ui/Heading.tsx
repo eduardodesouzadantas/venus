@@ -9,11 +9,11 @@ export function Heading({ className, as: Component = "h2", ...props }: HeadingPr
   return (
     <Component
       className={cn(
-        "font-serif font-medium tracking-tight text-white",
-        Component === "h1" && "text-4xl lg:text-5xl",
-        Component === "h2" && "text-3xl lg:text-4xl",
-        Component === "h3" && "text-2xl lg:text-3xl",
-        Component === "h4" && "text-xl lg:text-2xl",
+        "font-serif font-medium tracking-[-0.03em] text-white text-balance",
+        Component === "h1" && "text-[2.35rem] leading-[0.96] sm:text-5xl lg:text-6xl",
+        Component === "h2" && "text-[1.95rem] leading-[1.02] sm:text-4xl lg:text-[2.85rem]",
+        Component === "h3" && "text-[1.45rem] leading-[1.08] sm:text-3xl",
+        Component === "h4" && "text-[1.08rem] leading-[1.1] sm:text-xl",
         className
       )}
       {...props}

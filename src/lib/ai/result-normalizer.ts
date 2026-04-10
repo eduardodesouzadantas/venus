@@ -1,6 +1,8 @@
 import type { OnboardingData } from "@/types/onboarding";
 import type { LookData, LookItem, ResultPayload } from "@/types/result";
 import type { Product } from "@/lib/catalog";
+import { deriveCatalogStylistProfile } from "@/lib/catalog/stylist-profile";
+import { deriveEssenceProfile } from "@/lib/result/essence";
 
 type LookBlueprint = {
   name: string;
@@ -13,6 +15,7 @@ type LookBlueprint = {
 type ProfileSignals = {
   goal: string;
   goalKey: string;
+  styleDirection: "Masculina" | "Feminina" | "Neutra";
   satisfaction: number;
   mainPain: string;
   fit: string;
@@ -114,6 +117,10 @@ function normalizeText(value: unknown): string {
   return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
 }
 
+function uniq(values: string[]): string[] {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
 function stripDiacritics(value: string): string {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
@@ -144,9 +151,17 @@ function normalizeMetal(value: string | undefined): "Dourado" | "Prateado" {
   return normalized.includes("dour") ? "Dourado" : "Prateado";
 }
 
+function normalizeStyleDirection(value: string | undefined): "Masculina" | "Feminina" | "Neutra" {
+  const normalized = matchText(value || "");
+  if (normalized.includes("femin")) return "Feminina";
+  if (normalized.includes("mascul")) return "Masculina";
+  return "Neutra";
+}
+
 function getProfileSignals(userData: OnboardingData) {
   const goal = compactText(userData.intent.imageGoal, "Elegância", 40);
   const goalKey = pickGoalKey(goal);
+  const styleDirection = normalizeStyleDirection(userData.intent.styleDirection || "");
   const fit = compactText(userData.body.fit, "Slim", 24);
   const faceLines = compactText(userData.body.faceLines, "Marcantes", 24);
   const hairLength = compactText(userData.body.hairLength, "Médio", 24);
@@ -170,6 +185,7 @@ function getProfileSignals(userData: OnboardingData) {
     contrast,
     keywords: [
       ...goalKeywords,
+      matchText(styleDirection),
       matchText(fit),
       matchText(mainPain),
       ...environmentKeywords,
@@ -180,6 +196,7 @@ function getProfileSignals(userData: OnboardingData) {
       userData.scanner.bodyPhoto ? "body" : "",
       userData.scanner.skipped ? "skip" : "",
     ].filter(Boolean),
+    styleDirection,
   };
 }
 
@@ -288,7 +305,33 @@ function looksGeneric(value: unknown): boolean {
   return !text || GENERIC_MARKETING_PATTERNS.some((pattern) => pattern.test(text));
 }
 
+function scoreDirectionMatch(text: string, direction: ProfileSignals["styleDirection"]): number {
+  const masculineSignals = ["mascul", "homem", "men", "male"];
+  const feminineSignals = ["femin", "mulher", "women", "woman"];
+  const neutralSignals = ["neutro", "unissex", "unisex", "genderless"];
+  const hasMasculine = masculineSignals.some((keyword) => text.includes(keyword));
+  const hasFeminine = feminineSignals.some((keyword) => text.includes(keyword));
+  const hasNeutral = neutralSignals.some((keyword) => text.includes(keyword));
+
+  if (direction === "Masculina") {
+    if (hasMasculine) return 16;
+    if (hasFeminine) return -28;
+    return 0;
+  }
+
+  if (direction === "Feminina") {
+    if (hasFeminine) return 16;
+    if (hasMasculine) return -28;
+    return 0;
+  }
+
+  if (hasNeutral) return 10;
+  if (hasMasculine || hasFeminine) return -6;
+  return 0;
+}
+
 function scoreProduct(product: Product, blueprint: LookBlueprint, profile: ProfileSignals): number {
+  const stylist = deriveCatalogStylistProfile(product);
   const text = matchText([
     product.name,
     product.category,
@@ -307,6 +350,22 @@ function scoreProduct(product: Product, blueprint: LookBlueprint, profile: Profi
   for (const keyword of profile.keywords) {
     if (keyword && text.includes(keyword)) score += 4;
   }
+
+  score += scoreDirectionMatch(text, profile.styleDirection);
+
+  if (stylist.direction === profile.styleDirection) score += 8;
+  if (stylist.direction !== "Neutra" && profile.styleDirection === "Neutra") score += 2;
+  if (stylist.visualWeight === "Alta" && blueprint.type !== "Expansão Direcionada") score += 3;
+  if (stylist.visualWeight === "Pontual" && blueprint.type === "Expansão Direcionada") score += 4;
+  if (stylist.formality === "Alta" && blueprint.type === "Híbrido Premium") score += 4;
+  if (stylist.formality === "Media" && blueprint.type === "Híbrido Seguro") score += 3;
+  if (stylist.role === "anchor" && blueprint.type === "Híbrido Premium") score += 5;
+  if (stylist.role === "statement" && blueprint.type === "Expansão Direcionada") score += 6;
+  if (stylist.role === "accessory" && blueprint.type === "Expansão Direcionada") score += 5;
+  if (stylist.role === "base" && blueprint.type === "Híbrido Seguro") score += 6;
+  if (stylist.useCases.some((tag) => profile.keywords.some((keyword) => keyword && matchText(tag).includes(keyword)))) score += 4;
+  if (stylist.bodyEffect && profile.goal && matchText(stylist.bodyEffect).includes(matchText(profile.goal))) score += 2;
+  if (stylist.faceEffect && profile.goal && matchText(stylist.faceEffect).includes(matchText(profile.goal))) score += 1;
 
   if (product.type.toLowerCase().includes("acessor")) {
     score += blueprint.type === "Expansão Direcionada" ? 12 : 2;
@@ -363,7 +422,12 @@ function pickUniqueProducts(rankedProducts: Product[], usedIds: Set<string>, lim
   return selected;
 }
 
-function buildProductLookItem(product: Product, blueprint: LookBlueprint, profile: Pick<ProfileSignals, "goal" | "goalKey" | "fit" | "metal">): LookItem {
+function buildProductLookItem(
+  product: Product,
+  blueprint: LookBlueprint,
+  profile: Pick<ProfileSignals, "goal" | "goalKey" | "fit" | "metal" | "styleDirection">,
+): LookItem {
+  const stylist = deriveCatalogStylistProfile(product);
   const brand = normalizeText(product.style) || normalizeText(product.category) || "Catálogo real";
   const name = normalizeText(product.name) || "Peça real";
   const category = normalizeText(product.category);
@@ -379,6 +443,12 @@ function buildProductLookItem(product: Product, blueprint: LookBlueprint, profil
     photoUrl: product.image_url || "",
     brand,
     name,
+    role: stylist.role,
+    direction: stylist.direction,
+    visualWeight: stylist.visualWeight,
+    formality: stylist.formality,
+    bodyEffect: stylist.bodyEffect,
+    faceEffect: stylist.faceEffect,
     category: category || undefined,
     price: product.price_range || undefined,
     premiumTitle: name,
@@ -399,14 +469,57 @@ function buildProductLookItem(product: Product, blueprint: LookBlueprint, profil
         ? "Passa mais presença sem exagero."
         : "Cria intenção visual na medida certa.",
     contextOfUse: blueprint.whenToWear,
-    styleTags: [blueprint.type, profile.goalKey, roleLabel],
-    categoryTags: category ? [category, roleLabel === "base" ? "Peça principal" : roleLabel === "presença" ? "Peça de apoio" : "Peça de destaque"] : undefined,
-    fitTags: [profile.fit, roleLabel === "base" ? "Estrutura" : roleLabel === "presença" ? "Equilíbrio" : "Ponto de foco"].filter(Boolean),
-    colorTags: [profile.metal].filter(Boolean),
-    targetProfile: [profile.goal, roleLabel],
-    useCases: [blueprint.whenToWear, roleLabel === "base" ? "Uso diário" : roleLabel === "presença" ? "Contexto de reunião" : "Momento de destaque"],
-    authorityRationale: `${name} foi escolhido por coerência com ${profile.goal.toLowerCase()} e ${profile.fit.toLowerCase()}, como peça de ${roleLabel}.`,
-    conversionCopy: `Peça real do catálogo para completar o look ${blueprint.name.toLowerCase()} sem perder coerência.`,
+    styleTags: uniq([
+      ...stylist.styleTags,
+      blueprint.type,
+      profile.goalKey,
+      profile.styleDirection,
+      roleLabel,
+    ]),
+    categoryTags: uniq([
+      ...(stylist.categoryTags || []),
+      category ? category : null,
+      roleLabel === "base" ? "Peça principal" : roleLabel === "presença" ? "Peça de apoio" : "Peça de destaque",
+    ].filter((value): value is string => Boolean(value))),
+    fitTags: uniq([
+      ...(stylist.fitTags || []),
+      profile.fit,
+      roleLabel === "base" ? "Estrutura" : roleLabel === "presença" ? "Equilíbrio" : "Ponto de foco",
+    ].filter((value): value is string => Boolean(value))),
+    colorTags: uniq([
+      ...(stylist.colorTags || []),
+      profile.metal,
+    ].filter((value): value is string => Boolean(value))),
+    targetProfile: uniq([
+      ...(stylist.targetProfile || []),
+      profile.goal,
+      profile.styleDirection,
+      roleLabel,
+    ].filter((value): value is string => Boolean(value))),
+    useCases: uniq([
+      ...(stylist.useCases || []),
+      blueprint.whenToWear,
+      roleLabel === "base" ? "Uso diário" : roleLabel === "presença" ? "Contexto de reunião" : "Momento de destaque",
+    ].filter((value): value is string => Boolean(value))),
+    authorityRationale: stylist.authorityRationale || `${name} foi escolhido por coerência com ${profile.goal.toLowerCase()} e ${profile.fit.toLowerCase()}, como peça de ${roleLabel}.`,
+    conversionCopy: stylist.conversionCopy || `Peça real do catálogo para completar o look ${blueprint.name.toLowerCase()} sem perder coerência.`,
+    persuasiveDescription: `${stylist.summary} ${stylist.authorityRationale}`,
+    sellerSuggestions: {
+      pairsBestWith: stylist.useCases.slice(0, 3),
+      idealFor: stylist.summary,
+      buyerProfiles: uniq([
+        profile.goal,
+        profile.styleDirection,
+        roleLabel,
+        stylist.direction,
+      ]),
+      bestContext: blueprint.whenToWear,
+    },
+    bundleCandidates: uniq([
+      ...(stylist.categoryTags || []),
+      ...(stylist.styleTags || []),
+      ...(stylist.useCases || []),
+    ]).slice(0, 5),
   };
 }
 
@@ -547,6 +660,7 @@ function buildLookFromBlueprint(
 }
 
 function formatCatalogProductLine(product: Product): string {
+  const stylist = deriveCatalogStylistProfile(product);
   const fields = [
     `id=${product.id}`,
     `name=${normalizeText(product.name)}`,
@@ -554,13 +668,26 @@ function formatCatalogProductLine(product: Product): string {
     `style=${normalizeText(product.style) || "n/a"}`,
     `type=${normalizeText(product.type)}`,
     `color=${normalizeText(product.primary_color) || "n/a"}`,
+    `role=${stylist.role}`,
+    `direction=${stylist.direction}`,
+    `formality=${stylist.formality}`,
+    `visual_weight=${stylist.visualWeight}`,
+    `body_effect=${stylist.bodyEffect}`,
+    `face_effect=${stylist.faceEffect}`,
+    `use_cases=${stylist.useCases.join(", ") || "n/a"}`,
+    `summary=${stylist.summary}`,
+    `authority=${stylist.authorityRationale}`,
+    `conversion=${stylist.conversionCopy}`,
   ];
   return fields.join(" | ");
 }
 
 export function summarizeOnboardingProfile(userData: OnboardingData): string {
   const profile = getProfileSignals(userData);
+  const essence = deriveEssenceProfile(userData);
   const lines = [
+    `essence: ${essence.label} | ${essence.summary}`,
+    `style_direction: ${profile.styleDirection}`,
     `goal: ${profile.goal}`,
     `satisfaction: ${profile.satisfaction}/10`,
     `main_pain: ${profile.mainPain}`,
@@ -591,10 +718,11 @@ export function buildCatalogPromptSections(catalog: Product[], userData: Onboard
 
 export function buildCatalogAwareFallbackResult(userData: OnboardingData, catalog: Product[]): ResultPayload {
   const profileSignals = getProfileSignals(userData);
+  const essence = deriveEssenceProfile(userData);
   const profile: NormalizedProfile = {
     ...profileSignals,
-    heroStyle: buildHeroStyle(profileSignals.goalKey),
-    heroSubtitle: `Seu perfil pede ${profileSignals.goal.toLowerCase()} com leitura limpa e uso real.`,
+    heroStyle: essence.label,
+    heroSubtitle: essence.summary,
     paletteFamily: GOAL_FALLBACKS[profileSignals.goalKey].paletteFamily,
     paletteDescription: GOAL_FALLBACKS[profileSignals.goalKey].paletteDescription,
     diagnostic: {
@@ -646,10 +774,11 @@ export function normalizeOpenAIRecommendationPayload(
 
   const raw = payload as Partial<ResultPayload>;
   const profileSignals = getProfileSignals(userData);
+  const essence = deriveEssenceProfile(userData);
   const profile: NormalizedProfile = {
     ...profileSignals,
-    heroStyle: buildHeroStyle(profileSignals.goalKey),
-    heroSubtitle: `Seu perfil pede ${profileSignals.goal.toLowerCase()} com leitura limpa e uso real.`,
+    heroStyle: essence.label,
+    heroSubtitle: essence.summary,
     paletteFamily: GOAL_FALLBACKS[profileSignals.goalKey].paletteFamily,
     paletteDescription: GOAL_FALLBACKS[profileSignals.goalKey].paletteDescription,
     diagnostic: {

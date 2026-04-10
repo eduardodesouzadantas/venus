@@ -101,7 +101,10 @@ export async function backfillMerchantAuthUsers(
   options: MerchantBackfillOptions = {}
 ): Promise<MerchantBackfillReport> {
   const dryRun = options.dryRun ?? true;
-  const defaultOrgSlug = normalize(options.defaultOrgSlug) || "maison-elite";
+  const defaultOrgSlug = normalize(options.defaultOrgSlug);
+  if (!defaultOrgSlug) {
+    throw new Error("defaultOrgSlug is required for merchant backfill");
+  }
   const perPage = 1000;
 
   const report: MerchantBackfillReport = {

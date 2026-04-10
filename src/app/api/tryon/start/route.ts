@@ -1,0 +1,104 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { submitTryOn } from "@/lib/tryon/client";
+
+export const dynamic = "force-dynamic";
+
+export async function POST(req: NextRequest) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  let body: { model_image?: string; product_id?: string; org_id?: string };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid body" }, { status: 400 });
+  }
+
+  const { model_image, product_id, org_id } = body;
+
+  if (!model_image || !product_id || !org_id) {
+    return NextResponse.json({ error: "Missing required fields: model_image, product_id, org_id" }, { status: 400 });
+  }
+
+  // Validar que o usuário pertence à org — nunca confiar no org_id do cliente
+  const { data: membership } = await supabase
+    .from("org_members")
+    .select("org_id")
+    .eq("user_id", user.id)
+    .eq("org_id", org_id)
+    .maybeSingle();
+
+  if (!membership) {
+    return NextResponse.json({ error: "Forbidden: not a member of this org" }, { status: 403 });
+  }
+
+  // Verificar produto pertence à org
+  const { data: product } = await supabase
+    .from("products")
+    .select("id, image_url")
+    .eq("id", product_id)
+    .eq("org_id", org_id)
+    .maybeSingle();
+
+  if (!product || !product.image_url) {
+    return NextResponse.json({ error: "Product not found or missing image" }, { status: 404 });
+  }
+
+  // Verificar limite mensal (freemium = sem cap)
+  const { data: org } = await supabase
+    .from("orgs")
+    .select("plan_id, limits")
+    .eq("id", org_id)
+    .single();
+
+  const isFreemium = org?.plan_id === "freemium";
+
+  if (!isFreemium) {
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const { count } = await supabase
+      .from("tryon_events")
+      .select("*", { count: "exact", head: true })
+      .eq("org_id", org_id)
+      .gte("created_at", startOfMonth.toISOString());
+
+    const limits = org?.limits as Record<string, unknown> | null;
+    const monthlyLimit = typeof limits?.tryon_monthly === "number" ? limits.tryon_monthly : 50;
+
+    if ((count ?? 0) >= monthlyLimit) {
+      return NextResponse.json(
+        { error: "monthly_limit_reached", limit: monthlyLimit },
+        { status: 429 }
+      );
+    }
+  }
+
+  try {
+    const requestId = await submitTryOn({
+      model_image,
+      garment_image: product.image_url,
+    });
+
+    await supabase.from("tryon_events").insert({
+      org_id,
+      product_id,
+      user_id: user.id,
+      fal_request_id: requestId,
+      status: "pending",
+    });
+
+    return NextResponse.json({ request_id: requestId });
+  } catch (error) {
+    console.error("[tryon/start] Submit error:", error);
+    return NextResponse.json({ error: "Failed to start try-on" }, { status: 500 });
+  }
+}

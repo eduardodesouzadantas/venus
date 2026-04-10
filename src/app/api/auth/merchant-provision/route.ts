@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { sendMerchantWelcomeEmail, type MerchantWelcomeEmailResult } from "@/lib/email/welcome";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureTenantCoreRecords, normalizeTenantSlug } from "@/lib/tenant/core";
 
@@ -11,6 +12,7 @@ type RequestBody = {
   org_id?: string;
   role?: string;
   name?: string;
+  plan_id?: string;
 };
 
 function normalize(value: unknown) {
@@ -23,6 +25,27 @@ function canonicalOrg(body: RequestBody) {
 
 function isMerchantRole(role: string) {
   return role.startsWith("merchant_");
+}
+
+function normalizePlanId(value: unknown) {
+  const normalized = normalize(value).toLowerCase();
+  if (normalized === "freemium" || normalized === "starter" || normalized === "pro") {
+    return normalized;
+  }
+  return "";
+}
+
+function planLabel(planId: string) {
+  switch (planId) {
+    case "freemium":
+      return "Freemium - 15 dias";
+    case "starter":
+      return "Starter";
+    case "pro":
+      return "Pro";
+    default:
+      return planId;
+  }
 }
 
 export async function POST(request: Request) {
@@ -38,6 +61,7 @@ export async function POST(request: Request) {
   const orgSlug = canonicalOrg(body);
   const role = normalize(body.role) || "merchant_owner";
   const name = normalize(body.name);
+  const planId = normalizePlanId(body.plan_id) || "freemium";
 
   if (!email || !password || !orgSlug) {
     return NextResponse.json({ error: "Missing merchant bootstrap data" }, { status: 400 });
@@ -67,6 +91,7 @@ export async function POST(request: Request) {
     org_slug: orgSlug,
     org_id: orgSlug,
     role,
+    plan_id: planId,
     tenant_source: "merchant_provision",
   };
 
@@ -76,6 +101,7 @@ export async function POST(request: Request) {
     org_slug: orgSlug,
     org_id: orgSlug,
     role,
+    plan_id: planId,
   };
 
   const result = existing
@@ -103,8 +129,34 @@ export async function POST(request: Request) {
       orgName: name || result.data.user.email || orgSlug,
       ownerUserId: result.data.user.id,
       role,
+      planId,
       source: "merchant_provision",
     });
+
+    const loginUrl = new URL("/b2b/login", request.url).toString();
+    let welcomeEmail: MerchantWelcomeEmailResult = {
+      sent: false,
+      provider: "none" as const,
+      message: "Resend not configured",
+    };
+
+    try {
+      welcomeEmail = await sendMerchantWelcomeEmail({
+        to: result.data.user.email || email,
+        storeName: tenantCore.org.name,
+        slug: tenantCore.org.slug,
+        email: result.data.user.email || email,
+        password,
+        planLabel: planLabel(planId),
+        loginUrl,
+      });
+    } catch (error) {
+      welcomeEmail = {
+        sent: false,
+        provider: "none",
+        message: error instanceof Error ? error.message : "Failed to send welcome email",
+      };
+    }
 
     return NextResponse.json(
       {
@@ -115,6 +167,8 @@ export async function POST(request: Request) {
         org_id: orgSlug,
         tenant_org_id: tenantCore.org.id,
         role,
+        plan_id: planId,
+        welcome_email: welcomeEmail,
       },
       {
         headers: {
@@ -133,6 +187,7 @@ export async function POST(request: Request) {
         org_slug: orgSlug,
         org_id: orgSlug,
         role,
+        plan_id: planId,
       },
       { status: 500 }
     );

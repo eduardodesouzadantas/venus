@@ -2,7 +2,8 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Role } from "@/types/hardened";
+import { createClient } from "@/lib/supabase/client";
+import type { Role } from "@/types/hardened";
 
 interface User {
   id: string;
@@ -14,9 +15,10 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, role: Role, orgId?: string, password?: string) => Promise<void>;
-  logout: () => void;
+  login: (email: string, role: Role, orgSlug: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
   isLoading: boolean;
+  lastError: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -24,124 +26,110 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [lastError, setLastError] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
-    const saved = localStorage.getItem("venus_session");
-    if (saved) {
-      setUser(JSON.parse(saved));
-    }
-    setIsLoading(false);
+    const supabase = createClient();
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        const u = session.user;
+        const appMeta = u.app_metadata as Record<string, string> | undefined;
+        const userMeta = u.user_metadata as Record<string, string> | undefined;
+        setUser({
+          id: u.id,
+          email: u.email ?? "",
+          role: (appMeta?.role ?? userMeta?.role ?? "merchant_viewer") as Role,
+          name: userMeta?.name ?? u.email?.split("@")[0] ?? "",
+          orgId: appMeta?.org_id ?? userMeta?.org_id ?? undefined,
+        });
+      }
+      setIsLoading(false);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        const u = session.user;
+        const appMeta = u.app_metadata as Record<string, string> | undefined;
+        const userMeta = u.user_metadata as Record<string, string> | undefined;
+        setUser({
+          id: u.id,
+          email: u.email ?? "",
+          role: (appMeta?.role ?? userMeta?.role ?? "merchant_viewer") as Role,
+          name: userMeta?.name ?? u.email?.split("@")[0] ?? "",
+          orgId: appMeta?.org_id ?? userMeta?.org_id ?? undefined,
+        });
+      } else {
+        setUser(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const login = async (email: string, role: Role, orgId?: string, password?: string) => {
+  const login = async (email: string, role: Role, orgSlug: string, password: string) => {
     setIsLoading(true);
+    setLastError(null);
+
     try {
-      // Mock login delay
-      await new Promise(resolve => setTimeout(resolve, 800));
-
-      let canonicalUserId = `u_${Math.random().toString(36).substring(7)}`;
-
       if (role.startsWith("merchant_")) {
-        const merchantOrg = orgId || "maison-elite";
-        const merchantPassword = password || "venus-demo-password";
+        if (!orgSlug) {
+          throw new Error("Slug da loja é obrigatório para login de lojista");
+        }
 
-        const provisionResponse = await fetch("/api/auth/merchant-provision", {
+        const res = await fetch("/api/auth/merchant-provision", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Cache-Control": "no-store",
-          },
-          body: JSON.stringify({
-            email,
-            password: merchantPassword,
-            org_slug: merchantOrg,
-            org_id: merchantOrg,
-            role,
-          }),
+          headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+          body: JSON.stringify({ email, password, org_slug: orgSlug, role }),
         });
 
-        if (!provisionResponse.ok) {
-          throw new Error("Unable to provision merchant auth");
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.error || "Falha ao provisionar lojista");
         }
-
-        const { createClient } = await import("@/lib/supabase/client");
-        const supabase = createClient();
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password: merchantPassword,
-        });
-
-        if (signInError) {
-          throw signInError;
-        }
-
-        const { data: currentUserData } = await supabase.auth.getUser();
-        canonicalUserId = currentUserData.user?.id || canonicalUserId;
       } else if (role.startsWith("agency_")) {
-        const agencyPassword = password || "venus-demo-password";
-
-        const provisionResponse = await fetch("/api/auth/agency-provision", {
+        const res = await fetch("/api/auth/agency-provision", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Cache-Control": "no-store",
-          },
-          body: JSON.stringify({
-            email,
-            password: agencyPassword,
-            role,
-          }),
+          headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+          body: JSON.stringify({ email, password, role }),
         });
 
-        if (!provisionResponse.ok) {
-          throw new Error("Unable to provision agency auth");
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.error || "Falha ao provisionar acesso de agência");
         }
-
-        const { createClient } = await import("@/lib/supabase/client");
-        const supabase = createClient();
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password: agencyPassword,
-        });
-
-        if (signInError) {
-          throw signInError;
-        }
-
-        const { data: currentUserData } = await supabase.auth.getUser();
-        canonicalUserId = currentUserData.user?.id || canonicalUserId;
       }
 
-      const newUser: User = {
-        id: canonicalUserId,
-        email,
-        name: email.split('@')[0],
-        role,
-        ...(orgId ? { orgId } : {}),
-      };
+      const supabase = createClient();
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      if (signInError) throw signInError;
 
-      setUser(newUser);
-      localStorage.setItem("venus_session", JSON.stringify(newUser));
-
-      if (role.startsWith('agency')) {
+      if (role.startsWith("agency_")) {
         router.push("/agency");
       } else {
         router.push("/merchant");
       }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Falha ao entrar";
+      setLastError(message);
+      throw err;
     } finally {
       setIsLoading(false);
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
     setUser(null);
-    localStorage.removeItem("venus_session");
     router.push("/login");
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, login, logout, isLoading, lastError }}>
       {children}
     </AuthContext.Provider>
   );

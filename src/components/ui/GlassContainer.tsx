@@ -9,7 +9,7 @@ export const GlassContainer = React.forwardRef<HTMLDivElement, GlassContainerPro
       <div
         ref={ref}
         className={cn(
-          "rounded-3xl border border-white/10 bg-white/5 py-6 px-6 backdrop-blur-[30px] shadow-2xl",
+          "luxury-panel rounded-[28px] px-4 py-5 sm:px-6 sm:py-6",
           className
         )}
         {...props}

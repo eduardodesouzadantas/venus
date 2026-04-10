@@ -6,7 +6,7 @@ export interface TextProps extends React.HTMLAttributes<HTMLParagraphElement> {}
 export function Text({ className, ...props }: TextProps) {
   return (
     <p
-      className={cn("font-sans text-base leading-relaxed text-white/90", className)}
+      className={cn("font-sans text-[15px] leading-7 text-white/70 sm:text-base", className)}
       {...props}
     />
   )

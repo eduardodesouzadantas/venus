@@ -10,6 +10,8 @@ import { generateSmartReplies } from "@/lib/whatsapp/smart-replies";
 import { SmartReplyAngle, SmartReplySuggestion } from "@/types/whatsapp";
 import { trackWhatsAppEvent } from "@/lib/whatsapp/analytics";
 import { fetchSmartReplyOrgRanking, sortSmartRepliesByOrgRanking, type SmartReplyOrgRanking } from "@/lib/whatsapp/smart-reply-ranking";
+import { buildSalesCopilotPlan } from "@/lib/whatsapp/sales-copilot";
+import { SalesCopilotPanel } from "@/components/whatsapp/SalesCopilotPanel";
 import {
   buildLookComposerMessage,
   buildProductComposerMessage,
@@ -162,6 +164,11 @@ function InboxView() {
   }, [smartReplyRanking]);
 
   const topOperationalAngle = smartReplyRanking?.hasData ? smartReplyRanking.rankedAngles[0] ?? null : null;
+  const salesCopilotPlan = React.useMemo(() => {
+    if (!activeConversation) return null;
+
+    return buildSalesCopilotPlan(activeConversation, rankedSmartReplies);
+  }, [activeConversation, rankedSmartReplies]);
 
   const lastMessageId = activeConversation?.messages[activeConversation.messages.length - 1]?.id || null;
 
@@ -574,8 +581,36 @@ function InboxView() {
       <div className="w-80 flex-shrink-0 flex flex-col overflow-y-auto no-scrollbar space-y-8 pl-4">
         {activeConversation ? (
           <>
+            {salesCopilotPlan && (
+              <SalesCopilotPanel
+                plan={salesCopilotPlan}
+                onSendMessage={async (message) => {
+                  await sendMessage(message, "merchant", "text", {
+                    source: "sales_copilot",
+                    stage: salesCopilotPlan.stage,
+                    intent_score: salesCopilotPlan.stats.intentScore,
+                  });
+                }}
+                onApplyMessage={(message) => setInputText(message)}
+                onSendProductLink={async () => {
+                  if (!activeConversation.user.viewedProducts[0]) return;
+                  await sendProductLink("prod-id", activeConversation.user.viewedProducts[0]);
+                }}
+                onSendBundlePush={async () => {
+                  const bundleLookName =
+                    activeConversation.user.lookSummary?.[0]?.name ||
+                    activeConversation.user.viewedProducts[0] ||
+                    activeConversation.user.styleIdentity;
+                  await sendBundlePush("look-id", bundleLookName);
+                }}
+                onSetFollowUp={async () => {
+                  await setFollowUp(activeConversation.id);
+                }}
+              />
+            )}
+
             <section className="space-y-4">
-               <Heading as="h4" className="text-[10px] uppercase font-bold tracking-[0.4em] text-white/30 px-2">Smart Replies</Heading>
+               <Heading as="h4" className="text-[10px] uppercase font-bold tracking-[0.24em] text-white/30 px-2">Respostas prontas</Heading>
                <div className="p-5 rounded-[32px] bg-white/[0.03] border border-white/5 space-y-4">
                   <div className="flex items-start justify-between gap-4">
                      <div className="space-y-1">

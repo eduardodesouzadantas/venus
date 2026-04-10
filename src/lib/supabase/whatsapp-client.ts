@@ -10,10 +10,14 @@ export function createWhatsAppClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      // Keep this client isolated from the main auth browser client.
+      // @supabase/ssr caches browser clients by default, and this WhatsApp
+      // client uses accessToken, which would poison signInWithPassword for
+      // the login flow if it became the shared singleton.
+      isSingleton: false,
       accessToken: getWhatsAppAccessToken,
     }
   );
 
   return whatsappClient;
 }
-

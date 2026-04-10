@@ -72,6 +72,7 @@ const CATEGORY_COSTS = {
 } as const;
 
 const PLAN_BUDGETS = {
+  free: { daily: 100, monthly: 1_000 },
   starter: { daily: 300, monthly: 9_000 },
   growth: { daily: 1_000, monthly: 30_000 },
   scale: { daily: 2_500, monthly: 75_000 },
@@ -89,7 +90,10 @@ function sameUtcDay(value?: string | null, day?: string) {
 
 function getPlanBudget(planId?: string | null) {
   const normalized = normalize(planId).toLowerCase();
+  if (normalized === "freemium") return PLAN_BUDGETS.free;
+  if (normalized === "free") return PLAN_BUDGETS.free;
   if (normalized === "growth") return PLAN_BUDGETS.growth;
+  if (normalized === "pro") return PLAN_BUDGETS.growth;
   if (normalized === "scale") return PLAN_BUDGETS.scale;
   if (normalized === "enterprise") return PLAN_BUDGETS.enterprise;
   return PLAN_BUDGETS.starter;
@@ -143,12 +147,12 @@ async function listAgencyBillingRowsWithFilters(filters: AgencyBillingFilters): 
     whatsappConversationsResult,
     whatsappMessagesResult,
   ] = await Promise.all([
-    admin.from("products").select("org_id, created_at"),
-    admin.from("leads").select("org_id, created_at, updated_at, last_interaction_at"),
-    admin.from("saved_results").select("org_id, created_at"),
-    admin.from("tenant_events").select("org_id, created_at"),
-    admin.from("whatsapp_conversations").select("org_slug, created_at"),
-    admin.from("whatsapp_messages").select("org_slug, created_at"),
+    admin.from("products").select("org_id, created_at").order("created_at", { ascending: false }).limit(50),
+    admin.from("leads").select("org_id, created_at, updated_at, last_interaction_at").order("created_at", { ascending: false }).limit(50),
+    admin.from("saved_results").select("org_id, created_at").order("created_at", { ascending: false }).limit(50),
+    admin.from("tenant_events").select("org_id, created_at").order("created_at", { ascending: false }).limit(50),
+    admin.from("whatsapp_conversations").select("org_slug, created_at").order("created_at", { ascending: false }).limit(50),
+    admin.from("whatsapp_messages").select("org_slug, created_at").order("created_at", { ascending: false }).limit(50),
   ]);
 
   if (productsResult.error) throw new Error(`Failed to load billing products: ${productsResult.error.message}`);

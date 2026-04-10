@@ -26,13 +26,13 @@ export function getLeadStatusLabel(status: LeadStatus) {
     case "new":
       return "Novo";
     case "engaged":
-      return "Engajado";
+      return "Em conversa";
     case "qualified":
       return "Qualificado";
     case "offer_sent":
-      return "Oferta enviada";
+      return "Proposta enviada";
     case "closing":
-      return "Fechamento iniciado";
+      return "Fechamento em andamento";
     case "won":
       return "Ganho";
     case "lost":

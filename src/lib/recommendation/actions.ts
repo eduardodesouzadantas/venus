@@ -2,12 +2,14 @@
 
 import { OnboardingData } from "@/types/onboarding";
 import { ResultPayload } from "@/types/result";
+import type { VisualAnalysisPayload } from "@/types/visual-analysis";
 import { getB2BProducts, Product } from "@/lib/catalog";
 import { generateOpenAIRecommendation } from "@/lib/ai";
 import { buildCatalogAwareFallbackResult } from "@/lib/ai/result-normalizer";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { extractLeadSignalsFromSavedResultPayload, persistSavedResultAndLead } from "@/lib/leads";
 import { resolveAppTenantOrg } from "@/lib/tenant/core";
+import { generateVisualProfileAnalysis } from "@/lib/analysis/visual-profile";
 import {
   createProcessAndPersistLeadIdempotencyKey,
   stripOnboardingBinaryArtifacts,
@@ -35,6 +37,7 @@ export async function generateEngineResult(
     orgId?: string | null;
     orgSlug?: string | null;
     eventSource?: string | null;
+    visualAnalysis?: VisualAnalysisPayload | null;
     org?: {
       id: string;
       slug: string;
@@ -316,12 +319,14 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
     }
 
     const generationStartedAtMs = Date.now();
+    const visualAnalysis = await generateVisualProfileAnalysis(userData);
     let result: ResultPayload;
     try {
-      result = await generateEngineResult(userData, {
+      result = await generateEngineResult(safeUserData, {
         orgId: resolvedTenant.org.id,
         orgSlug: resolvedTenant.org.slug,
         eventSource: "app",
+        visualAnalysis,
         org: {
           id: resolvedTenant.org.id,
           slug: resolvedTenant.org.slug,
@@ -404,6 +409,7 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
             idempotencyKey,
           },
           onboardingContext: safeUserData,
+          visualAnalysis,
           finalResult: result,
         },
         leadName: leadSignals.name || safeUserData.contact?.name || null,

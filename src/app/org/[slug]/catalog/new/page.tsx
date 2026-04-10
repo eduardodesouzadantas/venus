@@ -1,5 +1,6 @@
 "use client";
 
+import { use } from "react";
 import { useState } from "react";
 import { Sparkles, Upload, ArrowLeft, Image as ImageIcon, Save, Edit3, Target, Zap, LayoutGrid, CheckCircle2, ShoppingBag, Terminal, Plus, X } from "lucide-react";
 import { Heading } from "@/components/ui/Heading";
@@ -8,10 +9,11 @@ import { VenusButton } from "@/components/ui/VenusButton";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-export default function NewProductEnrichment({ params }: { params: { slug: string } }) {
+export default function NewProductEnrichment({ params }: { params: Promise<{ slug: string }> }) {
   const [step, setStep] = useState<"upload" | "enriching" | "review">("upload");
   const [progress, setProgress] = useState(0);
   const router = useRouter();
+  const { slug } = use(params);
 
   const handleUpload = () => {
     setStep("enriching");
@@ -41,7 +43,7 @@ export default function NewProductEnrichment({ params }: { params: { slug: strin
       <div className="max-w-4xl mx-auto space-y-12 animate-in fade-in duration-700">
          
          <header className="flex items-center justify-between">
-            <Link href={`/org/${params.slug}/catalog`} className="flex items-center gap-3 px-4 py-2 rounded-full border border-white/5 hover:bg-white/5 transition-all text-white/40 hover:text-white group">
+            <Link href={`/org/${slug}/catalog`} className="flex items-center gap-3 px-4 py-2 rounded-full border border-white/5 hover:bg-white/5 transition-all text-white/40 hover:text-white group">
                <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
                <span className="text-[10px] font-bold uppercase tracking-widest">Voltar ao Acervo</span>
             </Link>
@@ -113,7 +115,7 @@ export default function NewProductEnrichment({ params }: { params: { slug: strin
                            <CheckCircle2 size={12} /> Alta Probabilidade de Desejo Detectada
                         </Text>
                      </div>
-                     <VenusButton onClick={() => router.push(`/org/${params.slug}/catalog`)} variant="solid" className="bg-white text-black h-12 px-8 rounded-full text-[10px] font-bold uppercase tracking-widest flex items-center gap-3">
+                     <VenusButton onClick={() => router.push(`/org/${slug}/catalog`)} variant="solid" className="bg-white text-black h-12 px-8 rounded-full text-[10px] font-bold uppercase tracking-widest flex items-center gap-3">
                         <Save size={16} /> Salvar Produto
                      </VenusButton>
                   </div>

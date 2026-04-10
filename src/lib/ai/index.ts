@@ -1,9 +1,10 @@
-import "server-only";
+﻿import "server-only";
 
 import OpenAI from "openai";
 import { OnboardingData } from "@/types/onboarding";
 import { Product } from "@/lib/catalog";
 import { ResultPayload } from "@/types/result";
+import type { VisualAnalysisPayload } from "@/types/visual-analysis";
 import { enforceOrgHardCap } from "@/lib/billing/enforcement";
 import { enforceTenantOperationalState, type TenantOperationalOrgSnapshot } from "@/lib/tenant/enforcement";
 import {
@@ -17,6 +18,7 @@ export interface OpenAIRecommendationHardCapContext {
   orgSlug?: string | null;
   eventSource?: string | null;
   org?: TenantOperationalOrgSnapshot | null;
+  visualAnalysis?: VisualAnalysisPayload | null;
 }
 
 export async function generateOpenAIRecommendation(
@@ -71,6 +73,7 @@ Regras:
 - Use apenas os dados do perfil e o catálogo real fornecidos.
 - Não invente produtos, marcas, atributos ou promessas.
 - Prefira looks reais e coerentes em vez de respostas criativas demais.
+- Respeite a linha de styling escolhida no onboarding e não misture peças fora dessa direção.
 - Explique de forma curta e clara por que cada escolha combina com o perfil.
 - Mostre a hierarquia do look com base, apoio e destaque sem escrever demais.
 - Justifique a paleta com o objetivo de imagem, o corpo e o metal informado.
@@ -87,6 +90,10 @@ CAPTURA FÍSICA:
 face_photo=${userData.scanner.facePhoto ? "yes" : "no"}
 body_photo=${userData.scanner.bodyPhoto ? "yes" : "no"}
 
+${hardCapContext?.visualAnalysis ? `LEITURA VISUAL POR IA:
+${JSON.stringify(hardCapContext.visualAnalysis, null, 2)}
+
+Use esta leitura visual como sinal principal. O intake e apoio, nao o centro.` : ""}
 CATÁLOGO REAL RELEVANTE:
 ${catalogSummary}
 

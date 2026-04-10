@@ -1,5 +1,5 @@
-import * as React from "react"
-import { cn } from "@/lib/utils"
+import * as React from "react";
+import { cn } from "@/lib/utils";
 
 interface PillSelectorProps {
   options: string[];
@@ -22,7 +22,7 @@ export function PillSelector({ options, selected, onChange, multiple = false }: 
   };
 
   return (
-    <div className="flex flex-wrap gap-3">
+    <div className="flex flex-wrap justify-center gap-2.5 sm:gap-3">
       {options.map((option) => {
         const isSelected = selected.includes(option);
         return (
@@ -30,10 +30,10 @@ export function PillSelector({ options, selected, onChange, multiple = false }: 
             key={option}
             onClick={() => toggle(option)}
             className={cn(
-              "px-5 py-3 rounded-full text-sm font-medium transition-all duration-300 active:scale-95",
-              isSelected 
-                ? "bg-white text-black shadow-[0_0_15px_rgba(255,255,255,0.4)]" 
-                : "bg-white/5 text-white/70 border border-white/10 hover:bg-white/10"
+              "min-h-11 rounded-full px-4 py-2.5 text-center text-[13px] leading-snug font-medium transition-all duration-300 active:scale-95 sm:min-h-12 sm:px-5 sm:py-3 sm:text-sm",
+              isSelected
+                ? "bg-[linear-gradient(180deg,#F5E3A2_0%,#D4AF37_100%)] text-[#0A0A0A] shadow-[0_14px_28px_rgba(212,175,55,0.18)]"
+                : "border border-white/10 bg-white/[0.04] text-white/68 hover:bg-white/[0.08]"
             )}
           >
             {option}

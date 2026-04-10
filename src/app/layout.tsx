@@ -25,12 +25,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR" className={`${inter.variable} ${playfair.variable} dark`} suppressHydrationWarning>
-      <body className="min-h-screen bg-black text-white antialiased" suppressHydrationWarning>
+      <body className="min-h-screen bg-black text-white antialiased relative isolate" suppressHydrationWarning>
         <UserImageProvider>
           <AuthProvider>
             <OnboardingProvider>
               <WhatsAppProvider>
-                <main className="min-h-screen bg-black relative overflow-x-hidden antialiased">
+                <main className="min-h-screen bg-black relative z-10 overflow-x-hidden antialiased">
                   {children}
                   <Suspense fallback={null}>
                     <DemoTour />
@@ -44,6 +44,5 @@ export default function RootLayout({
     </html>
   );
 }
-
 
 

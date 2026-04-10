@@ -1,5 +1,6 @@
 export interface OnboardingData {
   intent: {
+    styleDirection: "Masculina" | "Feminina" | "Neutra" | "";
     imageGoal: string;
     satisfaction: number;
     mainPain: string;
@@ -34,7 +35,7 @@ export interface OnboardingData {
 }
 
 export const defaultOnboardingData: OnboardingData = {
-  intent: { imageGoal: "", satisfaction: 5, mainPain: "" },
+  intent: { styleDirection: "", imageGoal: "", satisfaction: 5, mainPain: "" },
   lifestyle: { environments: [], purchaseDna: "", purchaseBehavior: "" },
   colors: { favoriteColors: [], avoidColors: [], metal: "" },
   body: { highlight: [], camouflage: [], fit: "", faceLines: "", hairLength: "" },

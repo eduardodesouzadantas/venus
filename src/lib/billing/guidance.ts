@@ -59,8 +59,10 @@ function normalize(value: unknown) {
 
 function planTier(planId?: string | null): PlanTier {
   const normalized = normalize(planId).toLowerCase();
+  if (normalized === "freemium") return "free";
   if (normalized === "free") return "free";
   if (normalized === "starter") return "starter";
+  if (normalized === "pro") return "growth";
   if (normalized === "growth") return "growth";
   if (normalized === "scale") return "scale";
   if (normalized === "enterprise") return "enterprise";

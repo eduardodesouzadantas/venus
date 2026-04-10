@@ -119,6 +119,19 @@ export async function POST(request: Request) {
     return Response.json({ error: updateError.message }, { status: 500 });
   }
 
+  await supabase.from("tenant_events").insert({
+    org_id: org.id,
+    actor_user_id: null,
+    event_type: "whatsapp_click",
+    event_source: "whatsapp",
+    dedupe_key: `whatsapp_click:${org.id}:${body.resultId}`,
+    payload: {
+      saved_result_id: body.resultId,
+      org_slug: org.slug,
+      timestamp: new Date().toISOString(),
+    },
+  });
+
   try {
     const { lead, created } = await findOrCreateLead(supabase, {
       orgId: org.id,

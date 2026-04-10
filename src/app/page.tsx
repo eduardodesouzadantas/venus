@@ -1,158 +1,185 @@
-"use client";
-
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { ArrowRight, Crown, MessagesSquare, ScanSearch, Sparkles } from "lucide-react";
 
-// Gold floating particles (hydrated on client)
-function GoldParticles() {
-  const [particles, setParticles] = useState<{id: number, left: string, top: string, size: number, delay: string, duration: string, opacity: number}[]>([]);
+const pillars = [
+  {
+    icon: ScanSearch,
+    title: "Lê a essência",
+    text: "Foto, intenção e sinais visuais entram primeiro. Nada de questionário solto.",
+  },
+  {
+    icon: Sparkles,
+    title: "Cruza o catálogo",
+    text: "A curadoria encontra as peças certas e explica por que elas funcionam.",
+  },
+  {
+    icon: MessagesSquare,
+    title: "Fecha no WhatsApp",
+    text: "A leitura vira conversa, prova social e próxima ação real com a loja.",
+  },
+];
 
-  useEffect(() => {
-    setParticles(
-      Array.from({ length: 18 }, (_, i) => ({
-        id: i,
-        left: `${5 + Math.random() * 90}%`,
-        top: `${5 + Math.random() * 90}%`,
-        size: Math.random() > 0.5 ? 1 : 2,
-        delay: `${Math.random() * 4}s`,
-        duration: `${4 + Math.random() * 6}s`,
-        opacity: 0.15 + Math.random() * 0.4,
-      }))
-    );
-  }, []);
+const proofTags = ["Foto + corpo + paleta", "Catálogo real da loja", "Share pronto para postar", "WhatsApp que converte"];
 
-  if (particles.length === 0) return null;
-
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none z-0" aria-hidden>
-      {particles.map((p) => (
-        <div
-          key={p.id}
-          className="absolute rounded-full animate-float"
-          style={{
-            left: p.left,
-            top: p.top,
-            width: p.size,
-            height: p.size,
-            backgroundColor: "#D4AF37",
-            opacity: p.opacity,
-            animationDelay: p.delay,
-            animationDuration: p.duration,
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-// AI Scan Line component
-function AIScanLine() {
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none z-0" aria-hidden>
-      <div
-        className="absolute left-0 right-0 h-px animate-scan"
-        style={{
-          background:
-            "linear-gradient(90deg, transparent 0%, rgba(212,175,55,0.15) 20%, rgba(212,175,55,0.5) 50%, rgba(212,175,55,0.15) 80%, transparent 100%)",
-        }}
-      />
-    </div>
-  );
-}
+const steps = [
+  {
+    number: "01",
+    title: "Entrada consultiva",
+    text: "A Venus calibra a direção visual antes de sugerir qualquer look.",
+  },
+  {
+    number: "02",
+    title: "Curadoria precisa",
+    text: "O app cruza perfil, proporção e catálogo para montar uma escolha coerente.",
+  },
+  {
+    number: "03",
+    title: "Desejo que retroalimenta",
+    text: "A imagem final é compartilhável, marca a loja e puxa novos testes.",
+  },
+];
 
 export default function SplashPage() {
-  const [revealed, setRevealed] = useState(false);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setRevealed(true), 150);
-    return () => clearTimeout(timer);
-  }, []);
-
   return (
-    <div className="relative flex flex-col h-[100dvh] bg-[#050505] overflow-hidden" id="venus-splash">
-
-      {/* ── BACKGROUND LAYER: Depth & Grid ── */}
-      <div className="absolute inset-0 z-0 pointer-events-none">
-        <div className="absolute inset-0 bg-[#050505]" />
-        
-        {/* Subtle Ambient Glow */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[60vh] opacity-10"
-             style={{ background: "radial-gradient(circle at 50% 0%, #D4AF37 0%, transparent 75%)" }} />
-
-        {/* Global technical grid */}
-        <div className="absolute inset-0 opacity-[0.015]" style={{
-          backgroundImage: "linear-gradient(rgba(212,175,55,1) 1px, transparent 1px), linear-gradient(90deg, rgba(212,175,55,1) 1px, transparent 1px)",
-          backgroundSize: "60px 60px",
-        }} />
+    <div className="relative min-h-screen overflow-hidden bg-[#04070A] text-white">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(224,228,235,0.11),transparent_34%),radial-gradient(circle_at_80%_20%,rgba(212,175,55,0.04),transparent_26%),linear-gradient(180deg,rgba(255,255,255,0.02),transparent_30%)]" />
+        <div
+          className="absolute inset-0 opacity-[0.02]"
+          style={{
+            backgroundImage:
+              "linear-gradient(rgba(255,255,255,0.9) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.9) 1px, transparent 1px)",
+            backgroundSize: "56px 56px",
+          }}
+        />
       </div>
 
-      <GoldParticles />
-      <AIScanLine />
-
-      {/* ── HEADER: BRAND IDENTITY ── */}
-      <header className={`relative z-20 flex flex-col items-center pt-12 transition-all duration-1000 ${revealed ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4"}`}>
-        <span className="text-4xl font-bold tracking-[0.1em] text-[#D4AF37]"
-              style={{ fontFamily: "var(--font-playfair), serif", textShadow: "0 0 20px rgba(212,175,55,0.4)" }}>
-          V
-        </span>
-        <span className="text-[10px] tracking-[0.5em] font-light text-white/30 uppercase mt-2">
-          Venus Engine
-        </span>
-      </header>
-
-      {/* ── MAIN HERO SECTION ── */}
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-6 -mt-6">
-        
-        {/* Primary Hero Asset: Optimized for verticality */}
-        <div className={`relative w-full aspect-[4/5] max-w-[260px] transition-all duration-1000 delay-200 ${revealed ? "opacity-100 scale-100" : "opacity-0 scale-95"}`}>
-          <div className="relative w-full h-full overflow-hidden rounded-[2.5rem] border border-white/[0.04] shadow-2xl">
-            <img
-              src="/hero-v2.png"
-              alt="Luxury Silhouette"
-              className="w-full h-full object-cover animate-breathe"
-              style={{
-                objectPosition: "50% 0%",
-                transform: "scale(1)",
-                maskImage: "linear-gradient(to bottom, black 88%, transparent 100%)",
-                WebkitMaskImage: "linear-gradient(to bottom, black 88%, transparent 100%)",
-                filter: "brightness(1) contrast(1.05)",
-              }}
-            />
-            {/* Dark blending gradient to smooth the bottom transition */}
-            <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-transparent to-transparent opacity-95" />
+      <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-5 pb-14 pt-5 sm:px-8 lg:px-10">
+        <header className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-full border border-[#D4AF37]/30 bg-[#D4AF37]/10 text-sm font-semibold text-[#D4AF37]">
+              V
+            </div>
+            <div className="space-y-0.5">
+              <div className="text-[10px] font-bold uppercase tracking-[0.38em] text-[#D4AF37]">Venus Engine</div>
+              <div className="text-[10px] uppercase tracking-[0.28em] text-white/30">Stylist intelligence for high ticket retail</div>
+            </div>
           </div>
-        </div>
 
-        {/* Messaging Area: High-impact typography */}
-        <div className={`text-center mt-6 space-y-4 max-w-[320px] transition-all duration-1000 delay-400 ${revealed ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}>
-          <h1 style={{ fontFamily: "var(--font-playfair), serif", fontSize: "clamp(1.6rem, 5.5vw, 1.9rem)", lineHeight: 1.15, color: "#fff" }}>
-            Sua <span className="shimmer-text">Assinatura.</span><br />
-            <span style={{ opacity: 0.85 }}>Revelada.</span>
-          </h1>
-
-          <p className="text-[8px] font-light leading-relaxed text-white/30 max-w-[260px] mx-auto uppercase tracking-[0.25em]">
-            Uma leitura visual que traduz presença em looks coerentes e prontos para uso real.
-          </p>
-
-          <div className="pt-6">
-            <Link href="/onboarding/intent" className="block w-full max-w-[280px] mx-auto">
-              <button className="w-full relative overflow-hidden rounded-full py-4 text-[10px] font-bold tracking-[0.25em] uppercase text-black transition-all duration-300 active:scale-95 shadow-[0_0_35px_rgba(212,175,55,0.35)] bg-gradient-to-r from-[#D4AF37] via-[#F0D060] to-[#D4AF37] bg-[length:200%_auto] hover:bg-right hover:shadow-[0_0_55px_rgba(212,175,55,0.55)] cursor-pointer">
-                <span className="relative z-10">Começar leitura</span>
-                {/* Interactive Shine Effect */}
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent -translate-x-full hover:translate-x-full transition-transform duration-1000 pointer-events-none" />
-              </button>
-            </Link>
+          <div className="hidden rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-[9px] font-bold uppercase tracking-[0.3em] text-white/45 sm:block">
+            Leitura consultiva • Catálogo real • Conversão viva
           </div>
-        </div>
-      </main>
+        </header>
 
-      {/* ── FOOTER ── */}
-      <footer className={`relative z-20 px-6 pb-8 text-center transition-all duration-700 delay-500 ${revealed ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"}`}>
-          <p className="text-[7px] text-white/15 tracking-[0.6em] uppercase">
-          © 2026 VENUS ENGINE · VISUAL INTELLIGENCE
-        </p>
-      </footer>
+        <main className="grid flex-1 gap-8 py-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-12 lg:py-14">
+          <section className="max-w-2xl space-y-6 sm:space-y-7">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/6 px-4 py-2">
+              <Crown className="h-3.5 w-3.5 text-[#D4AF37]" />
+              <span className="text-[9px] font-bold uppercase tracking-[0.32em] text-[#D4AF37]">Consultoria visual premium</span>
+            </div>
 
+            <div className="space-y-4">
+              <h1 className="max-w-[12ch] font-serif text-[2.85rem] leading-[0.92] tracking-[-0.04em] text-white sm:text-[4.35rem] lg:text-[4.9rem]">
+                A Venus entende sua essência.
+              </h1>
+              <p className="max-w-2xl text-[16px] leading-8 text-white/68 sm:text-[17px]">
+                Foto, corpo, paleta e catálogo real. A leitura vira look certo, imagem desejável e WhatsApp pronto para converter.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Link
+                href="/onboarding/intent"
+                className="inline-flex min-h-12 items-center justify-center rounded-full bg-[linear-gradient(180deg,#F1D77A_0%,#D4AF37_100%)] px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#0A0A0A] shadow-[0_18px_40px_rgba(212,175,55,0.18)] transition-transform active:scale-[0.98] sm:px-8"
+              >
+                Começar leitura
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+              <Link
+                href="/onboarding/intent?demo=true"
+                className="inline-flex min-h-12 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.28em] text-white/75 transition-colors hover:bg-white/[0.06] sm:px-8"
+              >
+                Ver demonstração
+              </Link>
+            </div>
+
+            <div className="hidden flex-wrap gap-2 sm:flex">
+              {proofTags.map((tag) => (
+                <span
+                  key={tag}
+                  className="rounded-full border border-white/8 bg-white/[0.03] px-3 py-2 text-[8px] font-bold uppercase tracking-[0.26em] text-white/50"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </section>
+
+          <section className="relative">
+            <div className="absolute -left-8 top-6 h-24 w-24 rounded-full bg-[#D4AF37]/10 blur-3xl sm:h-28 sm:w-28" />
+            <div className="absolute right-2 top-10 h-28 w-28 rounded-full bg-white/6 blur-3xl sm:h-36 sm:w-36" />
+
+            <div className="relative overflow-hidden rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.05)_0%,rgba(255,255,255,0.02)_100%)] p-3 shadow-[0_30px_120px_rgba(0,0,0,0.45)] sm:rounded-[36px] sm:p-5">
+              <div className="flex items-center justify-between gap-3 pb-3 sm:pb-4">
+                <div className="space-y-1">
+                  <div className="text-[9px] font-bold uppercase tracking-[0.34em] text-[#D4AF37]">Motor de desejo</div>
+                  <div className="text-[15px] font-semibold text-white">A porta de entrada da loja inteira</div>
+                </div>
+                <div className="rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-3 py-1.5 text-[8px] font-bold uppercase tracking-[0.24em] text-[#D4AF37]">
+                  Máquina viva
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-[26px] border border-white/8 bg-black/40">
+                <img
+                  src="/hero-v2.png"
+                  alt="Venus editorial preview"
+                  className="h-[300px] w-full object-cover object-top sm:h-[520px]"
+                />
+              </div>
+
+              <div className="mt-3 grid gap-2 sm:mt-4 sm:grid-cols-3 sm:gap-3">
+                {steps.map((step) => (
+                  <div key={step.number} className="rounded-[22px] border border-white/6 bg-black/22 p-3 sm:rounded-[24px] sm:p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[10px] font-bold uppercase tracking-[0.28em] text-[#D4AF37]">{step.number}</span>
+                      <span className="text-[8px] uppercase tracking-[0.24em] text-white/30">
+                        {step.number === "01" ? "Entende" : step.number === "02" ? "Curadoria" : "Atrai"}
+                      </span>
+                    </div>
+                    <div className="mt-2 text-[14px] font-semibold text-white">{step.title}</div>
+                    <p className="mt-1 text-[12px] leading-5 text-white/62 sm:text-[13px] sm:leading-6">{step.text}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        </main>
+
+        <section className="grid gap-4 pb-6 lg:grid-cols-3">
+          {pillars.map((pillar) => {
+            const Icon = pillar.icon;
+
+            return (
+              <div key={pillar.title} className="rounded-[28px] border border-white/8 bg-white/[0.03] p-5 shadow-[0_16px_60px_rgba(0,0,0,0.18)]">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/8">
+                    <Icon className="h-4 w-4 text-[#D4AF37]" />
+                  </div>
+                  <div className="text-[10px] font-bold uppercase tracking-[0.32em] text-white/32">High ticket experience</div>
+                </div>
+                <div className="mt-4 text-[18px] font-semibold text-white">{pillar.title}</div>
+                <p className="mt-2 max-w-md text-[14px] leading-7 text-white/62">{pillar.text}</p>
+              </div>
+            );
+          })}
+        </section>
+
+        <footer className="flex flex-col gap-2 border-t border-white/6 pt-5 text-[9px] uppercase tracking-[0.34em] text-white/28 sm:flex-row sm:items-center sm:justify-between">
+          <span>Venus Engine • consultoria visual para catálogo real</span>
+          <span>Foto + essência + look certo + conversão</span>
+        </footer>
+      </div>
     </div>
   );
 }

@@ -13,6 +13,20 @@ export interface Product {
   image_url: string | null;
   external_url: string | null;
   created_at: string;
+  style_direction?: "Masculina" | "Feminina" | "Neutra" | null;
+  style_tags?: string[] | null;
+  category_tags?: string[] | null;
+  fit_tags?: string[] | null;
+  color_tags?: string[] | null;
+  target_profile?: string[] | null;
+  use_cases?: string[] | null;
+  occasion_tags?: string[] | null;
+  season_tags?: string[] | null;
+  body_effect?: string | null;
+  face_effect?: string | null;
+  visual_weight?: string | null;
+  formality?: string | null;
+  catalog_notes?: string | null;
 }
 
 export async function getB2BProducts(): Promise<Product[]> {

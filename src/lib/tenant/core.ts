@@ -2,7 +2,7 @@ import type { SupabaseClient, User } from "@supabase/supabase-js";
 import type { Role } from "@/types/hardened";
 
 export type TenantStatus = "active" | "suspended" | "blocked";
-export type TenantPlan = "starter" | "growth" | "scale" | "enterprise";
+export type TenantPlan = "freemium" | "free" | "starter" | "pro" | "growth" | "scale" | "enterprise";
 export type TenantSource = "merchant_provision" | "merchant_backfill" | "system";
 
 export interface TenantLimits {
@@ -16,6 +16,9 @@ export interface TenantRecord {
   id: string;
   slug: string;
   name: string;
+  logo_url?: string | null;
+  primary_color?: string | null;
+  whatsapp_number?: string | null;
   status: TenantStatus;
   kill_switch: boolean;
   plan_id: TenantPlan | string;
@@ -73,7 +76,8 @@ export const DEFAULT_TENANT_LIMITS: TenantLimits = {
   leads: 10_000,
 };
 
-const ORG_SELECT_COLUMNS = "id, slug, name, status, kill_switch, plan_id, limits, owner_user_id, created_at, updated_at";
+const ORG_SELECT_COLUMNS =
+  "id, slug, name, logo_url, primary_color, whatsapp_number, status, kill_switch, plan_id, limits, owner_user_id, created_at, updated_at";
 const ORG_MEMBER_SELECT_COLUMNS = "id, org_id, user_id, role, status, created_at, updated_at";
 
 function normalizeString(value: unknown) {

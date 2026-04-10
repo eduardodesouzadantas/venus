@@ -58,7 +58,8 @@ export interface AgencySession {
   role: string;
 }
 
-const ORG_SELECT_COLUMNS = "id, slug, name, status, kill_switch, plan_id, limits, owner_user_id, created_at, updated_at";
+const ORG_SELECT_COLUMNS =
+  "id, slug, name, logo_url, primary_color, whatsapp_number, status, kill_switch, plan_id, limits, owner_user_id, created_at, updated_at";
 
 const AGENCY_MUTATION_EVENTS: Record<"activate" | "suspend" | "toggle_kill_switch", (current: TenantRecord) => string> = {
   activate: () => "agency.org_activated",
@@ -177,17 +178,19 @@ async function loadAgencySnapshot() {
     whatsappConversationsResult,
     whatsappMessagesResult,
   ] = await Promise.all([
-    admin.from("orgs").select(ORG_SELECT_COLUMNS).order("created_at", { ascending: false }),
-    admin.from("org_members").select("org_id, user_id, role, status, created_at, updated_at"),
-    admin.from("products").select("org_id, created_at"),
-    admin.from("leads").select("org_id, status, next_follow_up_at, last_interaction_at, created_at, updated_at"),
-    admin.from("saved_results").select("org_id, created_at, updated_at"),
+    admin.from("orgs").select(ORG_SELECT_COLUMNS).order("created_at", { ascending: false }).limit(50),
+    admin.from("org_members").select("org_id, user_id, role, status, created_at, updated_at").order("created_at", { ascending: false }).limit(50),
+    admin.from("products").select("org_id, created_at").order("created_at", { ascending: false }).limit(50),
+    admin.from("leads").select("org_id, status, next_follow_up_at, last_interaction_at, created_at, updated_at").order("created_at", { ascending: false }).limit(50),
+    admin.from("saved_results").select("org_id, created_at, updated_at").order("created_at", { ascending: false }).limit(50),
     admin
       .from("org_usage_daily")
-      .select("org_id, usage_date, ai_tokens, ai_requests, messages_sent, events_count, revenue_cents, cost_cents, leads, updated_at"),
-    admin.from("tenant_events").select("org_id, created_at, event_type"),
-    admin.from("whatsapp_conversations").select("org_slug, created_at"),
-    admin.from("whatsapp_messages").select("org_slug, created_at"),
+      .select("org_id, usage_date, ai_tokens, ai_requests, messages_sent, events_count, revenue_cents, cost_cents, leads, updated_at")
+      .order("usage_date", { ascending: false })
+      .limit(50),
+    admin.from("tenant_events").select("org_id, created_at, event_type").order("created_at", { ascending: false }).limit(50),
+    admin.from("whatsapp_conversations").select("org_slug, created_at").order("created_at", { ascending: false }).limit(50),
+    admin.from("whatsapp_messages").select("org_slug, created_at").order("created_at", { ascending: false }).limit(50),
   ]);
 
   if (orgsResult.error) {
@@ -465,7 +468,7 @@ export async function getAgencyOperationalFrictionSummary(range: AgencyTimeRange
     .from("tenant_events")
     .select("org_id, event_type, created_at, payload")
     .order("created_at", { ascending: false })
-    .limit(500);
+    .limit(50);
 
   if (window.dateFrom) {
     query.gte("created_at", `${window.dateFrom}T00:00:00`);

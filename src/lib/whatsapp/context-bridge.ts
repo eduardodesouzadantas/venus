@@ -1,6 +1,6 @@
 import { createWhatsAppClient } from "@/lib/supabase/whatsapp-client";
 import { fetchTenantBySlug, normalizeTenantSlug } from "@/lib/tenant/core";
-import { UserContext } from "@/types/whatsapp";
+import type { UserContext, WhatsAppLookItemContext, WhatsAppLookSummary } from "@/types/whatsapp";
 
 type SavedResultRow = {
   id: string;
@@ -60,6 +60,104 @@ const readNestedArray = (value: unknown, path: string[]): unknown[] => {
   return Array.isArray(cursor) ? cursor : [];
 };
 
+const normalizeStringArray = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => normalizeString(typeof entry === "string" ? entry : "")).filter(Boolean);
+};
+
+const mapLookItem = (value: unknown): WhatsAppLookItemContext | null => {
+  const item = asRecord(value);
+  if (!item) return null;
+
+  const name = normalizeString((item.name as string | undefined) || (item.premiumTitle as string | undefined));
+  const id = normalizeString(item.id as string | undefined);
+
+  if (!id && !name) return null;
+
+  return {
+    id: id || name,
+    name: name || id || "Item",
+    brand: normalizeString(item.brand as string | undefined) || undefined,
+    price: normalizeString(item.price as string | undefined) || undefined,
+    role: normalizeString(item.role as string | undefined) || undefined,
+    direction: normalizeString(item.direction as string | undefined) || undefined,
+    visualWeight: normalizeString(item.visualWeight as string | undefined) || undefined,
+    formality: normalizeString(item.formality as string | undefined) || undefined,
+    bodyEffect: normalizeString(item.bodyEffect as string | undefined) || undefined,
+    faceEffect: normalizeString(item.faceEffect as string | undefined) || undefined,
+    premiumTitle: normalizeString(item.premiumTitle as string | undefined) || undefined,
+    baseDescription: normalizeString(item.baseDescription as string | undefined) || undefined,
+    persuasiveDescription: normalizeString(item.persuasiveDescription as string | undefined) || undefined,
+    impactLine: normalizeString(item.impactLine as string | undefined) || undefined,
+    functionalBenefit: normalizeString(item.functionalBenefit as string | undefined) || undefined,
+    socialEffect: normalizeString(item.socialEffect as string | undefined) || undefined,
+    contextOfUse: normalizeString(item.contextOfUse as string | undefined) || undefined,
+    styleTags: normalizeStringArray(item.styleTags),
+    categoryTags: normalizeStringArray(item.categoryTags),
+    fitTags: normalizeStringArray(item.fitTags),
+    colorTags: normalizeStringArray(item.colorTags),
+    targetProfile: normalizeStringArray(item.targetProfile),
+    useCases: normalizeStringArray(item.useCases),
+    category: normalizeString(item.category as string | undefined) || undefined,
+    useCase: normalizeString(item.useCase as string | undefined) || undefined,
+    tryOnUrl: normalizeString(item.tryOnUrl as string | undefined) || undefined,
+    bundleCandidates: normalizeStringArray(item.bundleCandidates),
+    authorityRationale: normalizeString(item.authorityRationale as string | undefined) || undefined,
+    conversionCopy: normalizeString(item.conversionCopy as string | undefined) || undefined,
+    sellerSuggestions: item.sellerSuggestions && typeof item.sellerSuggestions === "object" && !Array.isArray(item.sellerSuggestions)
+      ? {
+          pairsBestWith: normalizeStringArray((item.sellerSuggestions as Record<string, unknown>).pairsBestWith),
+          idealFor: normalizeString((item.sellerSuggestions as Record<string, unknown>).idealFor as string | undefined),
+          buyerProfiles: normalizeStringArray((item.sellerSuggestions as Record<string, unknown>).buyerProfiles),
+          bestContext: normalizeString((item.sellerSuggestions as Record<string, unknown>).bestContext as string | undefined),
+        }
+      : undefined,
+  };
+};
+
+const mapLookSummary = (value: unknown): WhatsAppLookSummary | null => {
+  const look = asRecord(value);
+  if (!look) return null;
+
+  const items = readNestedArray(look, ["items"])
+    .map(mapLookItem)
+    .filter((entry): entry is WhatsAppLookItemContext => Boolean(entry));
+
+  return {
+    id: normalizeString(look.id as string | undefined),
+    name: normalizeString(look.name as string | undefined),
+    intention: normalizeString(look.intention as string | undefined),
+    type: normalizeString(look.type as string | undefined),
+    explanation: normalizeString(look.explanation as string | undefined),
+    whenToWear: normalizeString(look.whenToWear as string | undefined),
+    role: normalizeString(look.role as string | undefined) || undefined,
+    direction: normalizeString(look.direction as string | undefined) || undefined,
+    visualWeight: normalizeString(look.visualWeight as string | undefined) || undefined,
+    formality: normalizeString(look.formality as string | undefined) || undefined,
+    bodyEffect: normalizeString(look.bodyEffect as string | undefined) || undefined,
+    faceEffect: normalizeString(look.faceEffect as string | undefined) || undefined,
+    styleTags: normalizeStringArray(look.styleTags),
+    categoryTags: normalizeStringArray(look.categoryTags),
+    fitTags: normalizeStringArray(look.fitTags),
+    colorTags: normalizeStringArray(look.colorTags),
+    targetProfile: normalizeStringArray(look.targetProfile),
+    useCases: normalizeStringArray(look.useCases),
+    category: normalizeString(look.category as string | undefined) || undefined,
+    useCase: normalizeString(look.useCase as string | undefined) || undefined,
+    authorityRationale: normalizeString(look.authorityRationale as string | undefined) || undefined,
+    conversionCopy: normalizeString(look.conversionCopy as string | undefined) || undefined,
+    sellerSuggestions: look.sellerSuggestions && typeof look.sellerSuggestions === "object" && !Array.isArray(look.sellerSuggestions)
+      ? {
+          pairsBestWith: normalizeStringArray((look.sellerSuggestions as Record<string, unknown>).pairsBestWith),
+          idealFor: normalizeString((look.sellerSuggestions as Record<string, unknown>).idealFor as string | undefined),
+          buyerProfiles: normalizeStringArray((look.sellerSuggestions as Record<string, unknown>).buyerProfiles),
+          bestContext: normalizeString((look.sellerSuggestions as Record<string, unknown>).bestContext as string | undefined),
+        }
+      : undefined,
+    items,
+  };
+};
+
 const mapSavedResultToUserContext = (row: SavedResultRow): UserContext | null => {
   const payload = asRecord(row.payload);
   if (!payload) return null;
@@ -91,6 +189,11 @@ const mapSavedResultToUserContext = (row: SavedResultRow): UserContext | null =>
     readNestedString(finalResult, ["diagnostic", "desiredGoal"]) ||
     "";
 
+  const styleDirection =
+    (handoff?.styleDirection as string | undefined) ||
+    readNestedString(onboardingContext, ["intent", "styleDirection"]) ||
+    "";
+
   const paletteFamily =
     (handoff?.paletteFamily as string | undefined) ||
     readNestedString(finalResult, ["palette", "family"]) ||
@@ -113,28 +216,11 @@ const mapSavedResultToUserContext = (row: SavedResultRow): UserContext | null =>
     (typeof satisfaction === "number" ? Math.max(0, Math.min(100, satisfaction * 10)) : undefined) ??
     50;
 
-  const handoffLooks = handoff?.lookSummary as HandoffLook[] | undefined;
+  const handoffLooks = handoff?.lookSummary as unknown[] | undefined;
   const finalResultLooks = readNestedArray(finalResult, ["looks"]);
   const lookSummary = handoffLooks?.length
-    ? handoffLooks.map((look) => ({
-        id: look.id || "",
-        name: look.name || "",
-        intention: look.intention || "",
-        type: look.type || "",
-        explanation: look.explanation || "",
-        whenToWear: look.whenToWear || "",
-      }))
-    : finalResultLooks.map((look) => {
-        const item = asRecord(look);
-        return {
-          id: String(item?.id || ""),
-          name: String(item?.name || ""),
-          intention: String(item?.intention || ""),
-          type: String(item?.type || ""),
-          explanation: String(item?.explanation || ""),
-          whenToWear: String(item?.whenToWear || ""),
-        };
-      });
+    ? handoffLooks.map(mapLookSummary).filter((entry): entry is WhatsAppLookSummary => Boolean(entry))
+    : finalResultLooks.map(mapLookSummary).filter((entry): entry is WhatsAppLookSummary => Boolean(entry));
 
   const viewedProducts = lookSummary.map((look) => look.id).filter(Boolean);
   const lastLookId = lookSummary[0]?.id || "";
@@ -150,6 +236,7 @@ const mapSavedResultToUserContext = (row: SavedResultRow): UserContext | null =>
     lastLookId,
     tryOnCount,
     orgSlug,
+    styleDirection,
     imageGoal,
     paletteFamily,
     fit,
@@ -233,6 +320,7 @@ export async function hydrateWhatsAppConversationContext(conversation: UserConte
     tryOnCount: conversation.tryOnCount || bridge.tryOnCount,
     orgSlug: conversation.orgSlug || bridge.orgSlug,
     imageGoal: conversation.imageGoal || bridge.imageGoal,
+    styleDirection: conversation.styleDirection || bridge.styleDirection,
     paletteFamily: conversation.paletteFamily || bridge.paletteFamily,
     fit: conversation.fit || bridge.fit,
     metal: conversation.metal || bridge.metal,
@@ -265,6 +353,7 @@ export async function hydrateWhatsAppConversationList<T extends { user: UserCont
         tryOnCount: conversation.user.tryOnCount || bridge.tryOnCount,
         orgSlug: conversation.user.orgSlug || bridge.orgSlug,
         imageGoal: conversation.user.imageGoal || bridge.imageGoal,
+        styleDirection: conversation.user.styleDirection || bridge.styleDirection,
         paletteFamily: conversation.user.paletteFamily || bridge.paletteFamily,
         fit: conversation.user.fit || bridge.fit,
         metal: conversation.user.metal || bridge.metal,
