@@ -154,13 +154,21 @@ export const WhatsAppProvider = ({ children }: { children: React.ReactNode }) =>
     if (!currentOrgSlug) return;
 
     const channel = supabase
-      .channel(`whatsapp_changes_${currentOrgSlug}`)
-      .on('postgres_changes' as any, { event: '*', table: 'whatsapp_conversations', filter: `org_slug=eq.${currentOrgSlug}` } as any, () => {
-        fetchConversations();
-      })
-      .on('postgres_changes' as any, { event: 'INSERT', table: 'whatsapp_messages', filter: `org_slug=eq.${currentOrgSlug}` } as any, () => {
-        fetchConversations();
-      })
+      .channel(`inbox-${currentOrgSlug}`)
+      .on(
+        'postgres_changes' as any,
+        { event: '*', schema: 'public', table: 'whatsapp_conversations', filter: `org_slug=eq.${currentOrgSlug}` } as any,
+        () => {
+          fetchConversations();
+        }
+      )
+      .on(
+        'postgres_changes' as any,
+        { event: '*', schema: 'public', table: 'whatsapp_messages', filter: `org_slug=eq.${currentOrgSlug}` } as any,
+        () => {
+          fetchConversations();
+        }
+      )
       .subscribe();
 
     return () => {
@@ -211,11 +219,8 @@ export const WhatsAppProvider = ({ children }: { children: React.ReactNode }) =>
           "Cache-Control": "no-store",
         },
         body: JSON.stringify({
-          conversationId: targetId,
+          to: conv.user.phone,
           text,
-          type,
-          sender: userId,
-          metadata: metadata || {},
         }),
       });
 
