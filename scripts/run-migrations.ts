@@ -1,13 +1,22 @@
 import * as dotenv from "dotenv";
+import { existsSync } from "node:fs";
 import * as path from "path";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 
 const MIGRATIONS = [
   "docs/org_branding.sql",
+  "docs/merchant_groups.sql",
+  "docs/product_variants.sql",
   "docs/tryon_events.sql",
   "docs/share_system.sql",
-];
+].filter((relativePath) => {
+  if (relativePath === "docs/merchant_groups.sql") {
+    return true;
+  }
+
+  return existsSync(path.resolve(process.cwd(), relativePath));
+});
 
 function requireEnv(name: string) {
   const value = process.env[name];
