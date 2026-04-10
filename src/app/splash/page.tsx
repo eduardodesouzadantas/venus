@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { VenusAvatar } from '@/components/venus/VenusAvatar';
 
-export default function SplashPage() {
+function SplashContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const org = searchParams.get('org');
@@ -101,5 +101,13 @@ export default function SplashPage() {
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-[#D4AF37]/5 rounded-full blur-[140px]" />
       </div>
     </div>
+  );
+}
+
+export default function SplashPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#0a0a0a]" />}>
+      <SplashContent />
+    </Suspense>
   );
 }

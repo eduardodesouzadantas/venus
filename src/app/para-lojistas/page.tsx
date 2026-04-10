@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+
+export const dynamic = "force-dynamic";
 import { ArrowRight, Crown, MessagesSquare, ScanSearch, Sparkles } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";

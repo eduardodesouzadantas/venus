@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { normalizeTenantSlug } from "@/lib/tenant/core";
 
+export const dynamic = "force-dynamic";
+
 export default async function IndexRouter({
   searchParams,
 }: {
