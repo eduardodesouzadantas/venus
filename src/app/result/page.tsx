@@ -627,8 +627,7 @@ function ResultDashboardContent() {
         </div>
       )}
 
-      {canOpenWhatsAppHandoff && (
-        <div className="fixed bottom-0 left-0 right-0 z-[150] flex h-14 items-center justify-between bg-[#C9A84C] px-4">
+      <div className="fixed bottom-0 left-0 right-0 z-[150] flex h-14 items-center justify-between bg-[#C9A84C] px-4">
           <span className="text-[10px] font-bold uppercase tracking-wider text-black">● A Venus está online — {tenantContext?.branchName || tenantContext?.orgSlug || "Venus"}</span>
           <a
             href={whatsappHandoffPhone ? `https://wa.me/${whatsappHandoffPhone}` : "#"}
@@ -637,7 +636,6 @@ function ResultDashboardContent() {
             Continuar no WhatsApp →
           </a>
         </div>
-      )}
 
       <SaveResultsModal
         isOpen={isModalOpen}
