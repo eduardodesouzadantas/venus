@@ -45,26 +45,9 @@ function ResultDashboardContent() {
   const [engagedLookIds, setEngagedLookIds] = React.useState<string[]>([]);
   const [statsSummary, setStatsSummary] = React.useState<BehaviorStatsSummary | null>(null);
   const [isModalOpen, setIsModalOpen] = React.useState(false);
-  const [isHandoffLoading, setIsHandoffLoading] = React.useState(false);
   const [visualAnalysis, setVisualAnalysis] = React.useState<VisualAnalysisPayload | null>(null);
 
-  React.useEffect(() => {
-    setEngagedLookIds(getEngagedIds("look"));
-    setStatsSummary(getStatsSummary());
-  }, []);
-
-  React.useEffect(() => {
-    if (statsSummary && onboardingData.contact?.phone) {
-      trackPotentialAbandonment(statsSummary, onboardingData.contact);
-    }
-  }, [statsSummary, onboardingData.contact]);
-
-  React.useEffect(() => {
-    if (!isSaved && !onboardingData.contact?.phone) {
-      const timer = setTimeout(() => setIsModalOpen(true), 15000);
-      return () => clearTimeout(timer);
-    }
-  }, [isSaved, onboardingData.contact]);
+  const [isHandoffLoading, setIsHandoffLoading] = React.useState(false);
 
   React.useEffect(() => {
     if (!id || id === "MOCK_DB_FAIL") return;
@@ -297,7 +280,7 @@ function ResultDashboardContent() {
   const showStickyActions = !isModalOpen;
 
   return (
-    <div className={`flex min-h-screen flex-col overflow-x-hidden pb-44 transition-colors duration-1000 ${aiInsight.intensity === "HIGH" ? "bg-black" : "bg-[#0A0A0A]"}`}>
+    <div className={`flex min-h-screen flex-col overflow-x-hidden pb-36 transition-colors duration-1000 ${aiInsight.intensity === "HIGH" ? "bg-black" : "bg-[#0A0A0A]"}`}>
       {isSaved && <SavedProfileToast />}
 
       <div className="fixed left-1/2 top-4 z-[300] hidden -translate-x-1/2 items-center gap-3 rounded-full border border-white/10 bg-slate-950/55 px-4 py-2 backdrop-blur-3xl animate-in fade-in slide-in-from-top-4 sm:flex">
@@ -641,6 +624,18 @@ function ResultDashboardContent() {
             </div>
             <ArrowRight size={16} className="relative z-10" />
           </button>
+        </div>
+      )}
+
+      {canOpenWhatsAppHandoff && (
+        <div className="fixed bottom-0 left-0 right-0 z-[150] flex h-14 items-center justify-between bg-[#C9A84C] px-4">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-black">● A Venus está online — {tenantContext?.branchName || tenantContext?.orgSlug || "Venus"}</span>
+          <a
+            href={whatsappHandoffPhone ? `https://wa.me/${whatsappHandoffPhone}` : "#"}
+            className="flex items-center gap-2 rounded-full bg-black px-4 py-2 text-[9px] font-bold uppercase tracking-wider text-[#C9A84C]"
+          >
+            Continuar no WhatsApp →
+          </a>
         </div>
       )}
 

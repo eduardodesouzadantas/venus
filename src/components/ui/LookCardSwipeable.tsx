@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ChevronRight, Info, Search, ShoppingBag, Sparkles, Star, TrendingUp } from "lucide-react";
+import { ChevronRight, Info, Search, ShoppingBag, Sparkles, Star, TrendingUp, MessageCircle, Image as ImageIcon } from "lucide-react";
 import { LookData, LookItem } from "@/types/result";
 import { Heading } from "./Heading";
 import { Text } from "./Text";
@@ -10,6 +10,7 @@ import { LookSelectionModal } from "./LookSelectionModal";
 import { trackBehavior } from "@/lib/analytics/tracker";
 import { PriceAnchoring } from "./PriceAnchoring";
 import type { AIRecommendation } from "@/lib/ai/orchestrator";
+import { useSearchParams } from "next/navigation";
 
 type SelectedProduct = LookItem & {
   price?: string;
@@ -25,13 +26,34 @@ export function LookCardSwipeable({
   strategy?: AIRecommendation["strategy"];
   intensity?: "LOW" | "MEDIUM" | "HIGH";
 }) {
+  const searchParams = useSearchParams();
+  const id = searchParams.get("id");
   const [selectedProduct, setSelectedProduct] = React.useState<SelectedProduct | null>(null);
   const [selectedLookForPurchase, setSelectedLookForPurchase] = React.useState<LookData | null>(null);
   const [isTryOnOpen, setIsTryOnOpen] = React.useState(false);
+  const [tenantContext, setTenantContext] = React.useState<{ whatsappNumber?: string | null } | null>(null);
 
   React.useEffect(() => {
     trackBehavior(look.id, "view", "look");
   }, [look.id]);
+
+  React.useEffect(() => {
+    if (!id || id === "MOCK_DB_FAIL") return;
+    const loadTenantContext = async () => {
+      try {
+        const response = await fetch(`/api/result/${encodeURIComponent(id)}`, { cache: "no-store" });
+        if (!response.ok) return;
+        const payload = await response.json();
+        setTenantContext(payload.tenant || null);
+      } catch (error) {
+        console.warn("[LOOK] failed to load tenant context", error);
+      }
+    };
+    void loadTenantContext();
+  }, [id]);
+
+  const whatsappPhone = tenantContext?.whatsappNumber;
+  const canOpenWhatsApp = Boolean(whatsappPhone);
 
   const mockPrices: Record<string, string> = {
     "1": "R$ 890",
@@ -139,10 +161,17 @@ export function LookCardSwipeable({
           </div>
 
           <div className="absolute bottom-4 left-4 sm:left-8">
-            <span className="group/tryon flex items-center gap-2 rounded-full border border-white/20 bg-black/60 px-2.5 py-1.5 backdrop-blur-md transition-all active:scale-95 sm:px-3">
-              <Sparkles className="h-3 w-3 text-slate-300 group-hover/tryon:animate-pulse" />
-              <span className="text-[9px] font-bold uppercase tracking-widest text-white/80 sm:text-[10px]">Ver no corpo</span>
-            </span>
+            {canOpenWhatsApp ? (
+              <a
+                href={`https://wa.me/${whatsappPhone}?text=${encodeURIComponent(`Oi! Vi o look "${look.name}" e quero saber mais`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group/tryon flex items-center gap-2 rounded-full border border-white/20 bg-black/60 px-3 py-1.5 backdrop-blur-md transition-all active:scale-95 sm:px-4"
+              >
+                <MessageCircle className="h-3 w-3 text-slate-300 group-hover/tryon:animate-pulse" />
+                <span className="text-[9px] font-bold uppercase tracking-widest text-white/80 sm:text-[10px]">Falar com a Venus →</span>
+              </a>
+            ) : null}
           </div>
         </button>
 
@@ -178,19 +207,25 @@ export function LookCardSwipeable({
 
         <div className="mt-3 flex-1 space-y-4 px-5 sm:mt-4 sm:space-y-5 sm:px-8">
           <div className="space-y-3 sm:space-y-4">
-            {look.items.map((item) => (
+            {look.items.slice(0, 2).map((item) => (
               <div key={item.id} className="group/item flex items-start justify-between gap-3 rounded-[24px] border border-white/5 bg-white/[0.02] p-2.5 sm:gap-4 sm:rounded-[28px] sm:p-3">
                 <div className="flex min-w-0 flex-1 items-start gap-3 sm:gap-4">
                   <button
                     type="button"
-                    className="flex h-[6.5rem] w-[6.5rem] flex-shrink-0 cursor-pointer overflow-hidden rounded-[18px] border border-white/5 bg-white/5 shadow-lg shadow-slate-900/20 transition-all hover:scale-[1.04] active:scale-95 hover:shadow-slate-900/30 sm:h-32 sm:w-32"
+                    className="flex h-40 w-[120px] flex-shrink-0 cursor-pointer overflow-hidden rounded-[18px] border border-white/5 bg-[#0A0A0A] shadow-lg shadow-slate-900/20 transition-all hover:scale-[1.04] active:scale-95 hover:shadow-slate-900/30"
                     onClick={() => handleOpenProduct(item)}
                   >
-                    <img
-                      src={item.photoUrl || "https://images.unsplash.com/photo-1544441893-675973e31d85?q=80&w=200&auto=format"}
-                      alt={item.name}
-                      className="h-full w-full object-cover object-center grayscale transition-all group-hover/item:grayscale-0"
-                    />
+                    {item.photoUrl ? (
+                      <img
+                        src={item.photoUrl}
+                        alt={item.name}
+                        className="h-full w-full object-cover object-center grayscale transition-all group-hover/item:grayscale-0"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center">
+                        <ImageIcon className="h-8 w-8 text-white/15" />
+                      </div>
+                    )}
                   </button>
                   <div className="flex min-w-0 flex-1 flex-col pt-1">
                     <div className="mb-1 flex flex-wrap items-center gap-1.5 sm:gap-2">
