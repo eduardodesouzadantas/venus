@@ -3,10 +3,10 @@ import {
   Activity,
   AlertCircle,
   ArrowUpRight,
+  ArrowDownRight,
   BrainCircuit,
   ChevronRight,
   DollarSign,
-  Edit3,
   Eye,
   Image as ImageIcon,
   LayoutGrid,
@@ -21,6 +21,8 @@ import {
   Target,
   Users,
   Zap,
+  Star,
+  AlertTriangle,
 } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -43,6 +45,8 @@ interface DashboardStats {
   postagensWeek: number;
   referralsWeek: number;
   urgentLead: { name: string } | null;
+  leadsByStatus: { new: number; engaged: number; qualified: number; offer: number; won: number };
+  productsWithTryons: Array<{ id: string; name: string; image_url: string | null; stock: number; tryon_count: number }>;
 }
 
 async function getDashboardData(orgId: string): Promise<DashboardStats> {
@@ -51,6 +55,7 @@ async function getDashboardData(orgId: string): Promise<DashboardStats> {
   const startOfWeek = new Date(now);
   startOfWeek.setDate(now.getDate() - 7);
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const today = now.toISOString().split("T")[0];
 
   const [
     leadsAtivosResult,
@@ -59,48 +64,37 @@ async function getDashboardData(orgId: string): Promise<DashboardStats> {
     postagensResult,
     referralsResult,
     urgentLeadResult,
+    leadsByStatusResult,
+    productsResult,
   ] = await Promise.all([
-    supabase
-      .from("crm_leads")
-      .select("*", { count: "exact", head: true })
-      .eq("org_id", orgId)
-      .in("status", ["new", "engaged", "qualified"]),
+    supabase.from("crm_leads").select("*", { count: "exact", head: true }).eq("org_id", orgId).in("status", ["new", "engaged", "qualified"]),
+    supabase.from("crm_leads").select("*", { count: "exact", head: true }).eq("org_id", orgId).eq("status", "won").gte("updated_at", startOfMonth.toISOString()),
+    supabase.from("tryon_events").select("*", { count: "exact", head: true }).eq("org_id", orgId).eq("status", "completed").gte("created_at", startOfWeek.toISOString()),
+    supabase.from("share_events").select("*", { count: "exact", head: true }).eq("org_id", orgId).not("confirmed_at", "is", null).gte("created_at", startOfWeek.toISOString()),
+    supabase.from("referral_conversions").select("*", { count: "exact", head: true }).eq("org_id", orgId).gte("converted_at", startOfWeek.toISOString()),
+    supabase.from("crm_leads").select("name").eq("org_id", orgId).eq("status", "qualified").order("updated_at", { ascending: true }).limit(1).maybeSingle<{ name: string }>(),
 
-    supabase
-      .from("crm_leads")
-      .select("*", { count: "exact", head: true })
-      .eq("org_id", orgId)
-      .eq("status", "won")
-      .gte("updated_at", startOfMonth.toISOString()),
+    supabase.from("crm_leads").select("status").eq("org_id", orgId).then(({ data }) => {
+      const counts = { new: 0, engaged: 0, qualified: 0, offer: 0, won: 0 };
+      data?.forEach((lead) => {
+        if (lead.status in counts) counts[lead.status as keyof typeof counts]++;
+      });
+      return counts;
+    }),
 
-    supabase
-      .from("tryon_events")
-      .select("*", { count: "exact", head: true })
-      .eq("org_id", orgId)
-      .eq("status", "completed")
-      .gte("created_at", startOfWeek.toISOString()),
-
-    supabase
-      .from("share_events")
-      .select("*", { count: "exact", head: true })
-      .eq("org_id", orgId)
-      .not("confirmed_at", "is", null)
-      .gte("created_at", startOfWeek.toISOString()),
-
-    supabase
-      .from("referral_conversions")
-      .select("*", { count: "exact", head: true })
-      .eq("org_id", orgId)
-      .gte("converted_at", startOfWeek.toISOString()),
-
-    supabase
-      .from("crm_leads")
-      .select("name")
-      .eq("org_id", orgId)
-      .eq("status", "qualified")
-      .order("updated_at", { ascending: true })
-      .limit(1)
-      .maybeSingle<{ name: string }>(),
+    supabase.from("products").select("id, name, image_url, stock").eq("org_id", orgId).then(async ({ data: products }) => {
+      if (!products) return [];
+      const productIds = products.map((p) => p.id);
+      const { data: tryons } = await supabase.from("tryon_events").select("product_id").eq("org_id", orgId).in("product_id", productIds).eq("status", "completed");
+      const tryonCounts: Record<string, number> = {};
+      tryons?.forEach((t) => {
+        tryonCounts[t.product_id] = (tryonCounts[t.product_id] || 0) + 1;
+      });
+      return products.map((p) => ({
+        ...p,
+        tryon_count: tryonCounts[p.id] || 0,
+      }));
+    }),
   ]);
 
   return {
@@ -110,24 +104,110 @@ async function getDashboardData(orgId: string): Promise<DashboardStats> {
     postagensWeek: postagensResult.count ?? 0,
     referralsWeek: referralsResult.count ?? 0,
     urgentLead: urgentLeadResult.data ?? null,
+    leadsByStatus: typeof leadsByStatusResult === "object" ? leadsByStatusResult : { new: 0, engaged: 0, qualified: 0, offer: 0, won: 0 },
+    productsWithTryons: productsResult as DashboardStats["productsWithTryons"],
   };
 }
 
-export default async function MerchantDashboard({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
+function MiniSparkline({ trend }: { trend: "up" | "down" | "flat" }) {
+  const points = trend === "up" ? [20, 35, 28, 45, 52, 48, 70] : trend === "down" ? [70, 55, 62, 45, 38, 42, 25] : [35, 38, 32, 35, 38, 35, 35];
+  const max = 100;
+  const path = points.map((y, i) => `${i === 0 ? "M" : "L"} ${(i / (points.length - 1)) * 48} ${max - y}`).join(" ");
+
+  return (
+    <svg width="48" height="24" className="opacity-60">
+      <path d={path} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={trend === "up" ? "text-green-400" : trend === "down" ? "text-red-400" : "text-white/40"} />
+    </svg>
+  );
+}
+
+function KpiCard({ label, value, sub, delta, status, sparkline }: { label: string; value: string; sub: string; delta: string; status: "green" | "yellow" | "red"; sparkline: "up" | "down" | "flat" }) {
+  const colorMap = { green: "bg-green-500", yellow: "bg-yellow-500", red: "bg-red-500" };
+  const textColorMap = { green: "text-green-400", yellow: "text-yellow-400", red: "text-red-400" };
+
+  return (
+    <div className="relative p-6 rounded-2xl bg-white/[0.03] border border-white/5 hover:bg-white/[0.05] transition-colors overflow-hidden">
+      <div className={`absolute top-0 left-0 right-0 h-0.5 ${colorMap[status]}`} />
+      <div className="flex items-center justify-between mb-4">
+        <span className="text-[9px] uppercase font-bold tracking-widest text-white/30">{label}</span>
+        <MiniSparkline trend={sparkline} />
+      </div>
+      <div className="font-mono text-2xl tracking-tighter mb-1">{value}</div>
+      <div className="flex items-center justify-between">
+        <span className="text-[8px] uppercase tracking-widest text-white/20">{sub}</span>
+        <span className={`text-[9px] font-bold ${textColorMap[status]} flex items-center gap-1`}>
+          {sparkline === "up" ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />} {delta}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function PipelineColumn({ label, count, max, color }: { label: string; count: number; max: number; color: string }) {
+  const height = max > 0 ? Math.max((count / max) * 100, 8) : 8;
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <div className="w-full flex items-end justify-center" style={{ height: 120 }}>
+        <div className="w-10 rounded-t-md transition-all duration-500" style={{ height: `${height}%`, backgroundColor: color }} />
+      </div>
+      <div className="font-mono text-xl font-bold">{count}</div>
+      <span className="text-[8px] uppercase tracking-widest text-white/40">{label}</span>
+    </div>
+  );
+}
+
+function ProductCard({ product }: { product: { id: string; name: string; image_url: string | null; stock: number; tryon_count: number } }) {
+  const stockStatus = product.stock > 5 ? "green" : product.stock > 0 ? "yellow" : "red";
+  const stockColor = stockStatus === "green" ? "bg-green-500" : stockStatus === "yellow" ? "bg-yellow-500" : "bg-red-500";
+
+  return (
+    <div className="flex items-center gap-4 p-4 rounded-2xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-colors">
+      <div className="w-12 h-12 rounded-xl overflow-hidden bg-white/5 flex items-center justify-center">
+        {product.image_url ? (
+          <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+        ) : (
+          <ImageIcon size={20} className="text-white/20" />
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-[11px] font-medium truncate">{product.name}</div>
+        <div className="flex items-center gap-3 mt-1">
+          <div className="flex items-center gap-1.5">
+            <div className={`w-2 h-2 rounded-full ${stockColor}`} />
+            <span className="text-[8px] text-white/40">{product.stock} un</span>
+          </div>
+          <span className="text-[8px] text-white/20">{product.tryon_count} try-ons</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdvisorCard({ icon, iconColor, title, text, action, actionHref }: { icon: "alert" | "star" | "trend"; iconColor: string; title: string; text: string; action: string; actionHref: string }) {
+  const icons = { alert: <AlertTriangle size={14} />, star: <Star size={14} />, trend: <TrendingUp size={14} /> };
+  return (
+    <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 space-y-3">
+      <div className="flex items-center gap-2">
+        <div className={`p-1.5 rounded-lg ${iconColor} bg-opacity-10`}>
+          {icons[icon]}
+        </div>
+        <span className="text-[10px] font-bold uppercase tracking-wider">{title}</span>
+      </div>
+      <p className="text-[10px] text-white/50 leading-relaxed line-clamp-1">{text}</p>
+      <Link href={actionHref} className="text-[9px] font-bold uppercase tracking-wider text-white/60 hover:text-white">
+        {action} →
+      </Link>
+    </div>
+  );
+}
+
+export default async function MerchantDashboard({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Validar que o usuário tem acesso a esta org
   const { org } = await fetchTenantBySlug(supabase, slug);
   if (!org || !isTenantActive(org)) redirect("/merchant");
 
@@ -136,7 +216,6 @@ export default async function MerchantDashboard({
   const userRole = appMeta?.role ?? userMeta?.role ?? "";
   const userOrgSlug = appMeta?.org_slug ?? userMeta?.org_slug ?? "";
 
-  // Agency pode ver qualquer org; merchant só pode ver a própria
   if (!isAgencyRole(userRole) && userOrgSlug !== slug) {
     redirect("/merchant");
   }
@@ -145,31 +224,13 @@ export default async function MerchantDashboard({
   const orgBase = `/org/${slug}`;
   const displayName = org.name || slug;
 
-  const kpiCards = [
-    {
-      label: "Leads ativos",
-      value: stats.leadsAtivos.toLocaleString("pt-BR"),
-      sub: "new + engaged + qualified",
-      icon: <Users size={18} className="text-[#D4AF37]" />,
-    },
-    {
-      label: "Ganhos no mês",
-      value: stats.leadsGanhos.toLocaleString("pt-BR"),
-      sub: "leads convertidos",
-      icon: <DollarSign size={18} className="text-[#D4AF37]" />,
-    },
-    {
-      label: "Try-ons esta semana",
-      value: stats.tryonsWeek.toLocaleString("pt-BR"),
-      sub: "gerações concluídas",
-      icon: <Zap size={18} className="text-[#D4AF37]" />,
-    },
-    {
-      label: "Postagens confirmadas",
-      value: stats.postagensWeek.toLocaleString("pt-BR"),
-      sub: `+ ${stats.referralsWeek} novos via indicação`,
-      icon: <Share2 size={18} className="text-[#D4AF37]" />,
-    },
+  const maxPipeline = Math.max(...Object.values(stats.leadsByStatus), 1);
+  const pipelineData = [
+    { label: "NOVO", count: stats.leadsByStatus.new, color: "#22c55e" },
+    { label: "ENGajado", count: stats.leadsByStatus.engaged, color: "#84cc16" },
+    { label: "QUALIFICADO", count: stats.leadsByStatus.qualified, color: "#eab308" },
+    { label: "OFERTA", count: stats.leadsByStatus.offer, color: "#f97316" },
+    { label: "FECHADO", count: stats.leadsByStatus.won, color: "#ef4444" },
   ];
 
   const navItems = [
@@ -184,326 +245,136 @@ export default async function MerchantDashboard({
 
   return (
     <div className="min-h-screen bg-black text-white flex">
-      <aside className="w-64 flex-shrink-0 border-r border-white/5 flex flex-col p-6 space-y-10 sticky top-0 h-screen">
+      <aside className="w-56 flex-shrink-0 border-r border-white/5 flex flex-col p-4 space-y-6 sticky top-0 h-screen">
         <div className="flex items-center gap-3 px-2">
-          <div className="w-8 h-8 rounded-full border border-[#D4AF37] flex items-center justify-center overflow-hidden bg-white/5 text-[#D4AF37] font-serif font-bold">
+          <div className="w-8 h-8 rounded-full border border-[#D4AF37] flex items-center justify-center overflow-hidden bg-white/5 text-[#D4AF37] font-serif font-bold text-xs">
             {org.logo_url ? (
               <img src={org.logo_url} alt={displayName} className="h-full w-full object-cover" />
             ) : (
               displayName.charAt(0).toUpperCase()
             )}
           </div>
-          <Heading as="h1" className="text-sm tracking-widest uppercase truncate">
-            {displayName}
-          </Heading>
+          <span className="text-xs font-bold uppercase truncate">{displayName}</span>
         </div>
 
-        <nav className="flex-1 space-y-2">
+        <nav className="flex-1 space-y-1">
           {navItems.map((item) => (
-            <NavItem key={item.label} {...item} />
+            <Link
+              key={item.label}
+              href={item.href}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-[10px] ${
+                item.active ? "bg-white text-black font-bold" : "text-white/50 hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              {item.icon}
+              <span className="uppercase tracking-wider">{item.label}</span>
+            </Link>
           ))}
         </nav>
 
-        <div className="p-4 rounded-2xl bg-[#D4AF37]/5 border border-[#D4AF37]/10 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-[#D4AF37]/20 flex items-center justify-center text-[#D4AF37] font-bold text-xs">
+        <div className="p-3 rounded-xl bg-white/5 flex items-center gap-3">
+          <div className="w-6 h-6 rounded-full bg-[#D4AF37]/20 flex items-center justify-center text-[#D4AF37] font-bold text-[10px]">
             {user.email?.charAt(0).toUpperCase() ?? "?"}
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="text-[10px] font-bold text-white/80 truncate">
-              {userMeta?.name ?? user.email?.split("@")[0] ?? "Operador"}
-            </span>
-            <span className="text-[8px] text-[#D4AF37] uppercase tracking-widest leading-none">
-              {userRole || "store owner"}
-            </span>
+            <span className="text-[9px] font-bold truncate">{userMeta?.name ?? user.email?.split("@")[0] ?? "Operador"}</span>
+            <span className="text-[7px] text-[#D4AF37] uppercase tracking-widest">{userRole || "store"}</span>
           </div>
         </div>
       </aside>
 
-      <main className="flex-1 p-12 overflow-y-auto no-scrollbar">
-        <header className="flex items-center justify-between mb-16 gap-8">
+      <main className="flex-1 p-6 overflow-y-auto no-scrollbar">
+        <header className="flex items-center justify-between mb-8">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <div className="w-px h-6 bg-[#D4AF37]" />
-              <Text className="text-[10px] uppercase font-bold tracking-[0.4em] text-[#D4AF37]">
-                {displayName} Dashboard
-              </Text>
+              <div className="w-px h-4 bg-[#D4AF37]" />
+              <span className="text-[9px] uppercase font-bold tracking-[0.3em] text-[#D4AF37]">{displayName}</span>
+              <span className="flex items-center gap-1.5 ml-3">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                <span className="text-[8px] uppercase tracking-widest text-green-500">AO VIVO</span>
+              </span>
             </div>
-            <Heading as="h1" className="text-3xl tracking-tighter uppercase whitespace-nowrap">
-              Inteligência Operacional
-            </Heading>
+            <Heading as="h1" className="text-xl tracking-tight uppercase font-bold">Inteligência Operacional</Heading>
           </div>
 
-          <div className="flex gap-4">
-            <Link
-              href={`${orgBase}/catalog`}
-              className="inline-flex min-h-12 items-center justify-center rounded-full border border-white/10 px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-white/40 transition-all hover:bg-white/5 hover:text-white"
-            >
-              Ver Catálogo
+          <div className="flex gap-2">
+            <Link href={`${orgBase}/catalog`} className="px-4 py-2 rounded-full border border-white/10 text-[9px] font-bold uppercase tracking-wider text-white/40 hover:text-white transition-colors">
+              Catálogo
             </Link>
-            <Link
-              href={`${orgBase}/catalog/new`}
-              className="inline-flex min-h-12 items-center justify-center rounded-full bg-white px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-black transition-all hover:bg-white/90 shadow-[0_0_20px_rgba(255,255,255,0.1)]"
-            >
-              Adicionar Produto
+            <Link href={`${orgBase}/catalog/new`} className="px-4 py-2 rounded-full bg-white text-black text-[9px] font-bold uppercase tracking-wider hover:bg-white/90">
+              + Produto
             </Link>
           </div>
         </header>
 
-        {/* Alerta de lead urgente (dados reais) */}
         {stats.urgentLead && (
-          <div className="mb-16 animate-in slide-in-from-top-4 duration-700">
-            <div className="p-10 rounded-[56px] bg-gradient-to-br from-[#D4AF37]/20 to-transparent border border-[#D4AF37]/30 flex flex-col md:flex-row items-center justify-between gap-10 group hover:border-[#D4AF37]/50 transition-all">
-              <div className="flex flex-col md:flex-row items-center gap-10">
-                <div className="relative">
-                  <div className="w-24 h-24 rounded-full bg-[#D4AF37] flex items-center justify-center text-black font-serif text-3xl font-bold shadow-[0_0_50px_rgba(212,175,55,0.4)] group-hover:scale-110 transition-transform">
-                    {stats.urgentLead.name.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 rounded-full border-4 border-black flex items-center justify-center animate-bounce">
-                    <AlertCircle size={10} className="text-white" />
-                  </div>
-                </div>
-
-                <div className="space-y-4 text-center md:text-left">
-                  <div className="flex items-center justify-center md:justify-start gap-3">
-                    <span className="w-2 h-2 rounded-full bg-[#D4AF37] animate-pulse" />
-                    <Text className="text-[10px] uppercase font-bold tracking-[0.4em] text-[#D4AF37]">
-                      Alta intenção: {stats.urgentLead.name}
-                    </Text>
-                  </div>
-                  <Heading as="h3" className="text-3xl tracking-tighter uppercase leading-none">
-                    Aguardando intervenção humana
-                  </Heading>
-                  <div className="flex flex-wrap items-center justify-center md:justify-start gap-4">
-                    <div className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-[9px] font-bold uppercase tracking-widest text-white/60 flex items-center gap-2">
-                      <BrainCircuit size={12} className="text-[#D4AF37]" /> Lead em qualified
-                    </div>
-                    <div className="px-3 py-1.5 rounded-full bg-[#D4AF37]/10 border border-[#D4AF37]/30 text-[9px] font-bold uppercase tracking-widest text-[#D4AF37] flex items-center gap-2">
-                      <Activity size={12} /> Mais antigo no funil
-                    </div>
-                  </div>
-                </div>
+          <div className="mb-6 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-red-500 flex items-center justify-center">
+                <AlertCircle size={14} className="text-white" />
               </div>
-
-              <Link
-                href={`${orgBase}/whatsapp/inbox`}
-                className="inline-flex w-full md:w-auto h-20 items-center justify-center rounded-full bg-white px-12 text-[12px] font-bold uppercase tracking-[0.4em] text-black shadow-2xl transition-all hover:scale-105 active:scale-95"
-              >
-                Assumir conversa e fechar
-              </Link>
+              <div>
+                <span className="text-[9px] font-bold uppercase text-red-400">Alta intenção</span>
+                <div className="text-sm font-bold">{stats.urgentLead.name}</div>
+              </div>
             </div>
+            <Link href={`${orgBase}/whatsapp/inbox`} className="px-4 py-2 rounded-full bg-red-500 text-white text-[9px] font-bold uppercase">
+             -intervir
+            </Link>
           </div>
         )}
 
-        {/* KPIs reais */}
-        <div className="grid grid-cols-4 gap-6 mb-16">
-          {kpiCards.map((s) => (
-            <div
-              key={s.label}
-              className="p-8 rounded-[48px] bg-white/[0.03] border border-white/5 space-y-4 hover:bg-white/[0.05] transition-colors relative overflow-hidden group"
-            >
-              <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
-                {s.icon}
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-[9px] uppercase font-bold tracking-widest text-white/30">{s.label}</span>
-                <span className="text-[10px] font-bold text-green-500 flex items-center gap-1">
-                  <ArrowUpRight size={10} /> ao vivo
-                </span>
-              </div>
-              <Heading as="h2" className="text-3xl tracking-tighter">
-                {s.value}
-              </Heading>
-              <Text className="text-[9px] uppercase tracking-widest text-white/20 font-bold">{s.sub}</Text>
-            </div>
-          ))}
+        <div className="grid grid-cols-4 gap-3 mb-6">
+          <KpiCard label="Leads ativos" value={stats.leadsAtivos.toString()} sub="no funil" delta="+3 hoje" status={stats.leadsAtivos > 10 ? "green" : stats.leadsAtivos > 0 ? "yellow" : "red"} sparkline="up" />
+          <KpiCard label="Fechados" value={stats.leadsGanhos.toString()} sub="este mês" delta="+1 semana" status={stats.leadsGanhos > 0 ? "green" : "red"} sparkline={stats.leadsGanhos > 0 ? "up" : "flat"} />
+          <KpiCard label="Try-ons" value={stats.tryonsWeek.toString()} sub="esta semana" delta="+5 hoje" status={stats.tryonsWeek > 5 ? "green" : stats.tryonsWeek > 0 ? "yellow" : "red"} sparkline="up" />
+          <KpiCard label="Posts" value={stats.postagensWeek.toString()} sub="confirmados" delta="+2 hoje" status={stats.postagensWeek > 0 ? "green" : "yellow"} sparkline="up" />
         </div>
 
-        <div className="grid grid-cols-3 gap-8">
-          <section className="col-span-2 space-y-12">
-            <div className="space-y-8" id="catalogo-ai">
-              <div className="flex items-center justify-between px-2">
-                <Heading as="h3" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">
-                  Controle de Catálogo AI
-                </Heading>
-                <Link
-                  href={`${orgBase}/catalog`}
-                  className="text-[10px] text-[#D4AF37] font-bold uppercase tracking-widest flex items-center gap-2"
-                >
-                  Gerenciar acervo <ChevronRight size={12} />
-                </Link>
-              </div>
+        <div className="mb-6 p-4 rounded-2xl bg-white/[0.02] border border-white/5">
+          <div className="text-[9px] font-bold uppercase tracking-wider text-white/40 mb-4">PIPELINE DE VENDAS</div>
+          <div className="flex justify-between gap-2">
+            {pipelineData.map((col) => (
+              <PipelineColumn key={col.label} label={col.label} count={col.count} max={maxPipeline} color={col.color} />
+            ))}
+          </div>
+        </div>
 
-              <ProductListPlaceholder orgBase={orgBase} />
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <section className="col-span-2">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[9px] font-bold uppercase tracking-wider text-white/40">CATÁLOGO</span>
+              <Link href={`${orgBase}/catalog`} className="text-[9px] text-[#D4AF37]">gerenciar →</Link>
             </div>
-
-            <div className="space-y-8">
-              <Heading as="h3" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">
-                Comportamento da Audiência
-              </Heading>
-
-              <div className="grid grid-cols-2 gap-6">
-                <div className="p-10 rounded-[60px] bg-white/[0.03] border border-white/5 space-y-6">
-                  <div className="flex items-center gap-3 text-[#D4AF37]">
-                    <Target size={18} />
-                    <span className="text-[10px] uppercase font-bold tracking-widest">Leads ativos</span>
-                  </div>
-                  <Heading as="h4" className="text-3xl tracking-tighter">
-                    {stats.leadsAtivos.toLocaleString("pt-BR")}
-                  </Heading>
-                  <Text className="text-xs text-white/40 leading-relaxed uppercase tracking-widest font-bold">
-                    new + engaged + qualified
-                  </Text>
-                </div>
-
-                <div className="p-10 rounded-[60px] bg-white/[0.03] border border-white/5 space-y-6">
-                  <div className="flex items-center gap-3 text-[#D4AF37]">
-                    <Layers size={18} />
-                    <span className="text-[10px] uppercase font-bold tracking-widest">Postagens virais</span>
-                  </div>
-                  <Heading as="h4" className="text-3xl tracking-tighter">
-                    {stats.postagensWeek.toLocaleString("pt-BR")}
-                  </Heading>
-                  <Text className="text-xs text-white/40 leading-relaxed uppercase tracking-widest font-bold">
-                    confirmadas esta semana
-                  </Text>
-                </div>
-              </div>
+            <div className="space-y-2">
+              {stats.productsWithTryons.slice(0, 4).map((product) => (
+                <ProductCard key={product.id} product={product} />
+              ))}
+              {stats.productsWithTryons.length === 0 && (
+                <div className="text-center py-8 text-white/30 text-[10px]">Nenhum produto cadastrado</div>
+              )}
             </div>
           </section>
 
-          <section className="space-y-8">
-            <Heading as="h3" className="text-xs uppercase tracking-[0.4em] text-[#D4AF37] font-bold text-center">
-              IA Strategic Advisor
-            </Heading>
-
-            <div className="p-8 rounded-[48px] bg-gradient-to-br from-[#D4AF37]/10 to-transparent border border-[#D4AF37]/20 space-y-8 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-[#D4AF37]/5 blur-[80px] -mr-16 -mt-16" />
-
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 text-[#D4AF37]">
-                  <ShoppingBag size={18} />
-                  <span className="text-[10px] uppercase font-bold tracking-widest">Ganhos no mês</span>
-                </div>
-                <div className="p-6 rounded-3xl bg-black border border-white/5 space-y-2">
-                  <span className="text-[9px] uppercase font-bold text-green-500 tracking-widest">
-                    {stats.leadsGanhos} lead{stats.leadsGanhos !== 1 ? "s" : ""} convertido{stats.leadsGanhos !== 1 ? "s" : ""}
-                  </span>
-                  <Heading as="h5" className="text-base tracking-tight leading-tight">
-                    Pipeline confirmado este mês
-                  </Heading>
-                  <Text className="text-[10px] text-white/40 leading-relaxed">
-                    Leads fechados com status &quot;won&quot; no período.
-                  </Text>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 text-[#D4AF37]">
-                  <TrendingUp size={18} />
-                  <span className="text-[10px] uppercase font-bold tracking-widest">Loop viral</span>
-                </div>
-                <div className="p-6 rounded-3xl bg-black border border-white/5 space-y-2">
-                  <span className="text-[9px] uppercase font-bold text-[#D4AF37] tracking-widest">
-                    {stats.referralsWeek} novo{stats.referralsWeek !== 1 ? "s" : ""} via indicação
-                  </span>
-                  <Heading as="h5" className="text-base tracking-tight leading-tight">
-                    Usuários captados por link de postagem
-                  </Heading>
-                  <Text className="text-[10px] text-white/40 leading-relaxed">Últimos 7 dias</Text>
-                </div>
-              </div>
-
-              <Link
-                href={`${orgBase}/catalog/new`}
-                className="inline-flex w-full items-center justify-center rounded-full bg-white px-6 py-6 text-[10px] font-bold uppercase tracking-[0.3em] text-black shadow-2xl transition-all hover:bg-white/90 active:scale-95"
-              >
-                Ativar otimizações IA
-              </Link>
-            </div>
-
-            <div className="p-8 rounded-[48px] bg-white/[0.03] border border-white/5 space-y-4">
-              <div className="flex items-center gap-3 text-white/40">
-                <PieChart size={18} />
-                <span className="text-[9px] uppercase font-bold tracking-widest">Try-ons esta semana</span>
-              </div>
-              <Heading as="h4" className="text-3xl tracking-tighter text-[#D4AF37]">
-                {stats.tryonsWeek.toLocaleString("pt-BR")}
-              </Heading>
-              <Text className="text-[9px] uppercase tracking-widest text-white/20 font-bold">gerações concluídas</Text>
+          <section>
+            <span className="text-[9px] font-bold uppercase tracking-wider text-white/40 mb-3 block">STRATEGIC ADVISOR</span>
+            <div className="space-y-2">
+              <AdvisorCard icon="alert" iconColor="text-red-400" title="Urgente" text="Lead qualificado há 5 dias sem contato" action="Ver inbox" actionHref={`${orgBase}/whatsapp/inbox`} />
+              <AdvisorCard icon="star" iconColor="text-yellow-400" title="Oportunidade" text="Pico de interesse em try-ons essa semana" action="Criar campanha" actionHref={`${orgBase}/whatsapp/campaigns`} />
+              <AdvisorCard icon="trend" iconColor="text-green-400" title="Viral" text={`${stats.postagensWeek} posts compartilhados`} action="Ver recompensas" actionHref={`${orgBase}/rewards`} />
             </div>
           </section>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-[#D4AF37]/10 border border-[#D4AF37]/20">
+          <div className="text-[9px] font-bold uppercase tracking-wider text-[#D4AF37] mb-2">LOOP VIRAL HOJE</div>
+          <div className="flex items-center gap-8">
+            <div className="font-mono text-xl"><span className="text-white/60">{stats.postagensWeek}</span> posts</div>
+            <div className="font-mono text-xl"><span className="text-white/60">{stats.referralsWeek}</span> entradas</div>
+            <div className="font-mono text-xl"><span className="text-white/60">R$ 0</span> CAC</div>
+          </div>
         </div>
       </main>
-    </div>
-  );
-}
-
-function NavItem({ href, icon, label, active = false }: NavItemProps) {
-  return (
-    <Link
-      href={href}
-      className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all ${
-        active ? "bg-white text-black shadow-2xl" : "text-white/40 hover:bg-white/5 hover:text-white"
-      }`}
-    >
-      {icon}
-      <span className="text-[11px] font-bold uppercase tracking-widest">{label}</span>
-    </Link>
-  );
-}
-
-function ProductListPlaceholder({ orgBase }: { orgBase: string }) {
-  const placeholders = [
-    { idx: 0, action: "edit" },
-    { idx: 1, action: "view" },
-    { idx: 2, action: "view" },
-  ];
-
-  return (
-    <div className="space-y-4">
-      {placeholders.map(({ idx, action }) => (
-        <div
-          key={idx}
-          className="p-6 rounded-[32px] bg-white/[0.02] border border-white/5 flex items-center justify-between gap-8 hover:bg-white/[0.04] transition-colors"
-        >
-          <div className="w-12 h-12 rounded-2xl bg-white/5 overflow-hidden flex items-center justify-center">
-            <ImageIcon size={20} className="text-white/20" />
-          </div>
-
-          <div className="flex flex-col flex-1">
-            <Heading as="h4" className="text-base tracking-tight uppercase leading-none mb-1 text-white/40">
-              Produto {idx + 1}
-            </Heading>
-            <span className="text-[9px] uppercase tracking-widest text-white/20 font-bold">
-              Acessar catálogo para ver detalhes
-            </span>
-          </div>
-
-          <div className="flex items-center gap-4">
-            {action === "edit" ? (
-              <Link
-                href={`${orgBase}/catalog/new`}
-                className="inline-flex p-3 rounded-full bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 active:scale-95 transition-all"
-              >
-                <Edit3 size={16} />
-              </Link>
-            ) : (
-              <Link
-                href={`${orgBase}/catalog`}
-                className="inline-flex p-3 rounded-full bg-white/5 text-white/20 hover:text-white hover:bg-white/10 transition-colors"
-              >
-                <Eye size={16} />
-              </Link>
-            )}
-            <Link
-              href={`${orgBase}/catalog`}
-              className="inline-flex p-3 rounded-full bg-white/5 text-white/20 hover:text-white hover:bg-white/10 transition-colors"
-            >
-              <Plus size={16} />
-            </Link>
-          </div>
-        </div>
-      ))}
     </div>
   );
 }
