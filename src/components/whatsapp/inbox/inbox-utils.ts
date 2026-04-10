@@ -55,28 +55,28 @@ export const MESSAGE_STYLE_META: Record<string, MessageStyleMeta> = {
   user: {
     label: "CLIENTE",
     labelClass: "text-[#555]",
-    bubbleClass: "bg-[#111] text-[#F0F0F0]",
+    bubbleClass: "bg-[#141414] text-[#E0E0E0]",
     borderClass: "border-l-[#333]",
     alignClass: "items-start",
   },
   ai: {
-    label: "VENUS IA",
+    label: "VENUS",
     labelClass: "text-[#00FF88]",
-    bubbleClass: "bg-[#0d1a0d] text-[#E8FFE8]",
+    bubbleClass: "bg-[#0d1f0d] text-[#ccffcc]",
     borderClass: "border-l-[#00FF88]",
     alignClass: "items-end",
   },
   venus: {
-    label: "VENUS IA",
+    label: "VENUS",
     labelClass: "text-[#00FF88]",
-    bubbleClass: "bg-[#0d1a0d] text-[#E8FFE8]",
+    bubbleClass: "bg-[#0d1f0d] text-[#ccffcc]",
     borderClass: "border-l-[#00FF88]",
     alignClass: "items-end",
   },
   merchant: {
     label: "VOCÊ",
     labelClass: "text-[#C9A84C]",
-    bubbleClass: "bg-[#1a160a] text-[#FFF8E8]",
+    bubbleClass: "bg-[#1f1800] text-[#fff8dc]",
     borderClass: "border-l-[#C9A84C]",
     alignClass: "items-end",
   },
@@ -88,6 +88,8 @@ export const MESSAGE_STYLE_META: Record<string, MessageStyleMeta> = {
     alignClass: "items-end",
   },
 };
+
+const isDecorativePreview = (value: string) => /^[\s✦*•·-]+$/.test(value);
 
 const AVATAR_PALETTES = [
   ["#141414", "#251f11"],
@@ -135,6 +137,20 @@ export const getAvatarStyle = (value: string) => {
 };
 
 export const getConversationStatusMeta = (status: ConversationStatus) => STATUS_META[status];
+
+export const getConversationPreview = (conversation: {
+  lastMessage: string;
+  messages: WhatsAppMessage[];
+}) => {
+  const latestRealMessage = [...conversation.messages]
+    .reverse()
+    .map((message) => message.text.trim())
+    .find((text) => Boolean(text) && !isDecorativePreview(text));
+
+  if (latestRealMessage) return latestRealMessage;
+  if (conversation.lastMessage && !isDecorativePreview(conversation.lastMessage.trim())) return conversation.lastMessage;
+  return latestRealMessage || conversation.lastMessage || "";
+};
 
 export function groupMessages(messages: WhatsAppMessage[]) {
   const groups: Array<{ sender: WhatsAppMessage["sender"]; messages: WhatsAppMessage[] }> = [];

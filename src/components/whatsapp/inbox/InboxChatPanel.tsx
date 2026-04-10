@@ -79,16 +79,16 @@ export function InboxChatPanel({
           >
             {conversation.user.name.charAt(0).toUpperCase()}
           </div>
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <Heading as="h3" className="truncate text-[16px] uppercase tracking-tight text-[#F5F5F0]">
+          <div className="min-w-0 space-y-1">
+            <div className="flex min-w-0 items-center gap-2">
+              <Heading as="h3" className="truncate text-[16px] font-bold uppercase tracking-[0.2em] text-[#F5F5F0]">
                 {conversation.user.name}
               </Heading>
               <span className={`inline-flex items-center border px-2 py-1 text-[8px] font-bold uppercase tracking-[0.3em] ${headerStatusMeta.badge}`}>
                 {headerStatusMeta.label}
               </span>
             </div>
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.28em] text-white/35">
+            <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.24em] text-white/35">
               <span>{conversation.user.phone}</span>
               <span className="text-white/15">|</span>
               <span>{conversation.status.replaceAll("_", " ")}</span>
@@ -159,6 +159,7 @@ export function InboxChatPanel({
               onClick={onAiAssist}
               className="flex h-10 w-10 items-center justify-center border border-[#222] bg-[#0c0c0c] text-[#C9A84C] transition-colors duration-75 hover:bg-[#1a1a1a]"
               title="IA sugerir resposta"
+              aria-label="IA sugerir resposta"
             >
               <BrainCircuit size={15} />
             </button>
@@ -167,6 +168,7 @@ export function InboxChatPanel({
               onClick={() => void onProductAction()}
               className="flex h-10 w-10 items-center justify-center border border-[#222] bg-[#0c0c0c] text-[#C9A84C] transition-colors duration-75 hover:bg-[#1a1a1a]"
               title="Enviar produto"
+              aria-label="Enviar produto"
             >
               <PackagePlus size={15} />
             </button>
@@ -175,6 +177,7 @@ export function InboxChatPanel({
               onClick={onEmojiAction}
               className="flex h-10 w-10 items-center justify-center border border-[#222] bg-[#0c0c0c] text-[#F5F5F0] transition-colors duration-75 hover:bg-[#1a1a1a]"
               title="Emoji"
+              aria-label="Emoji"
             >
               <Smile size={15} />
             </button>
@@ -198,8 +201,9 @@ export function InboxChatPanel({
           <button
             type="button"
             onClick={() => void onSendMessage()}
-            className="flex h-10 w-10 items-center justify-center bg-[#C9A84C] text-black transition-opacity duration-75 hover:opacity-90"
+            className="flex h-10 w-10 items-center justify-center bg-[#C9A84C] text-white transition-colors duration-75 hover:bg-[#b8943f]"
             title="Enviar"
+            aria-label="Enviar"
           >
             <ArrowRight size={16} />
           </button>
