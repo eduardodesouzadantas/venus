@@ -4,6 +4,7 @@ import React from "react";
 import { ArrowRight, BrainCircuit, MessageSquare, PackagePlus, Repeat2, Smile } from "lucide-react";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
+import { VenusAvatar } from "@/components/venus/VenusAvatar";
 import type { SmartReplySuggestion, WhatsAppConversation } from "@/types/whatsapp";
 import {
   getAvatarStyle,
@@ -67,6 +68,7 @@ export function InboxChatPanel({
 
   const groupedMessages = groupMessages(conversation.messages);
   const headerStatusMeta = getConversationStatusMeta(conversation.status);
+  const isAiActive = conversation.status === "ai_active";
 
   const getMessageStyle = (sender: string) => {
     if (sender === "venus" || sender === "ai") {
@@ -105,26 +107,48 @@ export function InboxChatPanel({
     <main className="flex min-h-0 flex-1 flex-col border-r border-white/5 bg-[#0a0a0a]">
       <header className="flex items-center justify-between gap-4 border-b border-white/8 bg-[#111] px-5 py-4">
         <div className="flex min-w-0 items-center gap-3">
-          <div
-            className="flex h-10 w-10 items-center justify-center text-sm font-bold text-white"
-            style={getAvatarStyle(conversation.user.name)}
-          >
-            {conversation.user.name.charAt(0).toUpperCase()}
-          </div>
+          {isAiActive ? (
+            <VenusAvatar size={36} animated />
+          ) : (
+            <div
+              className="flex h-10 w-10 items-center justify-center text-sm font-bold text-white"
+              style={getAvatarStyle(conversation.user.name)}
+            >
+              {conversation.user.name.charAt(0).toUpperCase()}
+            </div>
+          )}
           <div className="min-w-0 space-y-1">
-            <div className="flex min-w-0 items-center gap-2">
-              <Heading as="h3" className="truncate text-[16px] font-bold uppercase tracking-[0.2em] text-[#F5F5F0]">
-                {conversation.user.name}
-              </Heading>
-              <span className={`inline-flex items-center border px-2 py-1 text-[8px] font-bold uppercase tracking-[0.3em] ${headerStatusMeta.badge}`}>
-                {headerStatusMeta.label}
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.24em] text-white/35">
-              <span>{conversation.user.phone}</span>
-              <span className="text-white/15">|</span>
-              <span>{conversation.status.replaceAll("_", " ")}</span>
-            </div>
+            {isAiActive ? (
+              <>
+                <div className="flex min-w-0 items-center gap-2">
+                  <Heading as="h3" className="truncate text-[16px] font-bold uppercase tracking-[0.2em] text-[#F5F5F0]">
+                    Venus
+                  </Heading>
+                  <span className="inline-flex items-center border border-[#00FF88]/20 bg-[#00FF88]/10 px-2 py-1 text-[8px] font-bold uppercase tracking-[0.3em] text-[#00FF88]">
+                    AI ACTIVE
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.24em] text-[#00FF88]">
+                  <span>● online agora</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex min-w-0 items-center gap-2">
+                  <Heading as="h3" className="truncate text-[16px] font-bold uppercase tracking-[0.2em] text-[#F5F5F0]">
+                    {conversation.user.name}
+                  </Heading>
+                  <span className={`inline-flex items-center border px-2 py-1 text-[8px] font-bold uppercase tracking-[0.3em] ${headerStatusMeta.badge}`}>
+                    {headerStatusMeta.label}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.24em] text-white/35">
+                  <span>{conversation.user.phone}</span>
+                  <span className="text-white/15">|</span>
+                  <span>{conversation.status.replaceAll("_", " ")}</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -150,12 +174,17 @@ export function InboxChatPanel({
         <div className="space-y-5">
           {groupedMessages.map((group, index) => {
             const meta = getMessageStyle(group.sender);
+            const showLabel = index === 0 || groupedMessages[index - 1]?.sender !== group.sender;
+            const isVenusSender = String(group.sender) === "venus" || group.sender === "ai";
             return (
               <div key={`${group.sender}-${index}`} className={`flex flex-col ${meta.alignClass}`}>
-                <div className="mb-1 px-1 text-[9px] uppercase tracking-[0.15em]" style={{ color: meta.labelColor }}>
-                  {meta.label}
-                </div>
                 <div className="w-full max-w-[82%] space-y-2">
+                  {showLabel ? (
+                    <div className="mb-1 flex items-center gap-2 px-1 text-[9px] uppercase tracking-[0.15em]" style={{ color: meta.labelColor }}>
+                      {isVenusSender ? <VenusAvatar size={16} animated={false} /> : null}
+                      <span>{meta.label}</span>
+                    </div>
+                  ) : null}
                   {group.messages.map((message) => (
                     <div key={message.id} className="flex flex-col">
                       <div
@@ -225,18 +254,21 @@ export function InboxChatPanel({
           </div>
 
           <div className="min-w-0 flex-1">
-            <textarea
-              value={inputText}
-              onChange={(event) => onInputText(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  void onSendMessage();
-                }
-              }}
-              placeholder={`Responda como ${storeName}...`}
-              className="h-24 w-full resize-none border border-[#222] bg-[#0c0c0c] px-4 py-3 text-[13px] text-[#F5F5F0] outline-none placeholder:text-[#444] focus:border-[#C9A84C]/50"
-            />
+            <div className="flex items-start gap-3">
+              {isAiActive ? <VenusAvatar size={20} animated={false} /> : null}
+              <textarea
+                value={inputText}
+                onChange={(event) => onInputText(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    void onSendMessage();
+                  }
+                }}
+                placeholder={isAiActive ? "A Venus está ativa — ou responda você..." : `Responda como ${storeName}...`}
+                className="h-24 w-full resize-none border border-[#222] bg-[#0c0c0c] px-4 py-3 text-[13px] text-[#F5F5F0] outline-none placeholder:text-[#444] focus:border-[#C9A84C]/50"
+              />
+            </div>
           </div>
 
           <button

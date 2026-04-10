@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// TODO: configurar nome "Venus — [nome da loja]" no Meta Business Manager
 
 export interface VenusContext {
   orgName: string;

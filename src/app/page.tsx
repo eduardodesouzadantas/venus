@@ -4,6 +4,7 @@ import { ArrowRight, Crown, MessagesSquare, ScanSearch, Sparkles } from "lucide-
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { fetchTenantBySlug, isAgencyRole, isTenantActive, resolveTenantContext, normalizeTenantSlug } from "@/lib/tenant/core";
+import { VenusAvatar } from "@/components/venus/VenusAvatar";
 
 const pillars = [
   {
@@ -120,6 +121,16 @@ export default async function SplashPage({
             <div className="inline-flex items-center gap-2 rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/6 px-4 py-2">
               <Crown className="h-3.5 w-3.5 text-[#D4AF37]" />
               <span className="text-[9px] font-bold uppercase tracking-[0.32em] text-[#D4AF37]">Consultoria visual premium</span>
+            </div>
+
+            <div className="flex flex-col items-start gap-4 py-2 sm:flex-row sm:items-center sm:gap-5">
+              <VenusAvatar size={80} animated />
+              <div className="space-y-1">
+                <div className="font-serif text-[2.4rem] italic leading-none tracking-[0.2em] text-[#D4AF37] sm:text-[3rem]">
+                  VENUS
+                </div>
+                <div className="text-[10px] uppercase tracking-[0.3em] text-white/40">sua personal stylist</div>
+              </div>
             </div>
 
             <div className="space-y-4">
