@@ -129,29 +129,68 @@ function buildPalette(goalKey: GoalKey, metal: string): ResultPayload["palette"]
           { hex: "#F8FAFC", name: "Branco óptico" },
           { hex: "#374151", name: "Grafite" },
         ],
-      };
+    };
   }
+}
+
+function buildPaletteHex(name: string, fallbackHex: string): string {
+  const text = normalizeText(name).toLowerCase();
+  if (!text) return fallbackHex;
+  if (text.includes("preto") || text.includes("black")) return "#111827";
+  if (text.includes("branco") || text.includes("off white") || text.includes("creme")) return "#F8FAFC";
+  if (text.includes("grafite") || text.includes("cinza") || text.includes("chumbo")) return "#374151";
+  if (text.includes("marinho") || text.includes("azul")) return "#1E3A8A";
+  if (text.includes("vinho") || text.includes("bordo") || text.includes("bordô")) return "#7C2D12";
+  if (text.includes("verde")) return "#14532D";
+  if (text.includes("bege") || text.includes("areia") || text.includes("taupe")) return "#D6C6B8";
+  if (text.includes("dour")) return "#C9A84C";
+  if (text.includes("prat")) return "#94A3B8";
+  if (text.includes("rosa")) return "#DB2777";
+  if (text.includes("roxo")) return "#7C3AED";
+  if (text.includes("laranja") || text.includes("coral")) return "#EA580C";
+  return fallbackHex;
+}
+
+function buildPaletteFromOnboarding(data: OnboardingData, essence: EssenceProfile): ResultPayload["palette"] {
+  const favoriteColors = data.colors.favoriteColors.map((value) => normalizeText(value)).filter(Boolean);
+  const avoidColors = data.colors.avoidColors.map((value) => normalizeText(value)).filter(Boolean);
+  const directionLabel = normalizeText(data.intent.styleDirection) || essence.styleDirection;
+  const goalLabel = normalizeText(data.intent.imageGoal) || essence.label;
+  const metalLabel = normalizeText(data.colors.metal) || "Prateado";
+  const primary = favoriteColors[0] || (essence.key === "authority" ? "Marinho intenso" : "Azul noturno");
+  const support = favoriteColors[1] || (metalLabel === "Dourado" ? "Off white" : "Grafite");
+  const accent = favoriteColors[2] || "Contraste controlado";
+  const contrast = essence.key === "authority" || essence.key === "presence" || essence.key === "creative" ? "Alto" : "Médio Alto";
+
+  return {
+    family: `${goalLabel} • ${directionLabel}`,
+    description: `Favorece ${favoriteColors.join(", ") || "as cores escolhidas"} e evita ${avoidColors.join(", ") || "cores de ruído"}, sustentando ${goalLabel.toLowerCase()} com leitura alinhada à linha ${directionLabel.toLowerCase()}.`,
+    colors: [
+      { hex: buildPaletteHex(primary, "#1E3A8A"), name: primary },
+      { hex: buildPaletteHex(support, "#F8FAFC"), name: support },
+      { hex: buildPaletteHex(accent, "#7C2D12"), name: accent },
+    ],
+    metal: metalLabel,
+    contrast,
+  };
 }
 
 function buildPaletteFromAnalysis(
   analysis: VisualAnalysisPayload,
-  fallbackGoalKey: GoalKey,
-  fallbackMetal: string,
+  fallbackPalette: ResultPayload["palette"],
 ): ResultPayload["palette"] {
-  const fallback = buildPalette(fallbackGoalKey, fallbackMetal);
-
   return {
-    family: normalizeText(analysis.paletteFamily) || fallback.family,
-    description: normalizeText(analysis.paletteDescription) || fallback.description,
+    family: normalizeText(analysis.paletteFamily) || fallbackPalette.family,
+    description: normalizeText(analysis.paletteDescription) || fallbackPalette.description,
     colors:
       Array.isArray(analysis.colors) && analysis.colors.length > 0
           ? analysis.colors.slice(0, 3).map((color) => ({
             hex: normalizeText(color.hex) || "#111827",
             name: normalizeText(color.name) || "Cor estratégica",
           }))
-        : fallback.colors,
-    metal: normalizeText(analysis.metal) || fallback.metal,
-    contrast: normalizeText(analysis.contrast) || fallback.contrast,
+        : fallbackPalette.colors,
+    metal: normalizeText(analysis.metal) || fallbackPalette.metal,
+    contrast: normalizeText(analysis.contrast) || fallbackPalette.contrast,
   };
 }
 
@@ -352,6 +391,7 @@ export function buildResultSurface(data: OnboardingData, visualAnalysis?: Visual
   const faceLines = normalizeText(data.body.faceLines) || "Marcantes";
   const metal = normalizeText(data.colors.metal) || "Prateado";
   const mainPain = normalizeText(data.intent.mainPain) || "ruído visual";
+  const onboardingPalette = buildPaletteFromOnboarding(data, essence);
 
   const resolvedEssence = visualAnalysis
     ? {
@@ -397,8 +437,8 @@ export function buildResultSurface(data: OnboardingData, visualAnalysis?: Visual
     : buildHero(goalKey, goal, fit, essence);
 
   const palette = visualAnalysis
-    ? buildPaletteFromAnalysis(visualAnalysis, goalKey, metal)
-    : buildPalette(goalKey, metal);
+    ? buildPaletteFromAnalysis(visualAnalysis, onboardingPalette)
+    : onboardingPalette;
 
   const diagnostic = visualAnalysis
     ? {

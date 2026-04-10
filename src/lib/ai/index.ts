@@ -9,6 +9,7 @@ import { enforceOrgHardCap } from "@/lib/billing/enforcement";
 import { enforceTenantOperationalState, type TenantOperationalOrgSnapshot } from "@/lib/tenant/enforcement";
 import {
   buildCatalogPromptSections,
+  filterCatalogForRecommendation,
   normalizeOpenAIRecommendationPayload,
   summarizeOnboardingProfile,
 } from "./result-normalizer";
@@ -64,7 +65,8 @@ export async function generateOpenAIRecommendation(
 
   const openai = new OpenAI({ apiKey });
   const profileSummary = summarizeOnboardingProfile(userData);
-  const catalogSummary = buildCatalogPromptSections(catalog, userData);
+  const filteredCatalog = filterCatalogForRecommendation(catalog, userData);
+  const catalogSummary = buildCatalogPromptSections(filteredCatalog, userData);
 
   const systemPrompt = `
 Você é a Venus Engine. Sua função é gerar uma leitura pessoal, precisa e comercialmente útil.
@@ -116,5 +118,5 @@ Gere a saída final com foco em aderência ao perfil, explicação curta, hierar
   }
 
   const payloadData = JSON.parse(responseText) as Partial<ResultPayload>;
-  return normalizeOpenAIRecommendationPayload(payloadData, userData, catalog);
+  return normalizeOpenAIRecommendationPayload(payloadData, userData, filteredCatalog);
 }

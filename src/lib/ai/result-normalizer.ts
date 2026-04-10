@@ -18,6 +18,8 @@ type ProfileSignals = {
   styleDirection: "Masculina" | "Feminina" | "Neutra";
   satisfaction: number;
   mainPain: string;
+  favoriteColors: string[];
+  avoidColors: string[];
   fit: string;
   faceLines: string;
   hairLength: string;
@@ -158,6 +160,65 @@ function normalizeStyleDirection(value: string | undefined): "Masculina" | "Femi
   return "Neutra";
 }
 
+function isDirectionCompatible(
+  productDirection: "Masculina" | "Feminina" | "Neutra",
+  targetDirection: ProfileSignals["styleDirection"],
+): boolean {
+  if (targetDirection === "Masculina") {
+    return productDirection === "Masculina" || productDirection === "Neutra";
+  }
+
+  if (targetDirection === "Feminina") {
+    return productDirection === "Feminina" || productDirection === "Neutra";
+  }
+
+  return productDirection === "Neutra";
+}
+
+function buildPaletteColor(name: string, fallbackHex: string): { hex: string; name: string } {
+  const normalized = matchText(name);
+  if (!normalized) {
+    return { hex: fallbackHex, name };
+  }
+
+  if (normalized.includes("preto") || normalized.includes("black")) return { hex: "#111827", name };
+  if (normalized.includes("branco") || normalized.includes("off white") || normalized.includes("creme")) return { hex: "#F8FAFC", name };
+  if (normalized.includes("grafite") || normalized.includes("chumbo") || normalized.includes("cinza")) return { hex: "#374151", name };
+  if (normalized.includes("marinho") || normalized.includes("azul")) return { hex: "#1E3A8A", name };
+  if (normalized.includes("vinho") || normalized.includes("bordo") || normalized.includes("bordô")) return { hex: "#7C2D12", name };
+  if (normalized.includes("verde")) return { hex: "#14532D", name };
+  if (normalized.includes("bege") || normalized.includes("areia") || normalized.includes("taupe")) return { hex: "#D6C6B8", name };
+  if (normalized.includes("dour")) return { hex: "#C9A84C", name };
+  if (normalized.includes("prat")) return { hex: "#94A3B8", name };
+  if (normalized.includes("rosa")) return { hex: "#DB2777", name };
+  if (normalized.includes("roxo")) return { hex: "#7C3AED", name };
+  if (normalized.includes("laranja") || normalized.includes("coral")) return { hex: "#EA580C", name };
+  return { hex: fallbackHex, name };
+}
+
+function buildOnboardingPalette(
+  profile: Pick<ProfileSignals, "goal" | "goalKey" | "styleDirection" | "favoriteColors" | "avoidColors" | "metal" | "contrast">,
+): ResultPayload["palette"] {
+  const primaryName = profile.favoriteColors[0] || profile.goal;
+  const supportName = profile.favoriteColors[1] || (profile.styleDirection === "Feminina" ? "off white" : "grafite");
+  const accentName = profile.favoriteColors[2] || (profile.goalKey === "Autoridade" ? "marinho" : profile.goalKey === "Criatividade" ? "vinho profundo" : "grafite");
+  const avoided = profile.avoidColors.length > 0 ? profile.avoidColors.join(", ") : "cores de ruído";
+  const directionLabel = profile.styleDirection.toLowerCase();
+  const metalLabel = profile.metal === "Dourado" ? "metais quentes" : "metais frios";
+
+  return {
+    family: `${profile.goal} • linha ${directionLabel}`,
+    description: `Favorece ${profile.favoriteColors.join(", ") || primaryName} e evita ${avoided}, sustentando ${profile.goal.toLowerCase()} com ${directionLabel} e ${metalLabel}.`,
+    metal: profile.metal,
+    contrast: profile.contrast,
+    colors: [
+      buildPaletteColor(primaryName, "#1F2937"),
+      buildPaletteColor(supportName, "#F8FAFC"),
+      buildPaletteColor(accentName, "#7C2D12"),
+    ],
+  };
+}
+
 function getProfileSignals(userData: OnboardingData) {
   const goal = compactText(userData.intent.imageGoal, "Elegância", 40);
   const goalKey = pickGoalKey(goal);
@@ -167,15 +228,19 @@ function getProfileSignals(userData: OnboardingData) {
   const hairLength = compactText(userData.body.hairLength, "Médio", 24);
   const mainPain = compactText(userData.intent.mainPain, "ruído visual", 40);
   const metal = normalizeMetal(userData.colors.metal || undefined);
+  const favoriteColors = userData.colors.favoriteColors.map((value) => compactText(value, "", 40)).filter(Boolean);
+  const avoidColors = userData.colors.avoidColors.map((value) => compactText(value, "", 40)).filter(Boolean);
   const satisfaction = Number.isFinite(userData.intent.satisfaction) ? userData.intent.satisfaction : 5;
   const contrast = GOAL_FALLBACKS[goalKey].contrast;
   const goalKeywords = GOAL_KEYWORDS[goalKey] || GOAL_KEYWORDS.Elegância;
   const environmentKeywords = userData.lifestyle.environments.map((value) => matchText(value));
-  const colorKeywords = [...userData.colors.favoriteColors, ...userData.colors.avoidColors].map((value) => matchText(value));
+  const colorKeywords = [...favoriteColors, ...avoidColors].map((value) => matchText(value));
 
   return {
     goal,
     goalKey,
+    favoriteColors,
+    avoidColors,
     fit,
     faceLines,
     hairLength,
@@ -249,6 +314,10 @@ function buildPalette(profile: Pick<ProfileSignals, "goalKey" | "metal" | "contr
             { hex: "#374151", name: "Grafite" },
           ],
   };
+}
+
+function buildPersonalizedPalette(profile: Pick<ProfileSignals, "goal" | "goalKey" | "styleDirection" | "favoriteColors" | "avoidColors" | "metal" | "contrast">): ResultPayload["palette"] {
+  return buildOnboardingPalette(profile);
 }
 
 function buildBodyVisagism(profile: Pick<ProfileSignals, "fit" | "faceLines">): ResultPayload["bodyVisagism"] {
@@ -682,6 +751,11 @@ function formatCatalogProductLine(product: Product): string {
   return fields.join(" | ");
 }
 
+export function filterCatalogForRecommendation(catalog: Product[], userData: OnboardingData): Product[] {
+  const profile = getProfileSignals(userData);
+  return catalog.filter((product) => isDirectionCompatible(deriveCatalogStylistProfile(product).direction, profile.styleDirection));
+}
+
 export function summarizeOnboardingProfile(userData: OnboardingData): string {
   const profile = getProfileSignals(userData);
   const essence = deriveEssenceProfile(userData);
@@ -702,13 +776,14 @@ export function summarizeOnboardingProfile(userData: OnboardingData): string {
 }
 
 export function buildCatalogPromptSections(catalog: Product[], userData: OnboardingData): string {
-  if (catalog.length === 0) {
+  const filteredCatalog = filterCatalogForRecommendation(catalog, userData);
+  if (filteredCatalog.length === 0) {
     return "CATALOGO REAL: nenhum produto disponível. Responda de forma conservadora e não invente marcas.";
   }
 
   const profile = getProfileSignals(userData);
   const sections = LOOK_BLUEPRINTS.map((blueprint) => {
-    const ranked = rankProductsForBlueprint(catalog, blueprint, profile).slice(0, 6);
+    const ranked = rankProductsForBlueprint(filteredCatalog, blueprint, profile).slice(0, 6);
     const lines = ranked.map((product) => `- ${formatCatalogProductLine(product)}`);
     return [`LOOK ${blueprint.name} (${blueprint.type})`, ...lines].join("\n");
   });
@@ -719,12 +794,14 @@ export function buildCatalogPromptSections(catalog: Product[], userData: Onboard
 export function buildCatalogAwareFallbackResult(userData: OnboardingData, catalog: Product[]): ResultPayload {
   const profileSignals = getProfileSignals(userData);
   const essence = deriveEssenceProfile(userData);
+  const filteredCatalog = filterCatalogForRecommendation(catalog, userData);
+  const onboardingPalette = buildPersonalizedPalette(profileSignals);
   const profile: NormalizedProfile = {
     ...profileSignals,
     heroStyle: essence.label,
     heroSubtitle: essence.summary,
-    paletteFamily: GOAL_FALLBACKS[profileSignals.goalKey].paletteFamily,
-    paletteDescription: GOAL_FALLBACKS[profileSignals.goalKey].paletteDescription,
+    paletteFamily: onboardingPalette.family,
+    paletteDescription: onboardingPalette.description,
     diagnostic: {
       currentPerception: `Seu perfil pede menos ruído e mais estrutura. O ponto sensível hoje é ${profileSignals.mainPain.toLowerCase()}.`,
       desiredGoal: `Projetar ${profileSignals.goal.toLowerCase()} com mais clareza e coerência.`,
@@ -744,13 +821,13 @@ export function buildCatalogAwareFallbackResult(userData: OnboardingData, catalo
   };
 
   const usedIds = new Set<string>();
-  const looks = LOOK_BLUEPRINTS.map((blueprint, index) => buildLookFromBlueprint(blueprint, profile, catalog, usedIds, index));
+  const looks = LOOK_BLUEPRINTS.map((blueprint, index) => buildLookFromBlueprint(blueprint, profile, filteredCatalog, usedIds, index));
   const selectedNames = looks.flatMap((look) => look.items.map((item) => item.name)).filter(Boolean);
   const accessoryNames = looks.flatMap((look) => look.accessories);
 
   return {
     hero: buildHero(profile),
-    palette: buildPalette(profile),
+    palette: buildPersonalizedPalette(profile),
     diagnostic: buildDiagnostic(profile, selectedNames),
     bodyVisagism: buildBodyVisagism(profile),
     accessories: buildAccessories(profile, accessoryNames),
@@ -775,12 +852,14 @@ export function normalizeOpenAIRecommendationPayload(
   const raw = payload as Partial<ResultPayload>;
   const profileSignals = getProfileSignals(userData);
   const essence = deriveEssenceProfile(userData);
+  const filteredCatalog = filterCatalogForRecommendation(catalog, userData);
+  const onboardingPalette = buildPersonalizedPalette(profileSignals);
   const profile: NormalizedProfile = {
     ...profileSignals,
     heroStyle: essence.label,
     heroSubtitle: essence.summary,
-    paletteFamily: GOAL_FALLBACKS[profileSignals.goalKey].paletteFamily,
-    paletteDescription: GOAL_FALLBACKS[profileSignals.goalKey].paletteDescription,
+    paletteFamily: onboardingPalette.family,
+    paletteDescription: onboardingPalette.description,
     diagnostic: {
       currentPerception: "",
       desiredGoal: "",
@@ -801,11 +880,11 @@ export function normalizeOpenAIRecommendationPayload(
 
   const usedIds = new Set<string>();
   const looks = LOOK_BLUEPRINTS.map((blueprint, index) =>
-    buildLookFromBlueprint(blueprint, profile, catalog, usedIds, index, raw.looks?.[index]),
+    buildLookFromBlueprint(blueprint, profile, filteredCatalog, usedIds, index, raw.looks?.[index]),
   );
   const selectedNames = looks.flatMap((look) => look.items.map((item) => item.name)).filter(Boolean);
   const accessoryNames = looks.flatMap((look) => look.accessories);
-  const palette = raw.palette || buildPalette(profile);
+  const palette = raw.palette || buildPersonalizedPalette(profile);
 
   return {
     hero: {
@@ -821,7 +900,7 @@ export function normalizeOpenAIRecommendationPayload(
             hex: normalizeText(color.hex) || "#111827",
             name: compactText(color.name, "Cor estratégica", 40),
           }))
-        : buildPalette(profile).colors,
+        : buildPersonalizedPalette(profile).colors,
       metal: profile.metal,
       contrast: compactText(palette.contrast, profile.contrast, 20),
     },

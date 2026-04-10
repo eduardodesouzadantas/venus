@@ -23,6 +23,13 @@ function normalizeStyleDirection(value: unknown): VisualAnalysisStyleDirection {
   return "Neutra";
 }
 
+function matchText(value: string): string {
+  return normalizeText(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
 function normalizeColorList(
   value: unknown,
   fallback: VisualAnalysisPayload["colors"],
@@ -41,6 +48,37 @@ function normalizeColorList(
     .filter((entry): entry is { hex: string; name: string } => Boolean(entry));
 
   return colors.length > 0 ? colors.slice(0, 3) : fallback;
+}
+
+function buildColorHex(name: string, fallbackHex: string): string {
+  const text = matchText(name);
+  if (!text) return fallbackHex;
+  if (text.includes("preto") || text.includes("black")) return "#111827";
+  if (text.includes("branco") || text.includes("off white") || text.includes("creme")) return "#F8FAFC";
+  if (text.includes("grafite") || text.includes("cinza") || text.includes("chumbo")) return "#374151";
+  if (text.includes("marinho") || text.includes("azul")) return "#1E3A8A";
+  if (text.includes("vinho") || text.includes("bordo") || text.includes("bordô")) return "#7C2D12";
+  if (text.includes("verde")) return "#14532D";
+  if (text.includes("bege") || text.includes("areia") || text.includes("taupe")) return "#D6C6B8";
+  if (text.includes("dour")) return "#C9A84C";
+  if (text.includes("prat")) return "#94A3B8";
+  if (text.includes("rosa")) return "#DB2777";
+  if (text.includes("roxo")) return "#7C3AED";
+  if (text.includes("laranja") || text.includes("coral")) return "#EA580C";
+  return fallbackHex;
+}
+
+function buildOnboardingPaletteColors(data: OnboardingData, essenceKey: string): VisualAnalysisPayload["colors"] {
+  const favoriteColors = data.colors.favoriteColors.map((value) => normalizeText(value)).filter(Boolean);
+  const first = favoriteColors[0] || (essenceKey === "authority" ? "Marinho intenso" : "Azul noturno");
+  const second = favoriteColors[1] || (data.colors.metal === "Dourado" ? "Off white" : "Grafite");
+  const third = favoriteColors[2] || (data.intent.styleDirection === "Feminina" ? "Vinho profundo" : "Contraste controlado");
+
+  return [
+    { hex: buildColorHex(first, "#1F2937"), name: first },
+    { hex: buildColorHex(second, "#F8FAFC"), name: second },
+    { hex: buildColorHex(third, "#7C2D12"), name: third },
+  ];
 }
 
 function buildContextSummary(data: OnboardingData): string {
@@ -114,16 +152,11 @@ function buildFallbackAnalysis(data: OnboardingData): VisualAnalysisPayload {
   const fit = normalizeText(data.body.fit) || "Slim";
   const faceLines = normalizeText(data.body.faceLines) || "Marcantes";
   const metal = normalizeText(data.colors.metal) || "Prateado";
-  const paletteFamily =
-    essence.key === "authority"
-      ? "Presenca de Autoridade"
-      : essence.key === "presence"
-        ? "Contraste Editorial"
-        : essence.key === "creative"
-          ? "Editorial de Contraste"
-          : essence.key === "discretion"
-            ? "Neutros Silenciosos"
-            : "Neutros Refinados";
+  const favoriteColors = data.colors.favoriteColors.map((value) => normalizeText(value)).filter(Boolean);
+  const avoidColors = data.colors.avoidColors.map((value) => normalizeText(value)).filter(Boolean);
+  const paletteFamily = `${styleDirection} • ${goal}`;
+  const paletteDescription = `Favorece ${favoriteColors.join(", ") || "as cores escolhidas"} e evita ${avoidColors.join(", ") || "cores de ruído"}, sustentando ${goal.toLowerCase()} com leitura alinhada à linha ${styleDirection.toLowerCase()}.`;
+  const paletteColors = buildOnboardingPaletteColors(data, essence.key);
 
   return {
     source: "fallback",
@@ -133,19 +166,10 @@ function buildFallbackAnalysis(data: OnboardingData): VisualAnalysisPayload {
     keySignals: essence.keySignals,
     styleDirection,
     paletteFamily,
-    paletteDescription:
-      essence.key === "authority"
-        ? "Contraste alto e tons profundos sustentam uma presenca firme."
-        : essence.key === "presence"
-          ? "Mais impacto visual, mas ainda com leitura limpa e controlada."
-          : essence.key === "creative"
-            ? "Cores mais expressivas, mas ainda legiveis e usaveis no mundo real."
-            : essence.key === "discretion"
-              ? "Baixo ruido visual, acabamento limpo e sofisticacao discreta."
-              : "Cores equilibradas para uma leitura elegante e consistente.",
+    paletteDescription,
     contrast: essence.key === "authority" || essence.key === "presence" || essence.key === "creative" ? "Alto" : "Medio Alto",
     metal,
-    colors: buildFallbackColors(essence.key),
+    colors: paletteColors,
     diagnostic: {
       currentPerception: `Seu perfil pede menos ruido e mais estrutura. Hoje o ponto sensivel e ${mainPain.toLowerCase()}, mas a leitura aponta para ${essence.label.toLowerCase()} na linha ${styleDirection.toLowerCase()}.`,
       desiredGoal: `Projetar ${goal.toLowerCase()} de um jeito mais limpo, pessoal e consistente.`,

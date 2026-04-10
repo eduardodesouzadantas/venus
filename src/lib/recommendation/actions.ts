@@ -47,7 +47,7 @@ export async function generateEngineResult(
     } | null;
   }
 ): Promise<ResultPayload> {
-  const products = await getB2BProducts();
+  const products = await getB2BProducts(hardCapContext?.orgId || null);
 
   try {
     const aiPayload = await generateOpenAIRecommendation(userData, products, hardCapContext);
