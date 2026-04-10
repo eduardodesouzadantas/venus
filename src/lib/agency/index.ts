@@ -11,6 +11,7 @@ import { resolveAgencyTimeRangeWindow, type AgencyTimeRange } from "@/lib/agency
 import {
   isAgencyRole,
   normalizeTenantSlug,
+  type MerchantGroupRecord,
   type TenantRecord,
   type TenantMemberRecord,
   resolveTenantContext,
@@ -44,6 +45,10 @@ export interface AgencyOrgMetrics {
 
 export interface AgencyOrgRow extends TenantRecord, AgencyOrgMetrics {}
 
+export interface AgencyMerchantGroupRow extends MerchantGroupRecord {
+  branch_count: number;
+}
+
 export interface AgencyOrgLeadSummary {
   total: number;
   by_status: Record<LeadStatus, number>;
@@ -57,10 +62,11 @@ export interface AgencySession {
   supabase: SupabaseClient;
   user: User;
   role: string;
+  orgId: string | null;
 }
 
 const ORG_SELECT_COLUMNS =
-  "id, slug, name, logo_url, primary_color, whatsapp_number, status, kill_switch, plan_id, limits, owner_user_id, created_at, updated_at";
+  "id, slug, name, group_id, branch_name, logo_url, primary_color, whatsapp_number, status, kill_switch, plan_id, limits, owner_user_id, created_at, updated_at";
 
 const AGENCY_MUTATION_EVENTS: Record<"activate" | "suspend" | "toggle_kill_switch", (current: TenantRecord) => string> = {
   activate: () => "agency.org_activated",
@@ -164,11 +170,13 @@ function buildUsageSnapshot(row: Record<string, unknown>): AgencyUsageSnapshot {
   };
 }
 
-async function loadAgencySnapshot() {
+async function loadAgencySnapshot(agencyOrgId?: string | null) {
   const admin = createAdminClient();
   const today = new Date().toISOString().slice(0, 10);
+  const normalizedAgencyOrgId = normalize(agencyOrgId);
 
   const [
+    merchantGroupsResult,
     orgsResult,
     membersResult,
     productsResult,
@@ -179,6 +187,12 @@ async function loadAgencySnapshot() {
     whatsappConversationsResult,
     whatsappMessagesResult,
   ] = await Promise.all([
+    queryWithTimeout(
+      normalizedAgencyOrgId
+        ? admin.from("merchant_groups").select("id, name, owner_user_id, org_id, created_at").eq("org_id", normalizedAgencyOrgId).order("created_at", { ascending: false }).limit(50)
+        : admin.from("merchant_groups").select("id, name, owner_user_id, org_id, created_at").order("created_at", { ascending: false }).limit(50),
+      { data: [], error: null }
+    ),
     queryWithTimeout(
       admin.from("orgs").select(ORG_SELECT_COLUMNS).order("created_at", { ascending: false }).limit(50),
       { data: [], error: null }
@@ -228,6 +242,11 @@ async function loadAgencySnapshot() {
   const orgs = (orgsResult.data || []) as TenantRecord[];
   const orgById = new Map(orgs.map((org) => [org.id, org]));
   const orgBySlug = new Map(orgs.map((org) => [normalizeTenantSlug(org.slug), org]));
+  const branchCountByGroupId = new Map<string, number>();
+  for (const org of orgs) {
+    if (!org.group_id) continue;
+    branchCountByGroupId.set(org.group_id, (branchCountByGroupId.get(org.group_id) || 0) + 1);
+  }
   const whatsappConversationsAvailable = !whatsappConversationsResult.error;
   const whatsappMessagesAvailable = !whatsappMessagesResult.error;
 
@@ -323,6 +342,10 @@ async function loadAgencySnapshot() {
   }
 
   return {
+    merchantGroups: (merchantGroupsResult.data || []).map((group: MerchantGroupRecord) => ({
+      ...(group as MerchantGroupRecord),
+      branch_count: branchCountByGroupId.get((group as MerchantGroupRecord).id) || 0,
+    })) as AgencyMerchantGroupRow[],
     orgs,
     memberCountByOrgId,
     productCountByOrgId,
@@ -388,6 +411,7 @@ export async function resolveAgencySession() {
     supabase,
     user,
     role: context.role || "agency_owner",
+    orgId: context.orgId || null,
   } satisfies AgencySession;
 }
 
@@ -404,6 +428,15 @@ export async function listAgencyOrgRows(): Promise<AgencyOrgRow[]> {
 
 export async function listAgencyOrgs() {
   return listAgencyOrgRows();
+}
+
+export async function listAgencyMerchantGroups(agencyOrgId?: string | null): Promise<AgencyMerchantGroupRow[]> {
+  if (!normalize(agencyOrgId)) {
+    return [];
+  }
+
+  const snapshot = await loadAgencySnapshot(agencyOrgId);
+  return snapshot.merchantGroups || [];
 }
 
 export async function getAgencyOrgMetrics(orgId: string): Promise<AgencyOrgMetrics | null> {

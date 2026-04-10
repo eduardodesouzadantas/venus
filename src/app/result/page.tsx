@@ -34,7 +34,12 @@ function ResultDashboardContent() {
   const hardCapOperation = id?.startsWith("HARD_CAP_BLOCKED") ? id.split(":")[1] || "saved_result_generation" : null;
   const tenantBlockReason = id?.startsWith("TENANT_BLOCKED") ? id.split(":")[1] || "tenant_not_found" : null;
   const { data: onboardingData } = useOnboarding();
-  const whatsappHandoffPhone = getWhatsAppHandoffPhone();
+  const [tenantContext, setTenantContext] = React.useState<{
+    whatsappNumber?: string | null;
+    orgSlug?: string | null;
+    branchName?: string | null;
+  } | null>(null);
+  const whatsappHandoffPhone = tenantContext?.whatsappNumber || getWhatsAppHandoffPhone();
   const canOpenWhatsAppHandoff = Boolean(whatsappHandoffPhone);
 
   const [engagedLookIds, setEngagedLookIds] = React.useState<string[]>([]);
@@ -74,10 +79,18 @@ function ResultDashboardContent() {
         const payload = (await response.json()) as {
           analysis?: VisualAnalysisPayload | null;
           finalResult?: unknown;
+          tenant?: {
+            whatsappNumber?: string | null;
+            orgSlug?: string | null;
+            branchName?: string | null;
+          } | null;
         };
 
         if (!cancelled && payload.analysis) {
           setVisualAnalysis(payload.analysis);
+        }
+        if (!cancelled) {
+          setTenantContext(payload.tenant || null);
         }
       } catch (error) {
         console.warn("[RESULT] failed to load persisted visual analysis", error);
@@ -142,7 +155,7 @@ function ResultDashboardContent() {
     };
 
     const message = buildWhatsAppHandoffMessage(handoffInput);
-    const url = buildWhatsAppHandoffUrl(message);
+    const url = buildWhatsAppHandoffUrl(message, whatsappHandoffPhone);
     if (!url) {
       return;
     }

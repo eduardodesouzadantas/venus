@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getAgencyOperationalFrictionSummary, listAgencyOrgRows, resolveAgencySession } from "@/lib/agency";
+import {
+  getAgencyOperationalFrictionSummary,
+  listAgencyMerchantGroups,
+  listAgencyOrgRows,
+  resolveAgencySession,
+} from "@/lib/agency";
 import { normalizeAgencyTimeRange } from "@/lib/agency/time-range";
 
 export const dynamic = "force-dynamic";
@@ -24,14 +29,14 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs = TIMEOUT_MS): Promise<T 
 
 export async function GET(request: NextRequest) {
   try {
-    await resolveAgencySession();
+    const session = await resolveAgencySession();
 
     const url = new URL(request.url);
     const range = normalizeAgencyTimeRange(url.searchParams.get("range") || "all", "all");
     const theme = url.searchParams.get("theme") === "light" ? "light" : "dark";
 
     const payload = await withTimeout(
-      Promise.all([listAgencyOrgRows(), getAgencyOperationalFrictionSummary(range)]),
+      Promise.all([listAgencyOrgRows(), listAgencyMerchantGroups(session.orgId), getAgencyOperationalFrictionSummary(range)]),
       TIMEOUT_MS
     );
 
@@ -39,19 +44,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({});
     }
 
-    const [rows, operationalSummary] = payload;
+    const [rows, merchantGroups, operationalSummary] = payload;
 
     return NextResponse.json(
       {
         ok: true,
         data: {
+          agency_org_id: session.orgId,
           range,
           theme,
           operational_events: operationalSummary.total_events,
+          merchant_groups: merchantGroups,
           rows: rows.map((row) => ({
             id: row.id,
             name: row.name,
             slug: row.slug,
+            group_id: row.group_id || null,
+            branch_name: row.branch_name || null,
             status: row.status,
             kill_switch: row.kill_switch,
             plan_id: row.plan_id,

@@ -32,6 +32,12 @@ export interface OnboardingData {
     phone: string;
     email: string;
   };
+  tenant?: {
+    orgSlug?: string;
+    orgId?: string;
+    branchName?: string;
+    whatsappNumber?: string;
+  };
 }
 
 export const defaultOnboardingData: OnboardingData = {

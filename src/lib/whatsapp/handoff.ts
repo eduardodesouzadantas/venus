@@ -77,9 +77,10 @@ export function buildWhatsAppHandoffMessage(input: WhatsAppHandoffInput) {
 
 export function buildWhatsAppHandoffUrl(message: string, phone = getWhatsAppHandoffPhone()) {
   const encodedMessage = encodeURIComponent(message);
+  const normalizedPhone = normalizePhone(phone);
 
-  if (phone) {
-    return `https://wa.me/${phone}?text=${encodedMessage}`;
+  if (normalizedPhone) {
+    return `https://wa.me/${normalizedPhone}?text=${encodedMessage}`;
   }
 
   return null;

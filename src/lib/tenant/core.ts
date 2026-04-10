@@ -12,10 +12,20 @@ export interface TenantLimits {
   leads: number;
 }
 
+export interface MerchantGroupRecord {
+  id: string;
+  name: string;
+  owner_user_id: string;
+  org_id: string;
+  created_at?: string;
+}
+
 export interface TenantRecord {
   id: string;
   slug: string;
   name: string;
+  group_id?: string | null;
+  branch_name?: string | null;
   logo_url?: string | null;
   primary_color?: string | null;
   whatsapp_number?: string | null;
@@ -49,6 +59,8 @@ export interface TenantContext {
 export interface TenantProvisionInput {
   orgSlug: string;
   orgName?: string;
+  groupId?: string | null;
+  branchName?: string | null;
   ownerUserId?: string | null;
   role?: Role | string;
   planId?: TenantPlan | string;
@@ -77,8 +89,9 @@ export const DEFAULT_TENANT_LIMITS: TenantLimits = {
 };
 
 const ORG_SELECT_COLUMNS =
-  "id, slug, name, logo_url, primary_color, whatsapp_number, status, kill_switch, plan_id, limits, owner_user_id, created_at, updated_at";
+  "id, slug, name, group_id, branch_name, logo_url, primary_color, whatsapp_number, status, kill_switch, plan_id, limits, owner_user_id, created_at, updated_at";
 const ORG_MEMBER_SELECT_COLUMNS = "id, org_id, user_id, role, status, created_at, updated_at";
+const MERCHANT_GROUP_SELECT_COLUMNS = "id, name, owner_user_id, org_id, created_at";
 
 function normalizeString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -184,6 +197,44 @@ export async function fetchTenantById(supabase: SupabaseClient, id: string) {
   return { org: (data as TenantRecord | null) ?? null, error: null };
 }
 
+export async function fetchMerchantGroupById(supabase: SupabaseClient, id: string) {
+  const normalizedId = normalizeString(id);
+  if (!normalizedId) {
+    return { group: null as MerchantGroupRecord | null, error: null as Error | null };
+  }
+
+  const { data, error } = await supabase
+    .from("merchant_groups")
+    .select(MERCHANT_GROUP_SELECT_COLUMNS)
+    .eq("id", normalizedId)
+    .maybeSingle();
+
+  if (error) {
+    return { group: null as MerchantGroupRecord | null, error };
+  }
+
+  return { group: (data as MerchantGroupRecord | null) ?? null, error: null };
+}
+
+export async function listMerchantGroupsByOrgId(supabase: SupabaseClient, orgId: string) {
+  const normalizedOrgId = normalizeString(orgId);
+  if (!normalizedOrgId) {
+    return { groups: [] as MerchantGroupRecord[], error: null as Error | null };
+  }
+
+  const { data, error } = await supabase
+    .from("merchant_groups")
+    .select(MERCHANT_GROUP_SELECT_COLUMNS)
+    .eq("org_id", normalizedOrgId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    return { groups: [] as MerchantGroupRecord[], error };
+  }
+
+  return { groups: (data || []) as MerchantGroupRecord[], error: null };
+}
+
 export async function fetchMerchantMembership(
   supabase: SupabaseClient,
   userId: string,
@@ -225,6 +276,10 @@ export async function resolveCurrentMerchantOrg(supabase: SupabaseClient) {
 
   if (context.orgSlug) {
     const result = await fetchTenantBySlug(supabase, context.orgSlug);
+    org = result.org;
+    orgError = result.error;
+  } else if (context.orgId) {
+    const result = await fetchTenantById(supabase, context.orgId);
     org = result.org;
     orgError = result.error;
   }
@@ -359,6 +414,7 @@ export async function ensureTenantCoreRecords(
   const orgPayload: Record<string, unknown> = {
     slug,
     name: normalizeString(input.orgName) || slug,
+    branch_name: normalizeString(input.branchName) || normalizeString(input.orgName) || slug,
     status: input.status || "active",
     kill_switch: false,
     plan_id: normalizeString(input.planId) || "starter",
@@ -367,6 +423,7 @@ export async function ensureTenantCoreRecords(
       ...(input.limits || {}),
     },
     ...(input.ownerUserId ? { owner_user_id: input.ownerUserId } : {}),
+    ...(input.groupId ? { group_id: input.groupId } : {}),
   };
 
   const { data: org, error: orgError } = await supabase
@@ -427,6 +484,8 @@ export async function ensureTenantCoreRecords(
       payload: {
         org_slug: slug,
         org_name: org.name,
+        group_id: org.group_id || null,
+        branch_name: org.branch_name || null,
         plan_id: org.plan_id,
         role: normalizeString(input.role) || "merchant_owner",
       },

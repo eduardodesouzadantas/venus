@@ -49,22 +49,25 @@ export async function updateB2CResult(formData: FormData, dbResultId: string) {
     user_name: name,
   });
 
-  const { error } = await supabase.from("saved_results")
-      .update({
-        user_email: email,
-        user_name: name,
-        org_id: resolvedTenant.org.id,
-        payload: {
-          ...currentPayload,
-          tenant: {
-            ...currentTenantPayload,
-            orgId: resolvedTenant.org.id,
-            orgSlug: resolvedTenant.org.slug,
-            source: tenantSource,
-          },
+  const { error } = await supabase
+    .from("saved_results")
+    .update({
+      user_email: email,
+      user_name: name,
+      org_id: resolvedTenant.org.id,
+      payload: {
+        ...currentPayload,
+        tenant: {
+          ...currentTenantPayload,
+          orgId: resolvedTenant.org.id,
+          orgSlug: resolvedTenant.org.slug,
+          branchName: resolvedTenant.org.branch_name || null,
+          whatsappNumber: resolvedTenant.org.whatsapp_number || null,
+          source: tenantSource,
         },
-      })
-      .eq("id", dbResultId);
+      },
+    })
+    .eq("id", dbResultId);
 
   if (error) {
     return { error: "Erro ao salvar Perfil: " + error.message }

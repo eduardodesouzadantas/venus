@@ -35,6 +35,7 @@ export async function GET(_: Request, context: RouteContext) {
       id: data.id,
       analysis: payload.visualAnalysis ?? null,
       finalResult: payload.finalResult ?? null,
+      tenant: payload.tenant ?? null,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     });

@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import { sendMerchantWelcomeEmail, type MerchantWelcomeEmailResult } from "@/lib/email/welcome";
+import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ensureTenantCoreRecords, normalizeTenantSlug } from "@/lib/tenant/core";
+import {
+  ensureTenantCoreRecords,
+  fetchMerchantGroupById,
+  isAgencyRole,
+  normalizeTenantSlug,
+  resolveTenantContext,
+} from "@/lib/tenant/core";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +20,12 @@ type RequestBody = {
   role?: string;
   name?: string;
   plan_id?: string;
+  agency_org_id?: string;
+  provision_mode?: string;
+  branch_mode?: string;
+  branch_name?: string;
+  merchant_group_id?: string;
+  merchant_group_name?: string;
 };
 
 function normalize(value: unknown) {
@@ -33,6 +46,29 @@ function normalizePlanId(value: unknown) {
     return normalized;
   }
   return "";
+}
+
+async function resolveCallerAgencyOrgId(fallbackOrgId?: string | null) {
+  const normalizedFallback = normalize(fallbackOrgId);
+  let callerOrgId = normalizedFallback || null;
+
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (user) {
+      const context = resolveTenantContext(user);
+      if (isAgencyRole(context.role) && context.orgId) {
+        callerOrgId = context.orgId;
+      }
+    }
+  } catch {
+    // If no session is present we fall back to the explicit body value.
+  }
+
+  return callerOrgId;
 }
 
 function planLabel(planId: string) {
@@ -62,6 +98,12 @@ export async function POST(request: Request) {
   const role = normalize(body.role) || "merchant_owner";
   const name = normalize(body.name);
   const planId = normalizePlanId(body.plan_id) || "freemium";
+  const branchName = normalize(body.branch_name);
+  const provisionMode = normalize(body.provision_mode) || "independent";
+  const branchMode = normalize(body.branch_mode) || "existing";
+  const merchantGroupId = normalize(body.merchant_group_id);
+  const merchantGroupName = normalize(body.merchant_group_name);
+  const agencyOrgId = await resolveCallerAgencyOrgId(body.agency_org_id);
 
   if (!email || !password || !orgSlug) {
     return NextResponse.json({ error: "Missing merchant bootstrap data" }, { status: 400 });
@@ -69,6 +111,10 @@ export async function POST(request: Request) {
 
   if (!isMerchantRole(role)) {
     return NextResponse.json({ error: "Unsupported role" }, { status: 403 });
+  }
+
+  if (provisionMode === "branch" && !agencyOrgId) {
+    return NextResponse.json({ error: "Missing agency org context for group provisioning" }, { status: 400 });
   }
 
   let admin;
@@ -93,6 +139,7 @@ export async function POST(request: Request) {
     role,
     plan_id: planId,
     tenant_source: "merchant_provision",
+    branch_name: branchName || name || orgSlug,
   };
 
   const userMetadata = {
@@ -102,6 +149,7 @@ export async function POST(request: Request) {
     org_id: orgSlug,
     role,
     plan_id: planId,
+    branch_name: branchName || name || orgSlug,
   };
 
   const result = existing
@@ -123,10 +171,51 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: result.error?.message || "Could not provision merchant" }, { status: 500 });
   }
 
+  let merchantGroupRecord: { id: string; name: string; owner_user_id: string; org_id: string; created_at?: string | null } | null = null;
+
   try {
+
+    if (provisionMode === "branch") {
+      if (branchMode === "new") {
+        const groupName = merchantGroupName || name || orgSlug;
+        const { data: groupData, error: groupError } = await admin
+          .from("merchant_groups")
+          .insert({
+            name: groupName,
+            owner_user_id: result.data.user.id,
+            org_id: agencyOrgId,
+          })
+          .select("id, name, owner_user_id, org_id, created_at")
+          .single();
+
+        if (groupError || !groupData) {
+          throw new Error(`Failed to create merchant group: ${groupError?.message || "unknown error"}`);
+        }
+
+        merchantGroupRecord = groupData;
+      } else {
+        if (!merchantGroupId) {
+          throw new Error("Missing merchant group id");
+        }
+
+        const { group, error: groupError } = await fetchMerchantGroupById(admin, merchantGroupId);
+        if (groupError || !group) {
+          throw new Error(groupError?.message || "Merchant group not found");
+        }
+
+        if (group.org_id !== agencyOrgId) {
+          throw new Error("Merchant group does not belong to the current agency");
+        }
+
+        merchantGroupRecord = group;
+      }
+    }
+
     const tenantCore = await ensureTenantCoreRecords(admin, {
       orgSlug,
       orgName: name || result.data.user.email || orgSlug,
+      groupId: provisionMode === "branch" ? merchantGroupRecord?.id || merchantGroupId || null : null,
+      branchName: branchName || name || orgSlug,
       ownerUserId: result.data.user.id,
       role,
       planId,
@@ -166,6 +255,9 @@ export async function POST(request: Request) {
         org_slug: orgSlug,
         org_id: orgSlug,
         tenant_org_id: tenantCore.org.id,
+        merchant_group_id: provisionMode === "branch" ? tenantCore.org.group_id || merchantGroupRecord?.id || merchantGroupId || null : null,
+        merchant_group_name: provisionMode === "branch" ? merchantGroupRecord?.name || merchantGroupName || null : null,
+        branch_name: tenantCore.org.branch_name || branchName || name || orgSlug,
         role,
         plan_id: planId,
         welcome_email: welcomeEmail,
@@ -186,6 +278,9 @@ export async function POST(request: Request) {
         email: result.data.user.email,
         org_slug: orgSlug,
         org_id: orgSlug,
+        merchant_group_id: provisionMode === "branch" ? merchantGroupRecord?.id || merchantGroupId || null : null,
+        merchant_group_name: provisionMode === "branch" ? merchantGroupRecord?.name || merchantGroupName || null : null,
+        branch_name: branchName || name || orgSlug,
         role,
         plan_id: planId,
       },

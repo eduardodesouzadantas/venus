@@ -17,6 +17,8 @@ type AgencyOrgSnapshot = {
   id: string;
   name: string;
   slug: string;
+  group_id: string | null;
+  branch_name: string | null;
   status: string;
   kill_switch: boolean;
   plan_id: string | null;
@@ -36,12 +38,23 @@ type AgencyOrgSnapshot = {
   };
 };
 
+type AgencyMerchantGroupSnapshot = {
+  id: string;
+  name: string;
+  owner_user_id: string;
+  org_id: string;
+  created_at: string | null;
+  branch_count: number;
+};
+
 type AgencySnapshotResponse = {
   ok: true;
   data: {
+    agency_org_id: string | null;
     range: string;
     theme: "dark" | "light";
     operational_events: number;
+    merchant_groups: AgencyMerchantGroupSnapshot[];
     rows: AgencyOrgSnapshot[];
   };
 };
@@ -263,7 +276,11 @@ export default function AgencyDashboardPage() {
             />
 
             <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-              <MerchantProvisionCard mode={theme} />
+              <MerchantProvisionCard
+                mode={theme}
+                agencyOrgId={snapshot?.agency_org_id ?? null}
+                merchantGroups={snapshot?.merchant_groups ?? []}
+              />
               <div className="space-y-4 rounded-[32px] border border-white/10 bg-white/[0.03] p-6">
                 <div className="flex items-center gap-3">
                   <ShieldCheck className="w-5 h-5 text-[#D4AF37]" />
@@ -371,7 +388,11 @@ export default function AgencyDashboardPage() {
         )}
 
         <section id="cadastro-lojista">
-          <MerchantProvisionCard mode={theme} />
+          <MerchantProvisionCard
+            mode={theme}
+            agencyOrgId={snapshot?.agency_org_id ?? null}
+            merchantGroups={snapshot?.merchant_groups ?? []}
+          />
         </section>
       </main>
     </div>

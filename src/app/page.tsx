@@ -1,5 +1,9 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight, Crown, MessagesSquare, ScanSearch, Sparkles } from "lucide-react";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import { fetchTenantBySlug, isAgencyRole, isTenantActive, resolveTenantContext, normalizeTenantSlug } from "@/lib/tenant/core";
 
 const pillars = [
   {
@@ -39,7 +43,47 @@ const steps = [
   },
 ];
 
-export default function SplashPage() {
+export default async function SplashPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const resolved = await searchParams;
+  const requestedOrg = normalizeTenantSlug(
+    typeof resolved.org === "string" ? resolved.org : Array.isArray(resolved.org) ? resolved.org[0] || "" : ""
+  );
+
+  if (requestedOrg) {
+    const supabase = await createClient();
+    const admin = createAdminClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (user) {
+      const context = resolveTenantContext(user);
+      if (context.role && isAgencyRole(context.role)) {
+        redirect("/agency");
+      }
+
+      const tenant = await fetchTenantBySlug(admin, requestedOrg);
+      if (
+        tenant.org &&
+        isTenantActive(tenant.org) &&
+        (context.orgSlug === tenant.org.slug || context.orgId === tenant.org.id)
+      ) {
+        redirect(`/org/${tenant.org.slug}/dashboard`);
+      }
+
+      redirect("/merchant");
+    }
+
+    const tenant = await fetchTenantBySlug(admin, requestedOrg);
+    if (tenant.org && isTenantActive(tenant.org)) {
+      redirect(`/onboarding/intent?org=${tenant.org.slug}`);
+    }
+  }
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#04070A] text-white">
       <div className="pointer-events-none absolute inset-0">

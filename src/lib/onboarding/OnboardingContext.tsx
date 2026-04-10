@@ -10,17 +10,59 @@ interface OnboardingContextProps {
 
 const OnboardingContext = createContext<OnboardingContextProps | undefined>(undefined);
 
+function normalize(value: string | null | undefined) {
+  return typeof value === "string" ? value.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9_-]/g, "") : "";
+}
+
 export function OnboardingProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<OnboardingData>(defaultOnboardingData);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
     const saved = sessionStorage.getItem("venus_onboarding");
+    const queryOrgSlug = typeof window !== "undefined" ? normalize(new URLSearchParams(window.location.search).get("org")) : "";
+
     if (saved) {
       try {
-        setData(JSON.parse(saved));
+        const parsed = JSON.parse(saved) as OnboardingData;
+        setData({
+          ...parsed,
+          tenant: {
+            ...parsed.tenant,
+            orgSlug: queryOrgSlug || parsed.tenant?.orgSlug,
+          },
+        });
       } catch (e) {
         console.error("Failed to parse onboarding data", e);
+        if (queryOrgSlug) {
+          setData((current) => ({
+            ...current,
+            tenant: {
+              ...current.tenant,
+              orgSlug: queryOrgSlug,
+            },
+          }));
+        }
+      }
+    } else if (queryOrgSlug) {
+      setData((current) => ({
+        ...current,
+        tenant: {
+          ...current.tenant,
+          orgSlug: queryOrgSlug,
+        },
+      }));
+    }
+
+    if (!saved && !queryOrgSlug) {
+      setData(defaultOnboardingData);
+    } else if (saved && !queryOrgSlug) {
+      // Keep the persisted tenant context when the URL no longer carries ?org=...
+      try {
+        const parsed = JSON.parse(saved) as OnboardingData;
+        setData(parsed);
+      } catch {
+        // ignore, handled above
       }
     }
     setIsLoaded(true);

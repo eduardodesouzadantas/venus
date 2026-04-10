@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { Check, Loader2, Plus, RefreshCw, ShieldCheck } from "lucide-react";
+import { Check, Layers, Loader2, Plus, RefreshCw, ShieldCheck, Store } from "lucide-react";
 
 import { GlassContainer } from "@/components/ui/GlassContainer";
 import { Heading } from "@/components/ui/Heading";
@@ -19,6 +19,9 @@ type MerchantProvisionResponse =
       tenant_org_id: string;
       role: string;
       plan_id: string;
+      merchant_group_id?: string | null;
+      merchant_group_name?: string | null;
+      branch_name?: string | null;
       welcome_email?: {
         sent: boolean;
         provider: "resend" | "none";
@@ -29,10 +32,20 @@ type MerchantProvisionResponse =
       ok?: false;
       error?: string;
       details?: string;
-    };
+};
 
 type AgencyVisualMode = "dark" | "light";
 type MerchantPlanId = "freemium" | "starter" | "pro";
+type MerchantGroupOption = {
+  id: string;
+  name: string;
+  owner_user_id: string;
+  org_id: string;
+  created_at?: string | null;
+  branch_count?: number;
+};
+type MerchantProvisionMode = "independent" | "branch";
+type MerchantBranchMode = "existing" | "new";
 
 const PLAN_OPTIONS: Array<{ value: MerchantPlanId; label: string; description: string }> = [
   { value: "freemium", label: "Freemium", description: "15 dias para validar a operação." },
@@ -53,7 +66,15 @@ function generateTempPassword() {
   return `venus-${segment}${Date.now().toString(36).slice(-4)}`;
 }
 
-export function MerchantProvisionCard({ mode = "dark" }: { mode?: AgencyVisualMode }) {
+export function MerchantProvisionCard({
+  mode = "dark",
+  merchantGroups = [],
+  agencyOrgId = null,
+}: {
+  mode?: AgencyVisualMode;
+  merchantGroups?: MerchantGroupOption[];
+  agencyOrgId?: string | null;
+}) {
   const isLight = mode === "light";
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
@@ -61,11 +82,31 @@ export function MerchantProvisionCard({ mode = "dark" }: { mode?: AgencyVisualMo
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState(() => generateTempPassword());
   const [planId, setPlanId] = useState<MerchantPlanId>("freemium");
+  const [provisionMode, setProvisionMode] = useState<MerchantProvisionMode>("independent");
+  const [branchMode, setBranchMode] = useState<MerchantBranchMode>("existing");
+  const [branchName, setBranchName] = useState("");
+  const [groupName, setGroupName] = useState("");
+  const [selectedGroupId, setSelectedGroupId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<MerchantProvisionResponse | null>(null);
 
   const derivedSlug = useMemo(() => slugify(name), [name]);
+  const normalizedSlug = (slug || derivedSlug).trim();
+  const normalizedBranchName = branchName.trim();
+  const normalizedGroupName = groupName.trim();
+  const selectedGroup = merchantGroups.find((group) => group.id === selectedGroupId) || null;
+  const requiresGroup = provisionMode === "branch";
+  const requiresExistingGroup = requiresGroup && branchMode === "existing";
+  const requiresNewGroup = requiresGroup && branchMode === "new";
+  const canSubmit =
+    Boolean(name.trim()) &&
+    Boolean(email.trim()) &&
+    Boolean(normalizedSlug) &&
+    (!requiresGroup || Boolean(normalizedBranchName)) &&
+    (!requiresExistingGroup || Boolean(selectedGroupId)) &&
+    (!requiresNewGroup || Boolean(normalizedGroupName)) &&
+    (!requiresGroup || Boolean(agencyOrgId));
 
   const handleNameChange = (value: string) => {
     setName(value);
@@ -91,10 +132,16 @@ export function MerchantProvisionCard({ mode = "dark" }: { mode?: AgencyVisualMo
             name: name.trim(),
             email: email.trim(),
             password: password.trim(),
-            org_slug: (slug || derivedSlug).trim(),
-            org_id: (slug || derivedSlug).trim(),
+            org_slug: normalizedSlug,
+            org_id: normalizedSlug,
             role: "merchant_owner",
             plan_id: planId,
+            agency_org_id: agencyOrgId || undefined,
+            provision_mode: provisionMode,
+            branch_mode: requiresGroup ? branchMode : undefined,
+            branch_name: normalizedBranchName || undefined,
+            merchant_group_id: selectedGroupId || undefined,
+            merchant_group_name: normalizedGroupName || undefined,
           }),
         });
 
@@ -145,6 +192,149 @@ export function MerchantProvisionCard({ mode = "dark" }: { mode?: AgencyVisualMo
         </div>
       </div>
 
+      <div className={`grid gap-3 rounded-[28px] border p-3 sm:grid-cols-2 ${isLight ? "border-black/10 bg-white/50" : "border-white/10 bg-white/[0.03]"}`}>
+        <button
+          type="button"
+          onClick={() => setProvisionMode("independent")}
+          className={`rounded-[22px] border px-4 py-4 text-left transition-colors ${
+            provisionMode === "independent"
+              ? isLight
+                ? "border-[#D4AF37]/40 bg-[#D4AF37]/10 text-[#141414]"
+                : "border-[#D4AF37]/30 bg-[#D4AF37]/10 text-white"
+              : isLight
+                ? "border-black/10 bg-white text-[#141414]"
+                : "border-white/10 bg-black/40 text-white"
+          }`}
+        >
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Store className="h-4 w-4 text-[#D4AF37]" />
+            Loja independente
+          </div>
+          <div className={`mt-1 text-[11px] ${isLight ? "text-black/45" : "text-white/45"}`}>
+            Cria uma loja única sem vínculo com grupo.
+          </div>
+        </button>
+        <button
+          type="button"
+          onClick={() => setProvisionMode("branch")}
+          className={`rounded-[22px] border px-4 py-4 text-left transition-colors ${
+            provisionMode === "branch"
+              ? isLight
+                ? "border-[#D4AF37]/40 bg-[#D4AF37]/10 text-[#141414]"
+                : "border-[#D4AF37]/30 bg-[#D4AF37]/10 text-white"
+              : isLight
+                ? "border-black/10 bg-white text-[#141414]"
+                : "border-white/10 bg-black/40 text-white"
+          }`}
+        >
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Layers className="h-4 w-4 text-[#D4AF37]" />
+            Filial de grupo
+          </div>
+          <div className={`mt-1 text-[11px] ${isLight ? "text-black/45" : "text-white/45"}`}>
+            Cria ou vincula uma filial a um grupo já existente.
+          </div>
+        </button>
+      </div>
+
+      {provisionMode === "branch" && (
+        <div className={`space-y-4 rounded-[28px] border p-4 ${isLight ? "border-black/10 bg-white/50" : "border-white/10 bg-white/[0.03]"}`}>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setBranchMode("existing")}
+              className={`rounded-[22px] border px-4 py-4 text-left transition-colors ${
+                branchMode === "existing"
+                  ? isLight
+                    ? "border-[#D4AF37]/40 bg-[#D4AF37]/10 text-[#141414]"
+                    : "border-[#D4AF37]/30 bg-[#D4AF37]/10 text-white"
+                  : isLight
+                    ? "border-black/10 bg-white text-[#141414]"
+                    : "border-white/10 bg-black/40 text-white"
+              }`}
+            >
+              <div className="text-sm font-medium">Grupo existente</div>
+              <div className={`mt-1 text-[11px] ${isLight ? "text-black/45" : "text-white/45"}`}>
+                Usa o grupo já cadastrado pela agência.
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setBranchMode("new")}
+              className={`rounded-[22px] border px-4 py-4 text-left transition-colors ${
+                branchMode === "new"
+                  ? isLight
+                    ? "border-[#D4AF37]/40 bg-[#D4AF37]/10 text-[#141414]"
+                    : "border-[#D4AF37]/30 bg-[#D4AF37]/10 text-white"
+                  : isLight
+                    ? "border-black/10 bg-white text-[#141414]"
+                    : "border-white/10 bg-black/40 text-white"
+              }`}
+            >
+              <div className="text-sm font-medium">Criar grupo novo</div>
+              <div className={`mt-1 text-[11px] ${isLight ? "text-black/45" : "text-white/45"}`}>
+                A filial já nasce dentro de um novo grupo.
+              </div>
+            </button>
+          </div>
+
+          {branchMode === "existing" ? (
+            <label className="space-y-2 block">
+              <span className={`text-[10px] font-medium tracking-[0.08em] ${isLight ? "text-black/45" : "text-white/35"}`}>Selecionar grupo</span>
+              <select
+                value={selectedGroupId}
+                onChange={(event) => setSelectedGroupId(event.target.value)}
+                className={`h-12 w-full rounded-3xl px-4 text-sm outline-none transition-colors focus:border-[#D4AF37]/40 ${
+                  isLight
+                    ? "border border-black/10 bg-white text-[#141414]"
+                    : "border border-white/10 bg-black/40 text-white"
+                }`}
+              >
+                <option value="">Escolha um grupo</option>
+                {merchantGroups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name} {group.branch_count !== undefined ? `(${group.branch_count} filiais)` : ""}
+                  </option>
+                ))}
+              </select>
+              {!merchantGroups.length ? (
+                <Text className={`text-[10px] ${isLight ? "text-black/40" : "text-white/35"}`}>
+                  Nenhum grupo cadastrado ainda.
+                </Text>
+              ) : null}
+            </label>
+          ) : (
+            <label className="space-y-2 block">
+              <span className={`text-[10px] font-medium tracking-[0.08em] ${isLight ? "text-black/45" : "text-white/35"}`}>Nome do grupo</span>
+              <input
+                value={groupName}
+                onChange={(event) => setGroupName(event.target.value)}
+                placeholder="Grupo São Paulo"
+                className={`h-12 w-full rounded-3xl px-4 text-sm outline-none transition-colors placeholder:opacity-50 focus:border-[#D4AF37]/40 ${
+                  isLight
+                    ? "border border-black/10 bg-white text-[#141414] placeholder:text-black/25"
+                    : "border border-white/10 bg-black/40 text-white placeholder:text-white/20"
+                }`}
+              />
+            </label>
+          )}
+
+          <label className="space-y-2 block">
+            <span className={`text-[10px] font-medium tracking-[0.08em] ${isLight ? "text-black/45" : "text-white/35"}`}>Nome da filial</span>
+            <input
+              value={branchName}
+              onChange={(event) => setBranchName(event.target.value)}
+              placeholder="Filial São Paulo"
+              className={`h-12 w-full rounded-3xl px-4 text-sm outline-none transition-colors placeholder:opacity-50 focus:border-[#D4AF37]/40 ${
+                isLight
+                  ? "border border-black/10 bg-white text-[#141414] placeholder:text-black/25"
+                  : "border border-white/10 bg-black/40 text-white placeholder:text-white/20"
+              }`}
+            />
+          </label>
+        </div>
+      )}
+
       {result?.ok ? (
         <div className={`space-y-4 rounded-[28px] border p-4 ${isLight ? "border-green-500/20 bg-green-500/10" : "border-green-500/20 bg-green-500/10"}`}>
           <div className="flex items-center gap-2 text-green-300">
@@ -153,9 +343,11 @@ export function MerchantProvisionCard({ mode = "dark" }: { mode?: AgencyVisualMo
           </div>
           <div className={`grid gap-3 text-sm sm:grid-cols-2 ${isLight ? "text-[#141414]" : "text-white/80"}`}>
             <InfoRow label="Loja" value={result.org_slug} />
+            <InfoRow label="Filial" value={result.branch_name || branchName || name || "Padrão"} />
             <InfoRow label="Email" value={result.email} />
             <InfoRow label="Senha inicial" value={password} />
             <InfoRow label="Plano" value={result.plan_id} />
+            <InfoRow label="Grupo" value={result.merchant_group_name || selectedGroup?.name || normalizedGroupName || "Independente"} />
             <InfoRow label="Próximo passo" value="Entrar em /b2b/login" />
             <InfoRow
               label="Email de boas-vindas"
@@ -288,7 +480,7 @@ export function MerchantProvisionCard({ mode = "dark" }: { mode?: AgencyVisualMo
             <VenusButton
               type="submit"
               variant="solid"
-              disabled={isSubmitting || !name.trim() || !email.trim() || !(slug || derivedSlug).trim()}
+              disabled={isSubmitting || !canSubmit}
               className={isLight ? "bg-[#D4AF37] text-black" : "bg-[#D4AF37] text-black"}
             >
               {isSubmitting ? (
@@ -306,7 +498,8 @@ export function MerchantProvisionCard({ mode = "dark" }: { mode?: AgencyVisualMo
           </div>
 
           <Text className={`text-[10px] font-medium tracking-[0.08em] ${isLight ? "text-black/40" : "text-white/35"}`}>
-            Isso cria o acesso e sincroniza a loja canônica para o painel B2B.
+            Isso cria o acesso e sincroniza a loja canônica para o painel B2B. Se a loja fizer parte de um grupo,
+            cada filial seguirá isolada por catálogo, WhatsApp e métricas.
           </Text>
         </form>
       )}

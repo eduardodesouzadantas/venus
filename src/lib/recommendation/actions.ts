@@ -8,7 +8,7 @@ import { generateOpenAIRecommendation } from "@/lib/ai";
 import { buildCatalogAwareFallbackResult } from "@/lib/ai/result-normalizer";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { extractLeadSignalsFromSavedResultPayload, persistSavedResultAndLead } from "@/lib/leads";
-import { resolveAppTenantOrg } from "@/lib/tenant/core";
+import { fetchTenantBySlug, isTenantActive, normalizeTenantSlug, resolveAppTenantOrg } from "@/lib/tenant/core";
 import { generateVisualProfileAnalysis } from "@/lib/analysis/visual-profile";
 import {
   createProcessAndPersistLeadIdempotencyKey,
@@ -68,12 +68,23 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
   try {
     const supabase = createAdminClient();
     const startedAtMs = Date.now();
-    const resolvedTenant = await resolveAppTenantOrg(supabase);
+    const explicitOrgSlug = normalizeTenantSlug(userData.tenant?.orgSlug);
+    const explicitTenant = explicitOrgSlug ? await fetchTenantBySlug(supabase, explicitOrgSlug) : null;
+    const resolvedTenantResult = explicitOrgSlug
+      ? explicitTenant?.org && isTenantActive(explicitTenant.org)
+        ? explicitTenant
+        : null
+      : await resolveAppTenantOrg(supabase);
 
-    if (!resolvedTenant.org) {
+    if (!resolvedTenantResult?.org) {
       console.warn("[SAVED_RESULTS] unable to resolve canonical tenant for persisted result");
       return "MOCK_DB_FAIL";
     }
+
+    const resolvedTenant = resolvedTenantResult as Exclude<typeof resolvedTenantResult, null> & {
+      org: NonNullable<Exclude<typeof resolvedTenantResult, null>["org"]>;
+      source: string;
+    };
 
     const safeUserData = stripOnboardingBinaryArtifacts(userData);
     const idempotencyKey = createProcessAndPersistLeadIdempotencyKey({
@@ -405,6 +416,8 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
           tenant: {
             orgId: resolvedTenant.org.id,
             orgSlug: resolvedTenant.org.slug,
+            branchName: resolvedTenant.org.branch_name || null,
+            whatsappNumber: resolvedTenant.org.whatsapp_number || null,
             source: resolvedTenant.source,
             idempotencyKey,
           },
