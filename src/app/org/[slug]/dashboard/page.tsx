@@ -239,10 +239,10 @@ export default async function MerchantDashboard({ params }: { params: Promise<{ 
   const navItems = [
     { href: `${orgBase}/dashboard`, icon: <LayoutGrid size={16} />, label: "Executivo", active: true },
     { href: `${orgBase}/catalog`, icon: <ImageIcon size={16} />, label: "Catálogo AI" },
-    { href: `${orgBase}/whatsapp/campaigns`, icon: <Activity size={16} />, label: "Performance" },
-    { href: `${orgBase}/whatsapp/inbox`, icon: <Users size={16} />, label: "Audiência" },
+    { href: `${orgBase}/performance`, icon: <Activity size={16} />, label: "Performance" },
+    { href: `${orgBase}/audience`, icon: <Users size={16} />, label: "Audiência" },
     { href: `${orgBase}/rewards`, icon: <Share2 size={16} />, label: "Recompensas" },
-    { href: `${orgBase}/catalog/new`, icon: <Sparkles size={16} />, label: "Sugestões IA" },
+    { href: `${orgBase}/suggestions`, icon: <Sparkles size={16} />, label: "Sugestões IA" },
     { href: `${orgBase}/settings`, icon: <Settings size={16} />, label: "Configurações" },
   ];
 
