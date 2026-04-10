@@ -1,16 +1,55 @@
-import { Loader2 } from "lucide-react";
+import type { CSSProperties } from "react";
+import { DM_Sans, Space_Mono } from "next/font/google";
+
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "700"],
+});
+
+const spaceMono = Space_Mono({
+  subsets: ["latin"],
+  weight: ["400", "700"],
+});
+
+const themeVars = {
+  ["--gold"]: "#C9A84C",
+  ["--green"]: "#00ff88",
+  ["--red"]: "#ff4444",
+  ["--amber"]: "#ffaa00",
+  ["--bg"]: "#080c0a",
+  ["--bg2"]: "#0f1410",
+  ["--bg3"]: "#141a15",
+  ["--border"]: "#1e2820",
+  ["--text"]: "#e8f0e9",
+  ["--muted"]: "#6b7d6c",
+} as CSSProperties & Record<string, string>;
 
 export default function Loading() {
   return (
-    <div className="min-h-screen bg-black text-white flex items-center justify-center px-6">
-      <div className="flex flex-col items-center gap-4 rounded-[32px] border border-white/10 bg-white/[0.04] px-8 py-10 shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
-        <div className="flex h-14 w-14 items-center justify-center rounded-full border border-[#D4AF37]/25 bg-[#D4AF37]/10">
-          <Loader2 className="h-7 w-7 animate-spin text-[#D4AF37]" />
-        </div>
-        <div className="text-center space-y-1">
-          <div className="text-sm font-medium tracking-[0.08em] text-[#D4AF37] uppercase">Agency</div>
-          <div className="text-lg tracking-tight">Carregando painel da agência</div>
-          <div className="text-sm text-white/45">A base está sendo resolvida com segurança.</div>
+    <div className={`${dmSans.className} min-h-screen bg-[var(--bg)] text-[var(--text)]`} style={themeVars}>
+      <div className="mx-auto flex min-h-screen max-w-[1600px] items-center justify-center px-5 lg:px-8">
+        <div className="w-full max-w-md rounded-[16px] border border-[var(--border)] bg-[var(--bg2)] p-6">
+          <div className="space-y-1">
+            <div className={`${spaceMono.className} text-[11px] uppercase tracking-[2px] text-[var(--gold)]`}>
+              INOVACORTEX
+            </div>
+            <div className={`${spaceMono.className} text-[10px] uppercase tracking-[1px] text-[var(--muted)]`}>
+              CONTROL PLANE
+            </div>
+          </div>
+
+          <div className="mt-6 space-y-3">
+            <div className="h-3 w-32 animate-pulse rounded-full bg-[var(--border)]" />
+            <div className="h-3 w-4/5 animate-pulse rounded-full bg-[var(--border)]" />
+            <div className="h-3 w-3/5 animate-pulse rounded-full bg-[var(--border)]" />
+          </div>
+
+          <div className="mt-6 flex items-center gap-3">
+            <span className="inline-flex h-2 w-2 rounded-full bg-[var(--green)] animate-pulse" />
+            <span className={`${spaceMono.className} text-[10px] uppercase tracking-[1px] text-[var(--green)]`}>
+              CARREGANDO PAINEL
+            </span>
+          </div>
         </div>
       </div>
     </div>

@@ -1,431 +1,693 @@
-"use client";
-
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { CircleDashed, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
+import type { CSSProperties } from "react";
+import { DM_Sans, Space_Mono } from "next/font/google";
 
-import { AgencyTelemetryPanel } from "@/components/agency/AgencyTelemetryPanel";
-import { MerchantProvisionCard } from "@/components/agency/MerchantProvisionCard";
-import { Heading } from "@/components/ui/Heading";
-import { Text } from "@/components/ui/Text";
-import { VenusButton } from "@/components/ui/VenusButton";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { buildOrgSoftCapSummary, getPlanSoftCaps, type OrgSoftCapSummary } from "@/lib/billing/limits";
 
-type LeadStatus = "new" | "engaged" | "qualified" | "offer_sent" | "closing" | "won" | "lost";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-type AgencyOrgSnapshot = {
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "700"],
+});
+
+const spaceMono = Space_Mono({
+  subsets: ["latin"],
+  weight: ["400", "700"],
+});
+
+const themeVars: CSSProperties & Record<string, string> = {
+  ["--gold"]: "#C9A84C",
+  ["--green"]: "#00ff88",
+  ["--red"]: "#ff4444",
+  ["--amber"]: "#ffaa00",
+  ["--bg"]: "#080c0a",
+  ["--bg2"]: "#0f1410",
+  ["--bg3"]: "#141a15",
+  ["--border"]: "#1e2820",
+  ["--text"]: "#e8f0e9",
+  ["--muted"]: "#6b7d6c",
+};
+
+type OrgRow = {
   id: string;
-  name: string;
   slug: string;
-  group_id: string | null;
-  branch_name: string | null;
-  status: string;
-  kill_switch: boolean;
+  name: string;
+  status: string | null;
   plan_id: string | null;
   created_at: string | null;
-  last_activity_at: string | null;
-  total_members: number;
-  total_products: number;
-  total_leads: number;
-  total_saved_results: number;
-  total_whatsapp_conversations: number | null;
-  total_whatsapp_messages: number | null;
-  lead_summary: {
-    total: number;
-    by_status: Record<LeadStatus, number>;
-    followup_overdue: number;
-    followup_without: number;
-  };
+  updated_at: string | null;
+  limits: Record<string, unknown> | null;
 };
 
-type AgencyMerchantGroupSnapshot = {
-  id: string;
-  name: string;
-  owner_user_id: string;
-  org_id: string;
-  created_at: string | null;
-  branch_count: number;
+type OrgDashboardRow = OrgRow & {
+  leads: number;
+  tryons: number;
+  products: number;
+  usagePct: number;
+  inactiveDays: number;
+  freemiumDaysRemaining: number | null;
+  tone: "green" | "amber" | "red";
+  statusLabel: string;
+  actionLabel: string;
+  softCapSummary: OrgSoftCapSummary;
 };
 
-type AgencySnapshotResponse = {
-  ok: true;
-  data: {
-    agency_org_id: string | null;
-    range: string;
-    theme: "dark" | "light";
-    operational_events: number;
-    merchant_groups: AgencyMerchantGroupSnapshot[];
-    rows: AgencyOrgSnapshot[];
-  };
+type DashboardData = {
+  orgs: OrgDashboardRow[];
+  activeCount: number;
+  mrrTotal: number;
+  tryonsToday: number;
+  tryonsMonth: number;
+  alertCount: number;
+  planBreakdown: Array<{ plan: string; count: number }>;
+  retentionPct: number;
+  mrrNovo: number;
+  churnRisk: number;
+  iaCost: number;
 };
 
-function buildHref(pathname: string, params: Record<string, string | undefined>) {
-  const searchParams = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
-    if (!value) continue;
-    searchParams.set(key, value);
-  }
-  const query = searchParams.toString();
-  return query ? `${pathname}?${query}` : pathname;
+const PLAN_VALUES: Record<string, number> = {
+  starter: 297,
+  pro: 697,
+  enterprise: 1997,
+};
+
+const PLAN_ORDER = ["freemium", "starter", "pro", "enterprise", "growth", "scale", "free"];
+
+function normalize(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function countFrom(result: { count: number | null; error: unknown }) {
+  return result.error ? 0 : result.count ?? 0;
+}
+
+function daysBetween(from: string | null, to = Date.now()) {
+  if (!from) return 0;
+  const start = new Date(from).getTime();
+  if (!Number.isFinite(start)) return 0;
+  return Math.max(0, Math.floor((to - start) / 86_400_000));
+}
+
+function formatMoney(value: number) {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function formatInteger(value: number) {
+  return new Intl.NumberFormat("pt-BR").format(value);
 }
 
 function formatDate(value: string | null) {
-  if (!value) return "Sem dados";
+  if (!value) return "sem dados";
   return new Intl.DateTimeFormat("pt-BR", {
     dateStyle: "short",
-    timeStyle: "short",
   }).format(new Date(value));
 }
 
-function formatNumber(value: number) {
-  return value.toLocaleString("pt-BR");
+function formatRelativeDays(days: number) {
+  if (days <= 0) return "hoje";
+  return `${days}d`;
 }
 
-function summarizeRows(rows: AgencyOrgSnapshot[]) {
-  const leadStatusTotals = rows.reduce<Record<LeadStatus, number>>(
-    (acc, row) => {
-      (Object.keys(row.lead_summary.by_status) as LeadStatus[]).forEach((status) => {
-        acc[status] += row.lead_summary.by_status[status] || 0;
+function getPlanValue(planId: string | null) {
+  return planId ? PLAN_VALUES[planId] || 0 : 0;
+}
+
+function getPlanLimit(limitValue: unknown, fallback: number) {
+  return typeof limitValue === "number" && Number.isFinite(limitValue) && limitValue > 0 ? limitValue : fallback;
+}
+
+function computeUsagePct(limits: Record<string, unknown> | null, counts: { leads: number; tryons: number; products: number }, planId: string | null) {
+  const softCaps = getPlanSoftCaps(planId);
+  const productsLimit = getPlanLimit(limits?.products, softCaps.products);
+  const leadsLimit = getPlanLimit(limits?.leads, softCaps.leads);
+  const tryonsLimit = getPlanLimit(limits?.saved_results ?? limits?.tryons ?? limits?.ai_tokens_monthly, softCaps.saved_results);
+
+  const ratios = [
+    productsLimit > 0 ? (counts.products / productsLimit) * 100 : 0,
+    leadsLimit > 0 ? (counts.leads / leadsLimit) * 100 : 0,
+    tryonsLimit > 0 ? (counts.tryons / tryonsLimit) * 100 : 0,
+  ];
+
+  return Math.max(0, Math.min(100, Math.round(Math.max(...ratios))));
+}
+
+function resolveTone(input: {
+  status: string | null;
+  planId: string | null;
+  usagePct: number;
+  inactiveDays: number;
+  freemiumDaysRemaining: number | null;
+  softCapSummary: OrgSoftCapSummary;
+}) {
+  const status = normalize(input.status).toLowerCase();
+  const planId = normalize(input.planId).toLowerCase();
+  const isInactive = status !== "active";
+  const isStale = input.inactiveDays > 7;
+  const isExpiredFreemium = planId === "freemium" && input.freemiumDaysRemaining !== null && input.freemiumDaysRemaining <= 0;
+  const isCriticalUsage = input.softCapSummary.overall_status === "critical" || input.usagePct >= 90;
+  const isWarningUsage =
+    planId === "freemium" || input.usagePct > 80 || input.softCapSummary.overall_status === "warning" || input.softCapSummary.warning_count > 0;
+
+  if (isInactive || isStale || isExpiredFreemium || isCriticalUsage) {
+    return "red" as const;
+  }
+
+  if (isWarningUsage) {
+    return "amber" as const;
+  }
+
+  return "green" as const;
+}
+
+function resolveStatusLabel(input: {
+  status: string | null;
+  planId: string | null;
+  usagePct: number;
+  inactiveDays: number;
+  freemiumDaysRemaining: number | null;
+}) {
+  const status = normalize(input.status).toLowerCase();
+  const planId = normalize(input.planId).toLowerCase();
+
+  if (status !== "active") {
+    return `INATIVA ${formatRelativeDays(input.inactiveDays)}`;
+  }
+
+  if (input.inactiveDays > 7) {
+    return `INATIVA ${formatRelativeDays(input.inactiveDays)}`;
+  }
+
+  if (planId === "freemium") {
+    const remaining = input.freemiumDaysRemaining ?? 0;
+    return remaining > 0 ? `FREEMIUM ${remaining}D REST.` : "FREEMIUM EXPIRADO";
+  }
+
+  if (input.usagePct > 80) {
+    return `USO ${input.usagePct}%`;
+  }
+
+  return "ATIVA";
+}
+
+function resolveActionLabel(tone: "green" | "amber" | "red", statusLabel: string) {
+  if (tone === "amber") return "CONVERTER →";
+  if (tone === "green") return "VER →";
+  return statusLabel.startsWith("INATIVA") ? "REATIVAR →" : "COBRAR →";
+}
+
+function resolveSignalGlyph(tone: "green" | "amber" | "red") {
+  if (tone === "amber") return "◎";
+  if (tone === "green") return "★";
+  return "!";
+}
+
+function resolveSignalColor(tone: "green" | "amber" | "red") {
+  if (tone === "amber") return "var(--amber)";
+  if (tone === "green") return "var(--green)";
+  return "var(--red)";
+}
+
+function pillTone(tone: "green" | "amber" | "red") {
+  if (tone === "amber") return "border-[var(--amber)]/40 text-[var(--amber)] bg-[rgba(255,170,0,0.08)]";
+  if (tone === "green") return "border-[var(--green)]/40 text-[var(--green)] bg-[rgba(0,255,136,0.08)]";
+  return "border-[var(--red)]/40 text-[var(--red)] bg-[rgba(255,68,68,0.08)]";
+}
+
+function actionTone(tone: "green" | "amber" | "red") {
+  if (tone === "amber") return "border-[var(--amber)]/40 text-[var(--amber)]";
+  if (tone === "green") return "border-[var(--green)]/40 text-[var(--green)]";
+  return "border-[var(--red)]/40 text-[var(--red)]";
+}
+
+async function loadDashboardData(): Promise<DashboardData> {
+  let admin: ReturnType<typeof createAdminClient> | null = null;
+  try {
+    admin = createAdminClient();
+  } catch {
+    return {
+      orgs: [],
+      activeCount: 0,
+      mrrTotal: 0,
+      tryonsToday: 0,
+      tryonsMonth: 0,
+      alertCount: 0,
+      planBreakdown: [],
+      retentionPct: 0,
+      mrrNovo: 0,
+      churnRisk: 0,
+      iaCost: 0,
+    };
+  }
+
+  if (!admin) {
+    return {
+      orgs: [],
+      activeCount: 0,
+      mrrTotal: 0,
+      tryonsToday: 0,
+      tryonsMonth: 0,
+      alertCount: 0,
+      planBreakdown: [],
+      retentionPct: 0,
+      mrrNovo: 0,
+      churnRisk: 0,
+      iaCost: 0,
+    };
+  }
+
+  const supabase = admin;
+
+  const now = new Date();
+  const since24h = new Date(now.getTime() - 86_400_000).toISOString();
+  const sinceMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+  const [orgsResult, activeCountResult, tryonsTodayResult, tryonsMonthResult] = await Promise.all([
+    supabase
+      .from("orgs")
+      .select("id, slug, name, status, plan_id, created_at, updated_at, limits")
+      .order("created_at", { ascending: false }),
+    supabase.from("orgs").select("id", { count: "exact", head: true }).eq("status", "active"),
+    supabase.from("saved_results").select("id", { count: "exact", head: true }).gte("created_at", since24h),
+    supabase.from("saved_results").select("id", { count: "exact", head: true }).gte("created_at", sinceMonth),
+  ]);
+
+  const orgs = ((orgsResult.error ? [] : orgsResult.data) || []) as OrgRow[];
+  const orgStats = await Promise.all(
+    orgs.map(async (org) => {
+      const [leadsResult, tryonsResult, productsResult] = await Promise.all([
+        supabase.from("leads").select("id", { count: "exact", head: true }).eq("org_id", org.id),
+        supabase.from("saved_results").select("id", { count: "exact", head: true }).eq("org_id", org.id),
+        supabase.from("products").select("id", { count: "exact", head: true }).eq("org_id", org.id),
+      ]);
+
+      const leads = countFrom(leadsResult);
+      const tryons = countFrom(tryonsResult);
+      const products = countFrom(productsResult);
+      const inactiveDays = daysBetween(org.updated_at || org.created_at);
+      const freemiumDaysRemaining = normalize(org.plan_id).toLowerCase() === "freemium" ? Math.max(0, 15 - daysBetween(org.created_at)) : null;
+      const softCapSummary = buildOrgSoftCapSummary({
+        plan_id: org.plan_id,
+        saved_results: tryons,
+        leads,
+        products,
+        whatsapp_messages: null,
+        estimated_cost_today_cents: 0,
+        estimated_cost_total_cents: 0,
       });
-      return acc;
-    },
-    {
-      new: 0,
-      engaged: 0,
-      qualified: 0,
-      offer_sent: 0,
-      closing: 0,
-      won: 0,
-      lost: 0,
-    }
+      const usagePct = computeUsagePct(org.limits, { leads, tryons, products }, org.plan_id);
+      const tone = resolveTone({
+        status: org.status,
+        planId: org.plan_id,
+        usagePct,
+        inactiveDays,
+        freemiumDaysRemaining,
+        softCapSummary,
+      });
+      const statusLabel = resolveStatusLabel({
+        status: org.status,
+        planId: org.plan_id,
+        usagePct,
+        inactiveDays,
+        freemiumDaysRemaining,
+      });
+
+      return {
+        ...org,
+        leads,
+        tryons,
+        products,
+        usagePct,
+        inactiveDays,
+        freemiumDaysRemaining,
+        tone,
+        statusLabel,
+        actionLabel: resolveActionLabel(tone, statusLabel),
+        softCapSummary,
+      };
+    })
   );
 
-  const topValueOrgs = [...rows]
-    .sort((left, right) => {
-      const leftValue = left.total_leads + left.total_saved_results + left.total_products;
-      const rightValue = right.total_leads + right.total_saved_results + right.total_products;
-      return rightValue - leftValue;
-    })
-    .slice(0, 4)
-    .map((row) => ({
-      id: row.id,
-      name: row.name,
-      slug: row.slug,
-      total_leads: row.total_leads,
-      total_saved_results: row.total_saved_results,
-      total_products: row.total_products,
-      lead_summary: {
-        followup_overdue: row.lead_summary.followup_overdue,
-        followup_without: row.lead_summary.followup_without,
-      },
-    }));
+  const activeCount = countFrom(activeCountResult);
+  const fallbackActiveCount = orgStats.filter((org) => normalize(org.status).toLowerCase() === "active").length;
+  const resolvedActiveCount = activeCount > 0 ? activeCount : fallbackActiveCount;
+  const mrrTotal = orgStats
+    .filter((org) => normalize(org.status).toLowerCase() === "active")
+    .reduce((sum, org) => sum + getPlanValue(normalize(org.plan_id).toLowerCase()), 0);
+
+  const activeThisMonth = orgStats
+    .filter((org) => normalize(org.status).toLowerCase() === "active" && org.created_at && org.created_at >= sinceMonth)
+    .sort((left, right) => (right.created_at || "").localeCompare(left.created_at || ""))[0];
+
+  const alertCount = orgStats.filter((org) => org.tone === "red").length;
+  const planBreakdownMap = new Map<string, number>();
+  for (const org of orgStats.filter((item) => normalize(item.status).toLowerCase() === "active")) {
+    const plan = normalize(org.plan_id).toLowerCase() || "sem plano";
+    planBreakdownMap.set(plan, (planBreakdownMap.get(plan) || 0) + 1);
+  }
+
+  const planBreakdown = PLAN_ORDER.map((plan) => ({ plan, count: planBreakdownMap.get(plan) || 0 })).filter((item) => item.count > 0);
+  for (const [plan, count] of planBreakdownMap.entries()) {
+    if (!PLAN_ORDER.includes(plan)) {
+      planBreakdown.push({ plan, count });
+    }
+  }
+
+  const retentionPct = orgStats.length > 0 ? Math.round((resolvedActiveCount / orgStats.length) * 100) : 0;
+  const mrrNovo = activeThisMonth ? getPlanValue(normalize(activeThisMonth.plan_id).toLowerCase()) : 0;
+  const churnRisk = orgStats.filter((org) => org.tone === "amber" || org.tone === "red").length;
+  const tryonsToday = countFrom(tryonsTodayResult);
+  const tryonsMonth = countFrom(tryonsMonthResult);
+  const iaCost = tryonsMonth * 0.075;
 
   return {
-    totalOrgs: rows.length,
-    activeOrgs: rows.filter((row) => row.status === "active" && !row.kill_switch).length,
-    suspendedOrBlocked: rows.filter((row) => row.status !== "active" || row.kill_switch).length,
-    killSwitchOn: rows.filter((row) => row.kill_switch).length,
-    totalProducts: rows.reduce((sum, row) => sum + row.total_products, 0),
-    totalLeads: rows.reduce((sum, row) => sum + row.total_leads, 0),
-    totalSavedResults: rows.reduce((sum, row) => sum + row.total_saved_results, 0),
-    orgsWithLeadRisk: rows.filter((row) => row.lead_summary.followup_overdue > 0 || row.lead_summary.followup_without > 0).length,
-    totalLeadOverdue: rows.reduce((sum, row) => sum + row.lead_summary.followup_overdue, 0),
-    totalLeadWithoutFollowUp: rows.reduce((sum, row) => sum + row.lead_summary.followup_without, 0),
-    leadStatusTotals,
-    leadStagePeak: Math.max(...Object.values(leadStatusTotals), 1),
-    topValueOrgs,
-    topValuePeak: Math.max(...topValueOrgs.map((row) => row.total_leads + row.total_saved_results + row.total_products), 1),
+    orgs: orgStats,
+    activeCount: resolvedActiveCount,
+    mrrTotal,
+    tryonsToday,
+    tryonsMonth,
+    alertCount,
+    planBreakdown,
+    retentionPct,
+    mrrNovo,
+    churnRisk,
+    iaCost,
   };
 }
 
-export default function AgencyDashboardPage() {
-  const searchParams = useSearchParams();
-  const range = searchParams.get("range") || "all";
-  const theme = searchParams.get("theme") === "light" ? "light" : "dark";
-  const [snapshot, setSnapshot] = useState<AgencySnapshotResponse["data"] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [refreshToken, setRefreshToken] = useState(0);
-
-  const requestUrl = useMemo(() => buildHref("/api/agency/snapshot", { range, theme }), [range, theme]);
-
-  useEffect(() => {
-    let mounted = true;
-    const controller = new AbortController();
-
-    async function loadSnapshot() {
-      try {
-        setLoading(true);
-        setError(null);
-
-        const response = await fetch(requestUrl, {
-          signal: controller.signal,
-          cache: "no-store",
-        });
-
-        const payload = (await response.json().catch(() => null)) as AgencySnapshotResponse | Record<string, never> | null;
-
-        if (!mounted) return;
-
-        if (!response.ok || !payload || !("ok" in payload) || !payload.ok || !("data" in payload) || !payload.data) {
-          setSnapshot(null);
-          setError("Painel da agência — nenhuma loja cadastrada ainda.");
-          return;
-        }
-
-        setSnapshot(payload.data);
-      } catch (err) {
-        if (mounted && !(err instanceof DOMException && err.name === "AbortError")) {
-          setSnapshot(null);
-          setError("Painel da agência — nenhuma loja cadastrada ainda.");
-        }
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void loadSnapshot();
-
-    return () => {
-      mounted = false;
-      controller.abort();
-    };
-  }, [requestUrl, refreshToken]);
-
-  const summary = snapshot ? summarizeRows(snapshot.rows) : null;
+export default async function AgencyDashboardPage() {
+  const data = await loadDashboardData();
 
   return (
-    <div className={`min-h-screen ${theme === "light" ? "bg-[#F5F0E7] text-[#141414]" : "bg-black text-white"}`}>
-      <div className={`px-6 pt-10 pb-8 border-b sticky top-0 z-40 backdrop-blur-2xl ${theme === "light" ? "border-black/5 bg-[#F5F0E7]/90" : "border-white/5 bg-black/80"}`}>
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="space-y-2">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-[#D4AF37] flex items-center justify-center text-black font-serif font-medium shadow-[0_0_24px_rgba(212,175,55,0.35)]">
-                V
-              </div>
-              <div>
-                <Text className="text-[10px] font-medium tracking-[0.08em] text-[#D4AF37]">Central de lojas</Text>
-                <Heading as="h1" className="text-2xl md:text-3xl tracking-tight">
-                  Painel da operação
-                </Heading>
-              </div>
+    <div className={`${dmSans.className} min-h-screen bg-[var(--bg)] text-[var(--text)]`} style={themeVars}>
+      <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--bg2)]">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4 px-5 py-4 lg:px-8">
+          <div className="space-y-0.5">
+            <div className={`${spaceMono.className} text-[11px] uppercase tracking-[2px] text-[var(--gold)]`}>
+              INOVACORTEX
             </div>
-            <Text className={`text-sm max-w-2xl ${theme === "light" ? "text-black/55" : "text-white/50"}`}>
-              Renderização cliente com fetch pós-mount, timeout na rota e fallback simples se a base estiver vazia.
-            </Text>
+            <div className={`${spaceMono.className} text-[10px] uppercase tracking-[1px] text-[var(--muted)]`}>
+              CONTROL PLANE
+            </div>
           </div>
 
-          <div className="flex flex-wrap gap-3">
-            <Link href={buildHref("/agency", { range: range === "all" ? undefined : range, theme: theme === "light" ? "dark" : "light" })}>
-              <VenusButton variant="outline" className="h-12 px-6 rounded-full tracking-[0.08em] text-[10px] font-medium border-white/10">
-                {theme === "light" ? "Tema escuro" : "Tema claro"}
-              </VenusButton>
-            </Link>
-            <Link href="#cadastro-lojista">
-              <VenusButton variant="solid" className="h-12 px-6 rounded-full tracking-[0.08em] text-[10px] font-medium bg-[#D4AF37] text-black">
-                Cadastrar lojista
-              </VenusButton>
-            </Link>
-            <VenusButton
-              type="button"
-              variant="outline"
-              className="h-12 px-6 rounded-full tracking-[0.08em] text-[10px] font-medium border-white/10"
-              onClick={() => setRefreshToken((current) => current + 1)}
-            >
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Atualizar
-            </VenusButton>
+          <div className={`${spaceMono.className} flex items-center gap-4 text-[10px] uppercase tracking-[1px]`}>
+            <div className="flex items-center gap-2 text-[var(--green)]">
+              <span className="inline-flex h-2 w-2 rounded-full bg-[var(--green)] shadow-[0_0_0_4px_rgba(0,255,136,0.08)] animate-pulse" />
+              <span>TEMPO REAL</span>
+            </div>
+            <div className="text-[var(--gold)]">{formatInteger(data.activeCount)} LOJAS ATIVAS</div>
           </div>
         </div>
-      </div>
+      </header>
 
-      <main className="px-6 py-8 space-y-10">
-        {error && !loading ? (
-          <div className="rounded-[28px] border border-red-500/20 bg-red-500/10 p-6 text-sm text-red-100">
-            {error}
-          </div>
-        ) : null}
+      <main className="mx-auto max-w-[1600px] px-5 py-5 lg:px-8">
+        <section className="grid gap-[1px] bg-[var(--border)] lg:grid-cols-4">
+          <KpiCard
+            label="MRR TOTAL"
+            value={formatMoney(data.mrrTotal)}
+            color="var(--gold)"
+            subtext="↑ crescimento"
+            subtextColor="var(--green)"
+          />
+          <KpiCard
+            label="LOJAS ATIVAS"
+            value={formatInteger(data.activeCount)}
+            color="var(--green)"
+            subtext={data.planBreakdown.length > 0 ? data.planBreakdown.map((item) => `${item.plan} ${item.count}`).join(" · ") : "sem dados"}
+            subtextColor="var(--muted)"
+          />
+          <KpiCard
+            label="TRY-ONS HOJE"
+            value={formatInteger(data.tryonsToday)}
+            color="var(--amber)"
+            subtext={`Custo estimado: ${formatMoney(data.tryonsToday * 0.075)}`}
+            subtextColor="var(--green)"
+          />
+          <KpiCard
+            label="ALERTAS"
+            value={formatInteger(data.alertCount)}
+            color="var(--red)"
+            subtext="inadimplentes, inativas > 7d"
+            subtextColor="var(--muted)"
+          />
+        </section>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="flex flex-col items-center gap-4 rounded-[32px] border border-white/10 bg-white/[0.04] px-8 py-10">
-              <Loader2 className="h-8 w-8 animate-spin text-[#D4AF37]" />
-              <Text className="text-sm text-white/50">Carregando painel da agência</Text>
-            </div>
-          </div>
-        ) : snapshot && snapshot.rows.length > 0 && summary ? (
-          <>
-            <AgencyTelemetryPanel
-              mode={theme}
-              totalOrgs={summary.totalOrgs}
-              activeOrgs={summary.activeOrgs}
-              suspendedOrBlocked={summary.suspendedOrBlocked}
-              killSwitchOn={summary.killSwitchOn}
-              totalProducts={summary.totalProducts}
-              totalLeads={summary.totalLeads}
-              totalSavedResults={summary.totalSavedResults}
-              orgsWithLeadRisk={summary.orgsWithLeadRisk}
-              totalLeadOverdue={summary.totalLeadOverdue}
-              totalLeadWithoutFollowUp={summary.totalLeadWithoutFollowUp}
-              leadStatusTotals={summary.leadStatusTotals}
-              leadStagePeak={summary.leadStagePeak}
-              topValueOrgs={summary.topValueOrgs}
-              topValuePeak={summary.topValuePeak}
-            />
-
-            <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-              <MerchantProvisionCard
-                mode={theme}
-                agencyOrgId={snapshot?.agency_org_id ?? null}
-                merchantGroups={snapshot?.merchant_groups ?? []}
-              />
-              <div className="space-y-4 rounded-[32px] border border-white/10 bg-white/[0.03] p-6">
-                <div className="flex items-center gap-3">
-                  <ShieldCheck className="w-5 h-5 text-[#D4AF37]" />
-                  <Heading as="h2" className="text-xl tracking-tight">
-                    Snapshot carregado
-                  </Heading>
-                </div>
-                <Text className="text-sm text-white/55">
-                  {snapshot.operational_events.toLocaleString("pt-BR")} eventos operacionais na janela selecionada.
-                </Text>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <MiniStat label="Total de lojas" value={summary.totalOrgs} />
-                  <MiniStat label="Risco comercial" value={summary.orgsWithLeadRisk} />
-                  <MiniStat label="Produtos" value={summary.totalProducts} />
-                  <MiniStat label="Leads" value={summary.totalLeads} />
+        <section className="mt-[1px] grid gap-[1px] bg-[var(--border)] lg:grid-cols-[1fr_320px]">
+          <div className="bg-[var(--bg2)]">
+            <div className="flex items-center justify-between gap-4 border-b border-[var(--border)] px-4 py-4">
+              <div>
+                <div className={`${spaceMono.className} text-[11px] uppercase tracking-[1px] text-[var(--muted)]`}>
+                  LOJAS — STATUS OPERACIONAL
                 </div>
               </div>
+              <Link href="/agency/billing" className={`${spaceMono.className} text-[11px] uppercase tracking-[1px] text-[var(--gold)]`}>
+                + NOVA LOJA
+              </Link>
             </div>
 
-            <section className="space-y-4">
-              <div className="space-y-1">
-                <Heading as="h2" className="text-xs tracking-[0.08em] text-white/40 font-medium">
-                  Detalhe por loja
-                </Heading>
-                <Text className="text-sm text-white/40">
-                  Renderizado no cliente para evitar qualquer crash no servidor.
-                </Text>
-              </div>
+            <div className="divide-y divide-[var(--border)]">
+              {data.orgs.length > 0 ? (
+                data.orgs.map((org) => (
+                  <div key={org.id} className="bg-[var(--bg2)] px-4 py-4">
+                    <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                      <div className="flex items-start gap-3">
+                        <span
+                          className="mt-2 h-2 w-2 rounded-full shrink-0"
+                          style={{ backgroundColor: resolveSignalColor(org.tone), boxShadow: `0 0 12px ${resolveSignalColor(org.tone)}` }}
+                        />
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="text-[14px] font-semibold text-[var(--text)]">{org.name}</div>
+                            <span
+                              className={`${spaceMono.className} rounded-full border px-2 py-1 text-[9px] uppercase tracking-[1px] ${pillTone(org.tone)}`}
+                            >
+                              {normalize(org.plan_id).toUpperCase() || "SEM PLANO"}
+                            </span>
+                          </div>
 
-              <div className="space-y-4">
-                {snapshot.rows.map((org) => {
-                  const statusLabel = org.kill_switch ? "blocked" : org.status;
-                  return (
-                    <div key={org.id} className="p-6 rounded-[32px] bg-white/[0.03] border border-white/5 space-y-5">
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="space-y-3">
-                          <div className="flex items-center gap-3 flex-wrap">
-                            <Heading as="h3" className="text-2xl tracking-tight">
-                              {org.name}
-                            </Heading>
-                            <span className="px-3 py-1 rounded-full text-[8px] tracking-[0.08em] font-medium border bg-white/5 text-white/70 border-white/10">
-                              {statusLabel}
-                            </span>
-                            <span className="px-3 py-1 rounded-full text-[8px] tracking-[0.08em] font-medium border bg-white/5 text-white/70 border-white/10">
-                              {org.plan_id || "sem plano"}
-                            </span>
+                          <div className={`${spaceMono.className} flex flex-wrap gap-3 text-[10px] uppercase tracking-[1px] text-[var(--muted)]`}>
+                            <span style={{ color: resolveSignalColor(org.tone) }}>{org.statusLabel}</span>
+                            <span>CRIADA {formatDate(org.created_at)}</span>
+                            <span>ATUALIZADA {formatDate(org.updated_at)}</span>
                           </div>
-                          <div className="flex flex-wrap gap-4 text-[10px] tracking-[0.08em] text-white/35">
-                            <span>slug: {org.slug}</span>
-                            <span>código: {org.id}</span>
-                            <span>criado: {formatDate(org.created_at)}</span>
-                            <span>última atividade: {formatDate(org.last_activity_at)}</span>
-                          </div>
-                          <div className="flex flex-wrap gap-2 text-[10px] tracking-[0.08em] text-white/55">
-                            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
-                              follow-up atrasado {formatNumber(org.lead_summary.followup_overdue)}
+
+                          <div className={`${spaceMono.className} flex flex-wrap gap-2 text-[10px] uppercase tracking-[1px] text-[var(--text)]`}>
+                            <span className="rounded-full border border-[var(--border)] bg-[var(--bg)] px-3 py-1">
+                              LEADS {formatInteger(org.leads)}
                             </span>
-                            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
-                              sem follow-up {formatNumber(org.lead_summary.followup_without)}
+                            <span className="rounded-full border border-[var(--border)] bg-[var(--bg)] px-3 py-1">
+                              TRY-ONS {formatInteger(org.tryons)}
                             </span>
                           </div>
                         </div>
+                      </div>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 min-w-[280px]">
-                          <SmallMetric label="Membros" value={org.total_members} />
-                          <SmallMetric label="Produtos" value={org.total_products} />
-                          <SmallMetric label="Leads" value={org.total_leads} />
-                          <SmallMetric label="Resultados" value={org.total_saved_results} />
+                      <div className="flex w-full flex-col gap-3 xl:w-[360px]">
+                        <div className="h-[50px] overflow-hidden rounded-[8px] border border-[var(--border)] bg-[var(--bg)] p-[3px]">
+                          <div
+                            className="h-full rounded-[5px]"
+                            style={{
+                              width: `${org.usagePct}%`,
+                              background:
+                                org.tone === "red"
+                                  ? "linear-gradient(90deg, var(--red), #7f1d1d)"
+                                  : org.tone === "amber"
+                                    ? "linear-gradient(90deg, var(--amber), #7a4a00)"
+                                    : "linear-gradient(90deg, var(--green), var(--gold))",
+                            }}
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between gap-3">
+                          <div className={`${spaceMono.className} text-[9px] uppercase tracking-[1px] text-[var(--muted)]`}>
+                            USO DO PLANO
+                          </div>
+                          <div className={`${spaceMono.className} text-[18px] font-bold text-[var(--text)]`}>
+                            {org.usagePct}%
+                          </div>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-                        <InfoCard label="Conversas WhatsApp" value={org.total_whatsapp_conversations === null ? "Sem dados" : formatNumber(org.total_whatsapp_conversations)} />
-                        <InfoCard label="Mensagens WhatsApp" value={org.total_whatsapp_messages === null ? "Sem dados" : formatNumber(org.total_whatsapp_messages)} />
-                        <InfoCard label="Última atividade" value={formatDate(org.last_activity_at)} />
-                        <InfoCard label="Status do pipeline" value={org.lead_summary.total > 0 ? "Ativo" : "Sem pipeline"} />
-                      </div>
-
-                      <div className="flex flex-wrap gap-3">
-                        <Link href={`/agency/orgs/${org.id}?from=agency&range=${encodeURIComponent(range)}`}>
-                          <VenusButton variant="glass" className="h-11 px-5 rounded-full tracking-[0.08em] text-[9px] font-medium border-white/10">
-                            Ver detalhe
-                          </VenusButton>
+                      <div className="flex justify-start xl:justify-end">
+                        <Link
+                          href={`/agency/orgs/${org.id}`}
+                          className={`${spaceMono.className} inline-flex min-h-11 items-center justify-center rounded-full border px-4 text-[10px] uppercase tracking-[1px] ${actionTone(org.tone)}`}
+                        >
+                          {org.actionLabel}
                         </Link>
-                        <span className="px-3 py-1 rounded-full text-[8px] tracking-[0.08em] font-medium border bg-white/5 text-white/70 border-white/10">
-                          {org.lead_summary.total} leads
-                        </span>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            </section>
-          </>
-        ) : (
-          <div className="p-8 rounded-[32px] bg-white/[0.03] border border-white/5 text-center">
-            <CircleDashed className="w-6 h-6 text-white/30 mx-auto mb-3" />
-            <Heading as="h3" className="text-lg tracking-tight">
-              Nenhuma loja cadastrada ainda
-            </Heading>
-            <Text className="text-sm text-white/40 mt-2">
-              A base está vazia agora. O painel não deve travar mesmo sem orgs cadastradas.
-            </Text>
+                  </div>
+                ))
+              ) : (
+                <div className="bg-[var(--bg2)] px-4 py-8">
+                  <div className="rounded-[12px] border border-[var(--border)] bg-[var(--bg)] p-6 text-center">
+                    <div className={`${spaceMono.className} text-[11px] uppercase tracking-[1px] text-[var(--gold)]`}>
+                      0 LOJAS CADASTRADAS
+                    </div>
+                    <div className="mt-2 text-sm text-[var(--muted)]">
+                      A base ainda esta vazia. O dashboard segue renderizando com contadores zerados.
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-        )}
 
-        <section id="cadastro-lojista">
-          <MerchantProvisionCard
-            mode={theme}
-            agencyOrgId={snapshot?.agency_org_id ?? null}
-            merchantGroups={snapshot?.merchant_groups ?? []}
-          />
+          <aside className="bg-[var(--bg2)] p-4">
+            <div className="space-y-4">
+              <div className="border-b border-[var(--border)] pb-4">
+                <div className={`${spaceMono.className} text-[11px] uppercase tracking-[1px] text-[var(--muted)]`}>
+                  RADAR — AÇÕES AGORA
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {data.orgs.filter((org) => org.tone !== "green").length > 0 ? (
+                  data.orgs
+                    .filter((org) => org.tone !== "green")
+                    .map((org) => (
+                      <div key={org.id} className="rounded-[12px] border border-[var(--border)] bg-[var(--bg)] p-3">
+                        <div className="flex items-start gap-3">
+                          <div
+                            className={`${spaceMono.className} mt-0.5 w-5 text-[16px] leading-none`}
+                            style={{ color: resolveSignalColor(org.tone) }}
+                          >
+                            {resolveSignalGlyph(org.tone)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[12px] leading-5 text-[var(--text)]">
+                              {org.tone === "red"
+                                ? `${org.name} precisa de correção imediata.`
+                                : `${org.name} está perto do limite operacional.`}
+                            </div>
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                              <Link
+                                href={`/agency/orgs/${org.id}`}
+                                className={`${spaceMono.className} text-[10px] uppercase tracking-[1px] text-[var(--gold)]`}
+                              >
+                                {org.name}
+                              </Link>
+                              <span className={`${spaceMono.className} text-[10px] uppercase tracking-[1px] text-[var(--gold)]`}>
+                                {org.actionLabel}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                ) : data.orgs.length > 0 ? (
+                  <div className="rounded-[12px] border border-[var(--border)] bg-[var(--bg)] p-3">
+                    <div className="flex items-start gap-3">
+                      <div className={`${spaceMono.className} mt-0.5 w-5 text-[16px] leading-none text-[var(--green)]`}>★</div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[12px] leading-5 text-[var(--text)]">
+                          Operacao estavel. Nenhuma loja com alerta agora.
+                        </div>
+                        <div className="mt-1">
+                          <Link
+                            href="/agency/billing"
+                            className={`${spaceMono.className} text-[10px] uppercase tracking-[1px] text-[var(--gold)]`}
+                          >
+                            REVISAR →
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-[12px] border border-[var(--border)] bg-[var(--bg)] p-3">
+                    <div className="flex items-start gap-3">
+                      <div className={`${spaceMono.className} mt-0.5 w-5 text-[16px] leading-none text-[var(--green)]`}>★</div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[12px] leading-5 text-[var(--text)]">Nenhuma loja cadastrada ainda.</div>
+                        <div className="mt-1">
+                          <Link
+                            href="/agency/billing"
+                            className={`${spaceMono.className} text-[10px] uppercase tracking-[1px] text-[var(--gold)]`}
+                          >
+                            + NOVA LOJA →
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="border-b border-[var(--border)] pb-4 pt-4">
+                <div className={`${spaceMono.className} text-[11px] uppercase tracking-[1px] text-[var(--muted)]`}>
+                  SAUDE DA REDE
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <GaugeCard label="RETENCAO %" value={`${data.retentionPct}%`} tone="green" />
+                <GaugeCard label="MRR NOVO" value={formatMoney(data.mrrNovo)} tone="gold" />
+                <GaugeCard label="CHURN RISCO" value={formatInteger(data.churnRisk)} tone="amber" />
+                <GaugeCard label="CUSTO IA" value={formatMoney(data.iaCost)} tone="green" />
+              </div>
+            </div>
+          </aside>
         </section>
       </main>
     </div>
   );
 }
 
-function MiniStat({ label, value }: { label: string; value: number }) {
+function KpiCard({
+  label,
+  value,
+  subtext,
+  color,
+  subtextColor,
+}: {
+  label: string;
+  value: string;
+  subtext: string;
+  color: string;
+  subtextColor: string;
+}) {
   return (
-    <div className="rounded-[18px] border border-white/10 bg-black/30 p-3 text-center">
-      <div className="text-[10px] font-medium tracking-[0.08em] text-white/35">{label}</div>
-      <div className="mt-1 text-xl tracking-tight">{value.toLocaleString("pt-BR")}</div>
-    </div>
-  );
-}
-
-function SmallMetric({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="p-4 rounded-3xl bg-black/40 border border-white/5 space-y-1">
-      <Text className="text-[9px] tracking-[0.08em] text-white/30 font-medium">{label}</Text>
-      <Heading as="h4" className="text-lg tracking-tight">
-        {value.toLocaleString("pt-BR")}
-      </Heading>
-    </div>
-  );
-}
-
-function InfoCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="p-4 rounded-3xl bg-black/40 border border-white/5 space-y-1">
-      <Text className="text-[9px] tracking-[0.08em] text-white/30 font-medium">{label}</Text>
-      <Heading as="h4" className="text-lg tracking-tight">
+    <div className="bg-[var(--bg2)] px-5 py-4">
+      <div className={`${spaceMono.className} text-[9px] uppercase tracking-[1px] text-[var(--muted)]`}>{label}</div>
+      <div className={`${spaceMono.className} mt-2 text-[26px] font-bold`} style={{ color }}>
         {value}
-      </Heading>
+      </div>
+      <div className={`${spaceMono.className} mt-2 text-[9px] uppercase tracking-[1px]`} style={{ color: subtextColor }}>
+        {subtext}
+      </div>
+    </div>
+  );
+}
+
+function GaugeCard({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "green" | "amber" | "gold";
+}) {
+  const toneColor =
+    tone === "amber" ? "var(--amber)" : tone === "gold" ? "var(--gold)" : "var(--green)";
+
+  return (
+    <div className="rounded-[10px] border border-[#2a3a2c] bg-[var(--bg3)] p-2.5">
+      <div className={`${spaceMono.className} text-[9px] uppercase tracking-[1px] text-[var(--muted)]`}>{label}</div>
+      <div className={`${spaceMono.className} mt-1 text-[18px] font-bold`} style={{ color: toneColor }}>
+        {value}
+      </div>
     </div>
   );
 }
