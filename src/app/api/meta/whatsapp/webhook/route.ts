@@ -103,7 +103,7 @@ export async function POST(request: Request) {
         let finalConversationId = existingConversation?.id || null;
 
         if (!finalConversationId) {
-          const { data: createdConversation } = await admin
+          const { data: createdConversation, error: convError } = await admin
             .from("whatsapp_conversations")
             .insert({
               org_slug: org.slug,
@@ -124,12 +124,16 @@ export async function POST(request: Request) {
             .select("id")
             .single();
 
+          if (convError) {
+            console.error("[WEBHOOK] conv insert error:", convError);
+          }
+
           finalConversationId = createdConversation?.id || null;
         }
 
         if (!finalConversationId) continue;
 
-        await admin.from("whatsapp_messages").insert({
+        const { error: msgError } = await admin.from("whatsapp_messages").insert({
           conversation_id: finalConversationId,
           org_slug: org.slug,
           sender: "user",
@@ -141,6 +145,10 @@ export async function POST(request: Request) {
             meta_display_phone_number: value?.metadata?.display_phone_number || null,
           },
         });
+
+        if (msgError) {
+          console.error("[WEBHOOK] msg insert error:", msgError);
+        }
 
         await admin
           .from("whatsapp_conversations")
@@ -182,8 +190,8 @@ export async function POST(request: Request) {
           });
 
           await bumpTenantUsageDaily(admin, org.id, { leads: created ? 1 : 0, events_count: 1 });
-        } catch (leadError) {
-          console.warn("[WHATSAPP_WEBHOOK] failed to sync lead", leadError);
+        } catch (e) {
+          console.error("[WEBHOOK] lead sync error:", e);
         }
       }
     }
