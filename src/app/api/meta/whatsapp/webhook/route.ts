@@ -92,6 +92,9 @@ export async function POST(request: Request) {
         const text = normalize(message.text?.body) || normalize(message.type) || "";
         const userName = normalize(contact?.profile?.name) || "Cliente Venus";
         const timestamp = message.timestamp ? new Date(Number(message.timestamp) * 1000).toISOString() : new Date().toISOString();
+        let nextConversationStatus: "ai_active" | "human_takeover" = "ai_active";
+        let nextConversationLastMessage = text;
+        let nextConversationLastUpdated = timestamp;
 
         const { data: existingConversation } = await admin
           .from("whatsapp_conversations")
@@ -150,13 +153,86 @@ export async function POST(request: Request) {
           console.error("[WEBHOOK] msg insert error:", msgError);
         }
 
+        if (finalConversationId && org) {
+          try {
+            const { data: conv } = await admin
+              .from("whatsapp_conversations")
+              .select("status")
+              .eq("id", finalConversationId)
+              .maybeSingle();
+
+            if (conv?.status === "ai_active") {
+              const { loadConversationContext } = await import("@/lib/venus/ConversationContext");
+              const { detectIntent } = await import("@/lib/venus/IntentDetector");
+              const { generateVenusReply } = await import("@/lib/venus/VenusStylist");
+
+              const context = await loadConversationContext(
+                admin,
+                org.id,
+                org.slug,
+                org.name,
+                userPhone,
+                userName,
+                finalConversationId
+              );
+
+              context.conversationState = detectIntent(text, context.conversationHistory);
+
+              if (context.conversationState === "needs_human") {
+                await admin.from("whatsapp_conversations").update({ status: "human_takeover" }).eq("id", finalConversationId);
+                nextConversationStatus = "human_takeover";
+              } else {
+                const venusReply = await generateVenusReply(context);
+
+                if (venusReply) {
+                  await fetch(`https://graph.facebook.com/v21.0/${process.env.WHATSAPP_PHONE_ID}/messages`, {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      messaging_product: "whatsapp",
+                      to: userPhone,
+                      type: "text",
+                      text: { body: venusReply },
+                    }),
+                  });
+
+                  await admin.from("whatsapp_messages").insert({
+                    conversation_id: finalConversationId,
+                    org_slug: org.slug,
+                    sender: "venus",
+                    text: venusReply,
+                    type: "text",
+                    metadata: { generated_by: "venus_stylist", state: context.conversationState },
+                  });
+
+                  nextConversationLastMessage = venusReply;
+                  nextConversationLastUpdated = new Date().toISOString();
+
+                  await admin
+                    .from("whatsapp_conversations")
+                    .update({
+                      last_message: venusReply,
+                      last_updated: nextConversationLastUpdated,
+                    })
+                    .eq("id", finalConversationId);
+                }
+              }
+            }
+          } catch (venusError) {
+            console.error("[VENUS_STYLIST] error:", venusError);
+          }
+        }
+
         await admin
           .from("whatsapp_conversations")
           .update({
             user_name: userName,
-            last_message: text,
-            last_updated: timestamp,
-            status: "ai_active",
+            last_message: nextConversationLastMessage,
+            last_updated: nextConversationLastUpdated,
+            status: nextConversationStatus,
             priority: "medium",
             unread_count: (existingConversation?.unread_count || 0) + 1,
           })
