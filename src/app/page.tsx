@@ -107,7 +107,6 @@ export default async function SplashPage({
             </div>
             <div className="space-y-0.5">
               <div className="text-[10px] font-bold uppercase tracking-[0.38em] text-[#D4AF37]">Venus Engine</div>
-              <div className="text-[10px] uppercase tracking-[0.28em] text-white/30">Stylist intelligence for high ticket retail</div>
             </div>
           </div>
 
@@ -144,17 +143,10 @@ export default async function SplashPage({
 
             <div className="flex flex-col gap-3 sm:flex-row">
               <Link
-                href="/onboarding/intent"
+                href="/splash"
                 className="inline-flex min-h-12 items-center justify-center rounded-full bg-[linear-gradient(180deg,#F1D77A_0%,#D4AF37_100%)] px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#0A0A0A] shadow-[0_18px_40px_rgba(212,175,55,0.18)] transition-transform active:scale-[0.98] sm:px-8"
               >
-                Começar leitura
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-              <Link
-                href="/onboarding/intent?demo=true"
-                className="inline-flex min-h-12 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.28em] text-white/75 transition-colors hover:bg-white/[0.06] sm:px-8"
-              >
-                Ver demonstração
+                COMEÇAR LEITURA →
               </Link>
             </div>
 
