@@ -367,7 +367,7 @@ function ResultDashboardContent() {
           </div>
 
           <div className="flex flex-col gap-3 pt-2 sm:flex-row">
-            {canOpenWhatsAppHandoff ? (
+            {canOpenWhatsAppHandoff && (
               <VenusButton
                 type="button"
                 onClick={handleWhatsAppHandoff}
@@ -376,10 +376,6 @@ function ResultDashboardContent() {
               >
                 {isHandoffLoading ? "Abrindo WhatsApp..." : surface.primaryCtaLabel}
               </VenusButton>
-            ) : (
-              <div className="rounded-full border border-white/10 bg-white/[0.03] px-5 py-3 text-[9px] font-bold uppercase tracking-[0.28em] text-white/40 sm:tracking-[0.35em]">
-                WhatsApp indisponível neste ambiente
-              </div>
             )}
             <VenusButton
               type="button"

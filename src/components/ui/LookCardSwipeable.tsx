@@ -38,7 +38,7 @@ export function LookCardSwipeable({
     "2": "R$ 1.250",
     "3": "R$ 540",
     "4": "R$ 780",
-    default: "R$ ---",
+    default: "Ver na loja →",
   };
 
   const mockRationales: Record<string, string> = {

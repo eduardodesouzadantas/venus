@@ -229,7 +229,7 @@ function ProductModalContent({ product, onClose, onRequestFullLook }: ProductMod
                     {metaLine && <Text className="mt-2 text-[10px] uppercase tracking-[0.22em] text-white/30">{metaLine}</Text>}
                   </div>
                   <div className="flex flex-col items-end">
-                    <span className="mb-1 text-xl font-serif leading-none text-slate-200">{product.price || "R$ ---"}</span>
+                    <span className="mb-1 text-xl font-serif leading-none text-slate-200">{product.price || "Ver na loja →"}</span>
                     <span className="text-[8px] uppercase tracking-widest text-white/30">Investimento em imagem</span>
                   </div>
                 </div>

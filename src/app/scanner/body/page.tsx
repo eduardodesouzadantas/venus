@@ -1,14 +1,17 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
+import { BodyPhotoUpload } from "@/components/ui/BodyPhotoUpload";
 import { RealCamera } from "@/components/ui/RealCamera";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
 
 export default function BodyScannerPage() {
   const router = useRouter();
   const { updateData } = useOnboarding();
+  const [mode, setMode] = useState<"upload" | "camera">("upload");
 
   const handleBodyCaptured = (imageData: string) => {
     updateData("scanner", { bodyPhoto: imageData });
@@ -28,12 +31,19 @@ export default function BodyScannerPage() {
           </Text>
         </div>
 
-        <RealCamera
-          instruction="Posicione o topo da cabeça e os pés nas guias pontilhadas."
-          overlayType="body"
-          showTimerOptions={true}
-          onCaptured={handleBodyCaptured}
-        />
+        {mode === "upload" ? (
+          <BodyPhotoUpload
+            onPhotoSelected={handleBodyCaptured}
+            onUseCamera={() => setMode("camera")}
+          />
+        ) : (
+          <RealCamera
+            instruction="Posicione o topo da cabeça e os pés nas guias pontilhadas."
+            overlayType="body"
+            showTimerOptions={true}
+            onCaptured={handleBodyCaptured}
+          />
+        )}
       </div>
     </div>
   );
