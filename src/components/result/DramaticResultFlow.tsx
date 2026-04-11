@@ -250,7 +250,7 @@ Quer descobrir o seu?`;
 
   if (!id) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-black px-6 text-white">
+      <div className="flex flex-col items-center justify-center bg-black px-6 text-white">
         <div className="w-full max-w-sm space-y-8 text-center">
           <h1 className="text-2xl font-serif uppercase">Sua leitura ainda não foi gerada</h1>
           <Link href="/onboarding/chat">
@@ -262,11 +262,11 @@ Quer descobrir o seu?`;
   }
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="bg-black text-white">
       {isSaved && <SavedProfileToast />}
 
       {currentSection === 1 && (
-        <div className="flex min-h-screen flex-col items-center justify-center px-6 py-12">
+        <div className="flex flex-col items-center justify-center px-6 py-12">
           <div className="w-full max-w-lg text-center space-y-8">
             <div className="space-y-4 animate-in fade-in zoom-in duration-1000">
               <span className="text-[10px] font-bold uppercase tracking-[0.4em] text-[#D4AF37]">
@@ -303,7 +303,7 @@ Quer descobrir o seu?`;
       )}
 
       {currentSection === 2 && (
-        <div className="flex min-h-screen flex-col px-6 py-12">
+        <div className="flex flex-col px-6 py-12">
           <div className="w-full max-w-lg mx-auto space-y-6">
             <div className="text-center space-y-2">
               <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#D4AF37]">
@@ -364,7 +364,7 @@ Quer descobrir o seu?`;
       )}
 
       {currentSection === 3 && (
-        <div className="flex min-h-screen flex-col px-4 py-8">
+        <div className="flex flex-col px-4 py-8">
           <div className="w-full max-w-md mx-auto space-y-6">
             <div className="text-center space-y-2">
               <p className="text-xl font-serif text-white">Esse sou eu.</p>
@@ -415,7 +415,7 @@ Quer descobrir o seu?`;
               </div>
             </div>
 
-            <div className="space-y-4 pt-4">
+            <div className="space-y-4">
               <div>
                 <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/60 block mb-2">
                   Légenda

@@ -202,3 +202,9 @@
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+@layer utilities {
+  .result-page * {
+    min-height: 0 !important;
+  }
+}

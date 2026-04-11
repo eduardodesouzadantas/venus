@@ -280,7 +280,7 @@ function ResultDashboardContent() {
   const showStickyActions = !isModalOpen;
 
   return (
-    <div className={`flex min-h-screen flex-col overflow-x-hidden pb-36 transition-colors duration-1000 ${aiInsight.intensity === "HIGH" ? "bg-black" : "bg-[#0A0A0A]"}`}>
+    <div className={`result-page flex min-h-screen flex-col overflow-x-hidden pb-36 transition-colors duration-1000 ${aiInsight.intensity === "HIGH" ? "bg-black" : "bg-[#0A0A0A]"}`}>
       {isSaved && <SavedProfileToast />}
 
       <div className="fixed left-1/2 top-4 z-[300] hidden -translate-x-1/2 items-center gap-3 rounded-full border border-white/10 bg-slate-950/55 px-4 py-2 backdrop-blur-3xl animate-in fade-in slide-in-from-top-4 sm:flex">
