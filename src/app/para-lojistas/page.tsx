@@ -83,7 +83,7 @@ export default async function SplashPage({
 
     const tenant = await fetchTenantBySlug(admin, requestedOrg);
     if (tenant.org && isTenantActive(tenant.org)) {
-      redirect(`/onboarding/intent?org=${tenant.org.slug}`);
+      redirect(`/onboarding/chat?org=${tenant.org.slug}`);
     }
   }
 
@@ -145,7 +145,7 @@ export default async function SplashPage({
 
             <div className="flex flex-col gap-3 sm:flex-row">
               <Link
-                href="/onboarding/intent"
+                href="/onboarding/chat"
                 className="inline-flex min-h-12 items-center justify-center rounded-full bg-[linear-gradient(180deg,#F1D77A_0%,#D4AF37_100%)] px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#0A0A0A] shadow-[0_18px_40px_rgba(212,175,55,0.18)] transition-transform active:scale-[0.98] sm:px-8"
               >
                 COMEÇAR LEITURA →

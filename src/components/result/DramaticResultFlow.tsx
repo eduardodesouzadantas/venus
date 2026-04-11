@@ -253,7 +253,7 @@ Quer descobrir o seu?`;
       <div className="flex min-h-screen flex-col items-center justify-center bg-black px-6 text-white">
         <div className="w-full max-w-sm space-y-8 text-center">
           <h1 className="text-2xl font-serif uppercase">Sua leitura ainda não foi gerada</h1>
-          <Link href="/onboarding/intent">
+          <Link href="/onboarding/chat">
             <VenusButton variant="solid">Começar agora</VenusButton>
           </Link>
         </div>

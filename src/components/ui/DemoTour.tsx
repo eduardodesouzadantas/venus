@@ -20,7 +20,7 @@ interface DemoStep {
 const DEMO_STEPS: DemoStep[] = [
   {
     id: "onboarding",
-    path: "/onboarding/intent",
+    path: "/onboarding/chat",
     title: "Leitura Inicial",
     description: "A experiência se ajusta ao perfil e à intenção antes da exibição dos looks.",
     value: "Reduz indecisão logo na entrada.",

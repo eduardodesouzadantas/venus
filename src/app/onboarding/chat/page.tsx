@@ -1,0 +1,595 @@
+"use client";
+
+import { AnimatePresence, motion } from "framer-motion";
+import { SendHorizonal } from "lucide-react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { VenusAvatar } from "@/components/venus/VenusAvatar";
+import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
+
+type ChatRole = "venus" | "client";
+
+type ChoiceOption = {
+  label: string;
+  value: string;
+  conversationValue: string;
+};
+
+type ChatStep =
+  | {
+      key: "line";
+      kind: "single";
+      prompt: string;
+      placeholder: string;
+      options: ChoiceOption[];
+    }
+  | {
+      key: "imageGoal";
+      kind: "single";
+      prompt: string;
+      placeholder: string;
+      options: ChoiceOption[];
+    }
+  | {
+      key: "styleDirection";
+      kind: "text";
+      prompt: string;
+      placeholder: string;
+    }
+  | {
+      key: "favoriteColors";
+      kind: "multi";
+      prompt: string;
+      placeholder: string;
+      options: ChoiceOption[];
+    }
+  | {
+      key: "avoidColors";
+      kind: "multi";
+      prompt: string;
+      placeholder: string;
+      options: ChoiceOption[];
+    };
+
+type Message = {
+  id: string;
+  role: ChatRole;
+  text: string;
+};
+
+const CHAT_STEPS: ChatStep[] = [
+  {
+    key: "line",
+    kind: "single",
+    prompt: "Antes de tudo — qual linha sustenta sua imagem?",
+    placeholder: "Digite ou toque numa opção.",
+    options: [
+      { label: "Feminina", value: "Feminina", conversationValue: "feminina" },
+      { label: "Masculina", value: "Masculina", conversationValue: "masculina" },
+      { label: "Neutra", value: "Neutra", conversationValue: "neutra" },
+    ],
+  },
+  {
+    key: "imageGoal",
+    kind: "single",
+    prompt: "Que leitura você quer que a roupa entregue?",
+    placeholder: "Digite ou toque numa opção.",
+    options: [
+      { label: "Autoridade", value: "Autoridade", conversationValue: "autoridade" },
+      { label: "Elegância", value: "Elegância", conversationValue: "elegância" },
+      { label: "Presença", value: "Presença", conversationValue: "presença" },
+      { label: "Criatividade", value: "Criatividade", conversationValue: "criatividade" },
+      { label: "Discrição sofisticada", value: "Discrição sofisticada", conversationValue: "discrição sofisticada" },
+    ],
+  },
+  {
+    key: "styleDirection",
+    kind: "text",
+    prompt:
+      "Me conta uma coisa — quando você se olha no espelho e pensa 'hoje tá certo', o que você está vestindo?",
+    placeholder: "Escreva sua resposta livre.",
+  },
+  {
+    key: "favoriteColors",
+    kind: "multi",
+    prompt: "Quais cores sustentam melhor sua presença?",
+    placeholder: "Digite ou selecione os chips.",
+    options: [
+      { label: "Neutros", value: "Neutros", conversationValue: "neutros" },
+      { label: "Terrosos", value: "Terrosos", conversationValue: "terrosos" },
+      { label: "Cores frias", value: "Cores frias", conversationValue: "cores frias" },
+      { label: "Cores quentes", value: "Cores quentes", conversationValue: "cores quentes" },
+      { label: "Pastéis", value: "Pastéis", conversationValue: "pastéis" },
+    ],
+  },
+  {
+    key: "avoidColors",
+    kind: "multi",
+    prompt: "E o que você evita — o que enfraquece sua imagem?",
+    placeholder: "Digite ou selecione os chips.",
+    options: [
+      { label: "Neutros", value: "Neutros", conversationValue: "neutros" },
+      { label: "Terrosos", value: "Terrosos", conversationValue: "terrosos" },
+      { label: "Cores frias", value: "Cores frias", conversationValue: "cores frias" },
+      { label: "Cores quentes", value: "Cores quentes", conversationValue: "cores quentes" },
+      { label: "Pastéis", value: "Pastéis", conversationValue: "pastéis" },
+    ],
+  },
+];
+
+const INTRO_MESSAGE = "Oi. Eu sou a Venus Stylist. Vou ler sua presença em cinco perguntas.";
+const CLOSING_MESSAGE = "Perfeito. Agora vou ler sua presença.";
+
+function normalize(text: string) {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function findSingleOption(step: Extract<ChatStep, { kind: "single" }>, raw: string) {
+  const normalized = normalize(raw);
+  if (!normalized) return null;
+
+  return step.options.find((option) => {
+    const optionVariants = [option.label, option.value, option.conversationValue];
+    return optionVariants.some((variant) => normalize(variant) === normalized);
+  }) || null;
+}
+
+function findMultiOptions(step: Extract<ChatStep, { kind: "multi" }>, raw: string) {
+  const normalized = normalize(raw);
+  if (!normalized) return [];
+
+  return step.options.filter((option) => {
+    const optionVariants = [option.label, option.value, option.conversationValue];
+    return optionVariants.some((variant) => normalized.includes(normalize(variant)));
+  });
+}
+
+function TypingBubble() {
+  return (
+    <div className="flex items-start gap-3">
+      <div className="mt-1 shrink-0">
+        <VenusAvatar size={30} animated />
+      </div>
+      <div className="rounded-[22px] rounded-bl-md border border-white/10 bg-white/[0.055] px-4 py-3 text-sm text-white/68 shadow-[0_12px_40px_rgba(0,0,0,0.22)] backdrop-blur-xl">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#D4AF37]" />
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#D4AF37] [animation-delay:120ms]" />
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#D4AF37] [animation-delay:240ms]" />
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function MessageBubble({ message }: { message: Message }) {
+  const isVenus = message.role === "venus";
+
+  return (
+    <div className={`flex items-end gap-3 ${isVenus ? "justify-start" : "justify-end"}`}>
+      {isVenus ? (
+        <div className="mt-1 shrink-0">
+          <VenusAvatar size={30} animated />
+        </div>
+      ) : null}
+
+      <div
+        className={[
+          "max-w-[min(84vw,32rem)] rounded-[26px] px-4 py-3 text-sm leading-7 shadow-[0_20px_50px_rgba(0,0,0,0.25)]",
+          isVenus
+            ? "rounded-bl-md border border-white/10 bg-white/[0.055] text-white/88 backdrop-blur-xl"
+            : "rounded-br-md border border-[#D4AF37]/25 bg-[linear-gradient(180deg,rgba(212,175,55,0.18)_0%,rgba(212,175,55,0.08)_100%)] text-white",
+        ].join(" ")}
+      >
+        <p className="whitespace-pre-line">{message.text}</p>
+      </div>
+    </div>
+  );
+}
+
+function ChoiceChip({
+  label,
+  selected,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  selected: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={[
+        "inline-flex min-h-11 items-center justify-center rounded-full border px-4 py-2 text-[13px] font-medium transition-all duration-200 active:scale-[0.98]",
+        selected
+          ? "border-[#D4AF37]/40 bg-[#D4AF37]/18 text-[#F5E2A0] shadow-[0_12px_24px_rgba(212,175,55,0.12)]"
+          : "border-white/10 bg-white/[0.04] text-white/74 hover:border-white/18 hover:bg-white/[0.07]",
+        disabled ? "cursor-not-allowed opacity-50" : "",
+      ].join(" ")}
+    >
+      {label}
+    </button>
+  );
+}
+
+function ChatContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const orgSlug = searchParams.get("org") || "";
+  const { updateData, updateConversation } = useOnboarding();
+
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: "intro",
+      role: "venus",
+      text: INTRO_MESSAGE,
+    },
+  ]);
+  const [activeStepIndex, setActiveStepIndex] = useState<number | null>(null);
+  const [isTyping, setIsTyping] = useState(true);
+  const [inputValue, setInputValue] = useState("");
+  const [selectedValues, setSelectedValues] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [isFinishing, setIsFinishing] = useState(false);
+
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const introTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const currentStep = activeStepIndex !== null ? CHAT_STEPS[activeStepIndex] : null;
+  const nextHref = useMemo(() => {
+    return orgSlug ? `/scanner/opt-in?org=${encodeURIComponent(orgSlug)}` : "/scanner/opt-in";
+  }, [orgSlug]);
+
+  useEffect(() => {
+    introTimerRef.current = setTimeout(() => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: "step-0",
+          role: "venus",
+          text: CHAT_STEPS[0].prompt,
+        },
+      ]);
+      setActiveStepIndex(0);
+      setIsTyping(false);
+    }, 800);
+
+    return () => {
+      if (introTimerRef.current) clearTimeout(introTimerRef.current);
+      if (stepTimerRef.current) clearTimeout(stepTimerRef.current);
+      if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages, isTyping, activeStepIndex]);
+
+  useEffect(() => {
+    if (currentStep && !isTyping) {
+      inputRef.current?.focus();
+    }
+  }, [currentStep, isTyping]);
+
+  const scheduleNextStep = (nextIndex: number) => {
+    setIsTyping(true);
+    stepTimerRef.current = setTimeout(() => {
+      setIsTyping(false);
+
+      if (nextIndex < CHAT_STEPS.length) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `step-${nextIndex}`,
+            role: "venus",
+            text: CHAT_STEPS[nextIndex].prompt,
+          },
+        ]);
+        setActiveStepIndex(nextIndex);
+        return;
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: "closing",
+          role: "venus",
+          text: CLOSING_MESSAGE,
+        },
+      ]);
+      setActiveStepIndex(null);
+      setIsFinishing(true);
+
+      redirectTimerRef.current = setTimeout(() => {
+        router.push(nextHref);
+      }, 900);
+    }, 800);
+  };
+
+  const handleChoiceSelect = (option: ChoiceOption) => {
+    if (!currentStep || currentStep.kind !== "single" || isTyping || isFinishing) return;
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `${currentStep.key}-answer`,
+        role: "client",
+        text: option.label,
+      },
+    ]);
+
+    if (currentStep.key === "line") {
+      updateData("intent", { styleDirection: option.value as "Masculina" | "Feminina" | "Neutra" | "" });
+      updateConversation({ line: option.conversationValue as "masculina" | "feminina" | "neutra" });
+    } else if (currentStep.key === "imageGoal") {
+      updateData("intent", { imageGoal: option.value });
+      updateConversation({ imageGoal: option.conversationValue });
+    }
+
+    setInputValue("");
+    setSelectedValues([]);
+    setError(null);
+    setActiveStepIndex(null);
+    scheduleNextStep((activeStepIndex ?? 0) + 1);
+  };
+
+  const commitMultiValues = (values: string[]) => {
+    if (!currentStep || currentStep.kind !== "multi" || isTyping || isFinishing) return;
+    if (values.length === 0) {
+      setError("Escolha ao menos uma opção ou digite uma resposta válida.");
+      return;
+    }
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `${currentStep.key}-answer`,
+        role: "client",
+        text: values.join(", "),
+      },
+    ]);
+
+    if (currentStep.key === "favoriteColors") {
+      updateData("colors", { favoriteColors: values.map((value) => {
+        const option = currentStep.options.find((item) => item.label === value || item.value === value || item.conversationValue === value);
+        return option?.value || value;
+      }) });
+      updateConversation({ favoriteColors: values.map((value) => {
+        const option = currentStep.options.find((item) => item.label === value || item.value === value || item.conversationValue === value);
+        return option?.conversationValue || value;
+      }) });
+    } else if (currentStep.key === "avoidColors") {
+      updateData("colors", { avoidColors: values.map((value) => {
+        const option = currentStep.options.find((item) => item.label === value || item.value === value || item.conversationValue === value);
+        return option?.value || value;
+      }) });
+      updateConversation({ avoidColors: values.map((value) => {
+        const option = currentStep.options.find((item) => item.label === value || item.value === value || item.conversationValue === value);
+        return option?.conversationValue || value;
+      }) });
+    }
+
+    setInputValue("");
+    setSelectedValues([]);
+    setError(null);
+    setActiveStepIndex(null);
+    scheduleNextStep((activeStepIndex ?? 0) + 1);
+  };
+
+  const handleSubmit = () => {
+    if (!currentStep || isTyping || isFinishing) return;
+
+    if (currentStep.kind === "text") {
+      const trimmed = inputValue.trim();
+      if (!trimmed) {
+        setError("Escreva uma resposta antes de enviar.");
+        return;
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `${currentStep.key}-answer`,
+          role: "client",
+          text: trimmed,
+        },
+      ]);
+      updateConversation({ styleDirection: trimmed });
+      setInputValue("");
+      setSelectedValues([]);
+      setError(null);
+      setActiveStepIndex(null);
+      scheduleNextStep((activeStepIndex ?? 0) + 1);
+      return;
+    }
+
+    if (currentStep.kind === "single") {
+      const typed = inputValue.trim();
+      const matched = typed ? findSingleOption(currentStep, typed) : null;
+      if (matched) {
+        handleChoiceSelect(matched);
+        return;
+      }
+
+      if (!typed) {
+        setError("Escolha uma opção ou digite exatamente uma das respostas acima.");
+      } else {
+        setError("Não reconheci essa resposta. Use uma das opções acima.");
+      }
+      return;
+    }
+
+    const typed = inputValue.trim();
+    const fromText = typed ? findMultiOptions(currentStep, typed) : [];
+    const values = selectedValues.length > 0 ? selectedValues : fromText.map((option) => option.value);
+    commitMultiValues(values);
+  };
+
+  const toggleMultiChoice = (option: ChoiceOption) => {
+    if (!currentStep || currentStep.kind !== "multi" || isTyping || isFinishing) return;
+
+    setError(null);
+    setSelectedValues((prev) =>
+      prev.includes(option.value) ? prev.filter((value) => value !== option.value) : [...prev, option.value]
+    );
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      handleSubmit();
+    }
+  };
+
+  const canSend =
+    !!currentStep &&
+    !isTyping &&
+    !isFinishing &&
+    (currentStep.kind === "text"
+      ? inputValue.trim().length > 0
+      : currentStep.kind === "single"
+        ? Boolean(inputValue.trim())
+        : selectedValues.length > 0 || Boolean(inputValue.trim()));
+
+  const displayedSelected = currentStep?.kind === "multi" ? selectedValues : [];
+
+  return (
+    <div className="relative flex min-h-screen flex-col overflow-hidden bg-[#0a0a0a] text-white">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute left-[-10%] top-[-8%] h-72 w-72 rounded-full bg-[#D4AF37]/8 blur-[100px]" />
+        <div className="absolute right-[-8%] top-[18%] h-64 w-64 rounded-full bg-white/5 blur-[120px]" />
+        <div className="absolute bottom-[-8%] left-[18%] h-80 w-80 rounded-full bg-[#D4AF37]/5 blur-[120px]" />
+      </div>
+
+      <header className="relative z-10 flex items-center gap-3 px-4 pb-3 pt-4 sm:px-6">
+        <div className="flex items-center gap-3">
+          <VenusAvatar size={42} animated />
+          <div className="space-y-0.5">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.38em] text-[#D4AF37]">Venus Stylist</div>
+            <div className="text-[11px] text-white/42">Conversa consultiva em andamento</div>
+          </div>
+        </div>
+      </header>
+
+      <main className="relative z-10 flex-1 px-4 pb-44 pt-3 sm:px-6">
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+          <AnimatePresence initial={false}>
+            {messages.map((message) => (
+              <motion.div
+                key={message.id}
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.28, ease: "easeOut" }}
+              >
+                <MessageBubble message={message} />
+              </motion.div>
+            ))}
+          </AnimatePresence>
+
+          {isTyping ? <TypingBubble /> : null}
+
+          <div ref={messagesEndRef} />
+        </div>
+      </main>
+
+      <div className="relative z-10 border-t border-white/8 bg-[#0a0a0a]/95 backdrop-blur-2xl">
+        <div className="mx-auto w-full max-w-3xl px-4 py-4 sm:px-6">
+          {currentStep ? (
+            <div className="mb-3 space-y-3">
+              <div className="rounded-[28px] border border-white/10 bg-white/[0.045] px-4 py-4 shadow-[0_18px_50px_rgba(0,0,0,0.2)]">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.34em] text-[#D4AF37]">Venus</p>
+                <p className="mt-2 text-[15px] leading-7 text-white/90 sm:text-[16px]">{currentStep.prompt}</p>
+              </div>
+
+              {currentStep.kind !== "text" ? (
+                <div className="flex flex-wrap gap-2.5">
+                  {currentStep.options.map((option) => {
+                    const isSelected =
+                      currentStep.kind === "single"
+                        ? inputValue.trim() === option.value || inputValue.trim() === option.label || inputValue.trim() === option.conversationValue
+                        : displayedSelected.includes(option.value);
+
+                    return (
+                      <ChoiceChip
+                        key={option.value}
+                        label={option.label}
+                        selected={isSelected}
+                        disabled={isTyping || isFinishing}
+                        onClick={() => {
+                          if (currentStep.kind === "single") {
+                            handleChoiceSelect(option);
+                            return;
+                          }
+                          toggleMultiChoice(option);
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-[24px] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/48">
+                  Responda em texto livre. A Venus lê o contexto, não só palavras-chave.
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          {error ? <p className="mb-3 text-[12px] text-[#ffb6a8]">{error}</p> : null}
+
+          <div className="flex items-end gap-3">
+            <textarea
+              ref={inputRef}
+              value={inputValue}
+              onChange={(event) => {
+                setInputValue(event.target.value);
+                if (error) setError(null);
+              }}
+              onKeyDown={handleKeyDown}
+              rows={currentStep?.kind === "text" ? 3 : 1}
+              disabled={!currentStep || isTyping || isFinishing}
+              placeholder={currentStep?.placeholder || "Aguarde a próxima pergunta."}
+              className="min-h-14 flex-1 resize-none rounded-[26px] border border-white/10 bg-white/[0.04] px-4 py-4 text-[15px] leading-6 text-white outline-none placeholder:text-white/28 focus:border-[#D4AF37]/35 disabled:cursor-not-allowed disabled:opacity-50"
+            />
+
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={!canSend}
+              className="inline-flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-[22px] border border-[#D4AF37]/25 bg-[linear-gradient(180deg,#F1D77A_0%,#D4AF37_100%)] text-[#0a0a0a] shadow-[0_20px_40px_rgba(212,175,55,0.18)] transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Enviar resposta"
+            >
+              <SendHorizonal className="h-4 w-4" />
+            </button>
+          </div>
+
+          {currentStep?.kind === "multi" ? (
+            <p className="mt-2 text-[11px] text-white/38">
+              Toque em uma ou mais opções e envie. Você também pode digitar a resposta.
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function OnboardingChatPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#0a0a0a]" />}>
+      <ChatContent />
+    </Suspense>
+  );
+}

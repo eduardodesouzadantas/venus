@@ -27,7 +27,7 @@ function SplashContent() {
   const words = ["A", "Venus", "entende", "sua", "essência."];
 
   const handleStart = () => {
-    const nextUrl = org ? `/onboarding/intent?org=${org}` : '/onboarding/intent';
+    const nextUrl = org ? `/onboarding/chat?org=${org}` : "/onboarding/chat";
     router.push(nextUrl);
   };
 

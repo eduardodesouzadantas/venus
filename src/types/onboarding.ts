@@ -1,3 +1,11 @@
+export interface OnboardingConversationData {
+  line: "masculina" | "feminina" | "neutra" | "";
+  imageGoal: string;
+  styleDirection: string;
+  favoriteColors: string[];
+  avoidColors: string[];
+}
+
 export interface OnboardingData {
   intent: {
     styleDirection: "Masculina" | "Feminina" | "Neutra" | "";
@@ -32,6 +40,7 @@ export interface OnboardingData {
     phone: string;
     email: string;
   };
+  conversation: OnboardingConversationData;
   tenant?: {
     orgSlug?: string;
     orgId?: string;
@@ -46,4 +55,5 @@ export const defaultOnboardingData: OnboardingData = {
   colors: { favoriteColors: [], avoidColors: [], metal: "" },
   body: { highlight: [], camouflage: [], fit: "", faceLines: "", hairLength: "" },
   scanner: { facePhoto: "", bodyPhoto: "", skipped: false },
+  conversation: { line: "", imageGoal: "", styleDirection: "", favoriteColors: [], avoidColors: [] },
 };

@@ -192,7 +192,7 @@ function ResultDashboardContent() {
           <Text className="text-sm text-white/70">{description}</Text>
           <Text className="text-xs text-white/40">O bloqueio foi auditado no tenant core e a operação não foi executada.</Text>
           <div className="flex flex-col gap-3 pt-2 sm:flex-row">
-            <Link href="/onboarding/intent" onClick={handleRestartConsultation}>
+            <Link href="/onboarding/chat" onClick={handleRestartConsultation}>
               <VenusButton variant="solid" className="w-full bg-white text-black sm:w-auto">
                 Recomeçar consulta
               </VenusButton>
@@ -234,7 +234,7 @@ function ResultDashboardContent() {
           <Text className="text-sm text-white/70">{description}</Text>
           <Text className="text-xs text-white/40">O bloqueio foi auditado em tenant core e a operação não foi executada.</Text>
           <div className="flex flex-col gap-3 pt-2 sm:flex-row">
-            <Link href="/onboarding/intent" onClick={handleRestartConsultation}>
+            <Link href="/onboarding/chat" onClick={handleRestartConsultation}>
               <VenusButton variant="solid" className="w-full bg-white text-black sm:w-auto">
                 Recomeçar consulta
               </VenusButton>
@@ -267,7 +267,7 @@ function ResultDashboardContent() {
             </p>
           </div>
 
-          <Link href="/onboarding/intent" onClick={handleRestartConsultation}>
+          <Link href="/onboarding/chat" onClick={handleRestartConsultation}>
             <VenusButton variant="solid" className="w-full bg-[#D4AF37] text-black">
               Começar agora <ArrowRight className="ml-2 h-4 w-4" />
             </VenusButton>

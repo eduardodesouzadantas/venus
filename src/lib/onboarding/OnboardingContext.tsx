@@ -1,17 +1,54 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { OnboardingData, defaultOnboardingData } from "@/types/onboarding";
+import { OnboardingData, OnboardingConversationData, defaultOnboardingData } from "@/types/onboarding";
 
 interface OnboardingContextProps {
   data: OnboardingData;
   updateData: <K extends keyof OnboardingData>(step: K, values: Partial<OnboardingData[K]>) => void;
+  updateConversation: (values: Partial<OnboardingConversationData>) => void;
 }
 
 const OnboardingContext = createContext<OnboardingContextProps | undefined>(undefined);
 
 function normalize(value: string | null | undefined) {
   return typeof value === "string" ? value.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9_-]/g, "") : "";
+}
+
+function mergeOnboardingData(parsed: Partial<OnboardingData>, queryOrgSlug: string): OnboardingData {
+  return {
+    ...defaultOnboardingData,
+    ...parsed,
+    intent: {
+      ...defaultOnboardingData.intent,
+      ...(parsed.intent || {}),
+    },
+    lifestyle: {
+      ...defaultOnboardingData.lifestyle,
+      ...(parsed.lifestyle || {}),
+    },
+    colors: {
+      ...defaultOnboardingData.colors,
+      ...(parsed.colors || {}),
+    },
+    body: {
+      ...defaultOnboardingData.body,
+      ...(parsed.body || {}),
+    },
+    scanner: {
+      ...defaultOnboardingData.scanner,
+      ...(parsed.scanner || {}),
+    },
+    conversation: {
+      ...defaultOnboardingData.conversation,
+      ...(parsed.conversation || {}),
+    },
+    tenant: {
+      ...defaultOnboardingData.tenant,
+      ...(parsed.tenant || {}),
+      orgSlug: queryOrgSlug || parsed.tenant?.orgSlug,
+    },
+  };
 }
 
 export function OnboardingProvider({ children }: { children: React.ReactNode }) {
@@ -24,14 +61,8 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
 
     if (saved) {
       try {
-        const parsed = JSON.parse(saved) as OnboardingData;
-        setData({
-          ...parsed,
-          tenant: {
-            ...parsed.tenant,
-            orgSlug: queryOrgSlug || parsed.tenant?.orgSlug,
-          },
-        });
+        const parsed = JSON.parse(saved) as Partial<OnboardingData>;
+        setData(mergeOnboardingData(parsed, queryOrgSlug));
       } catch (e) {
         console.error("Failed to parse onboarding data", e);
         if (queryOrgSlug) {
@@ -56,14 +87,6 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
 
     if (!saved && !queryOrgSlug) {
       setData(defaultOnboardingData);
-    } else if (saved && !queryOrgSlug) {
-      // Keep the persisted tenant context when the URL no longer carries ?org=...
-      try {
-        const parsed = JSON.parse(saved) as OnboardingData;
-        setData(parsed);
-      } catch {
-        // ignore, handled above
-      }
     }
     setIsLoaded(true);
   }, []);
@@ -81,10 +104,21 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     }));
   };
 
+  const updateConversation = (values: Partial<OnboardingConversationData>) => {
+    setData((prev) => ({
+      ...prev,
+      conversation: {
+        ...defaultOnboardingData.conversation,
+        ...(prev.conversation || {}),
+        ...values,
+      },
+    }));
+  };
+
   // if (!isLoaded) return null; foi removido para permitir SSR livre e hidratar na ponta.
 
   return (
-    <OnboardingContext.Provider value={{ data, updateData }}>
+    <OnboardingContext.Provider value={{ data, updateData, updateConversation }}>
       {children}
     </OnboardingContext.Provider>
   );
