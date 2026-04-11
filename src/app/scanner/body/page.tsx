@@ -6,15 +6,34 @@ import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { BodyPhotoUpload } from "@/components/ui/BodyPhotoUpload";
 import { RealCamera } from "@/components/ui/RealCamera";
+import { useUserImage } from "@/lib/onboarding/UserImageContext";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
+import { analyzeColorimetry } from "@/lib/analysis/colorimetry-client";
 
 export default function BodyScannerPage() {
   const router = useRouter();
-  const { updateData } = useOnboarding();
+  const { data, updateData, updateConversation } = useOnboarding();
+  const { setUserPhoto } = useUserImage();
   const [mode, setMode] = useState<"upload" | "camera">("upload");
 
-  const handleBodyCaptured = (imageData: string) => {
+  const handleBodyCaptured = async (imageData: string) => {
     updateData("scanner", { bodyPhoto: imageData });
+    setUserPhoto(imageData);
+
+    if ((!data.colors.favoriteColors.length || !data.colors.avoidColors.length) && data.scanner.facePhoto) {
+      const analysis = await analyzeColorimetry(data.scanner.facePhoto);
+      if (analysis) {
+        updateData("colors", {
+          favoriteColors: analysis.favoriteColors,
+          avoidColors: analysis.avoidColors,
+        });
+        updateConversation({
+          favoriteColors: analysis.favoriteColors,
+          avoidColors: analysis.avoidColors,
+        });
+      }
+    }
+
     router.push("/processing");
   };
 

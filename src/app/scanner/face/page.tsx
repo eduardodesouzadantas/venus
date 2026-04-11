@@ -4,14 +4,31 @@ import { useRouter } from "next/navigation";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { RealCamera } from "@/components/ui/RealCamera";
+import { useUserImage } from "@/lib/onboarding/UserImageContext";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
+import { analyzeColorimetry } from "@/lib/analysis/colorimetry-client";
 
 export default function FaceScannerPage() {
   const router = useRouter();
-  const { updateData } = useOnboarding();
+  const { updateData, updateConversation } = useOnboarding();
+  const { setUserPhoto } = useUserImage();
 
-  const handleFaceCaptured = (imageData: string) => {
+  const handleFaceCaptured = async (imageData: string) => {
     updateData("scanner", { facePhoto: imageData });
+    setUserPhoto(imageData);
+
+    const analysis = await analyzeColorimetry(imageData);
+    if (analysis) {
+      updateData("colors", {
+        favoriteColors: analysis.favoriteColors,
+        avoidColors: analysis.avoidColors,
+      });
+      updateConversation({
+        favoriteColors: analysis.favoriteColors,
+        avoidColors: analysis.avoidColors,
+      });
+    }
+
     router.push("/scanner/body");
   };
 

@@ -3,16 +3,18 @@
 import React, { Suspense, useMemo } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowRight, Activity, Bookmark, BrainCircuit, History, LayoutGrid, PackageCheck, Sparkles, Target, Watch, BookOpen } from "lucide-react";
+import { ArrowRight, Activity, Bookmark, BrainCircuit, History, LayoutGrid, Loader2, PackageCheck, Sparkles, Target, Watch, BookOpen } from "lucide-react";
 import { Text } from "@/components/ui/Text";
 import { VenusButton } from "@/components/ui/VenusButton";
 import { SavedProfileToast } from "@/components/ui/SavedProfileToast";
 import { SaveResultsModal } from "@/components/onboarding/SaveResultsModal";
 import { SocialShareActions } from "@/components/ui/SocialShareActions";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
+import { useUserImage } from "@/lib/onboarding/UserImageContext";
 import { getEngagedIds, getStatsSummary } from "@/lib/analytics/tracker";
 import type { BehaviorStatsSummary } from "@/lib/analytics/tracker";
 import type { UserStats } from "@/lib/ai/orchestrator";
+import type { LookData } from "@/types/result";
 import type { VisualAnalysisPayload } from "@/types/visual-analysis";
 import { orchestrateExperience } from "@/lib/ai/orchestrator";
 import { buildResultSurface } from "@/lib/result/surface";
@@ -25,6 +27,199 @@ import {
 import { registerSocialAction } from "@/lib/social/economy";
 import { trackPotentialAbandonment } from "@/lib/whatsapp/AutomationEngine";
 
+function inferTryOnCategory(look: LookData, item?: LookData["items"][number]): "tops" | "bottoms" | "one-pieces" {
+  const source = `${look.type} ${look.name} ${item?.name || ""} ${item?.contextOfUse || ""}`.toLowerCase();
+  if (source.includes("dress") || source.includes("vestido")) return "one-pieces";
+  if (source.includes("calca") || source.includes("calça") || source.includes("saia") || source.includes("pants") || source.includes("skirt")) {
+    return "bottoms";
+  }
+  return "tops";
+}
+
+function AutoTryOnPreview({
+  personImageUrl,
+  garmentImageUrl,
+  orgId,
+  category,
+  lookName,
+}: {
+  personImageUrl: string;
+  garmentImageUrl: string;
+  orgId: string;
+  category: "tops" | "bottoms" | "one-pieces";
+  lookName: string;
+}) {
+  const [status, setStatus] = React.useState<"idle" | "loading" | "processing" | "done" | "error">("idle");
+  const [generatedImageUrl, setGeneratedImageUrl] = React.useState("");
+  const [requestId, setRequestId] = React.useState("");
+  const [errorMessage, setErrorMessage] = React.useState("");
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    if (!personImageUrl || !garmentImageUrl) {
+      setStatus("idle");
+      setGeneratedImageUrl("");
+      setRequestId("");
+      setErrorMessage("");
+      return;
+    }
+
+    const start = async () => {
+      setStatus("loading");
+      setErrorMessage("");
+      setGeneratedImageUrl("");
+
+      try {
+        const response = await fetch("/api/tryon/auto", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            person_image_url: personImageUrl,
+            garment_image_url: garmentImageUrl,
+            org_id: orgId,
+            category,
+          }),
+        });
+
+        const payload = (await response.json().catch(() => null)) as
+          | { status?: string; generated_image_url?: string; request_id?: string; error?: string }
+          | null;
+
+        if (cancelled) return;
+
+        if (!response.ok) {
+          throw new Error(payload?.error || "Falha ao iniciar try-on");
+        }
+
+        if (payload?.generated_image_url) {
+          setStatus("done");
+          setGeneratedImageUrl(payload.generated_image_url);
+          return;
+        }
+
+        if (payload?.request_id) {
+          setStatus("processing");
+          setRequestId(payload.request_id);
+          return;
+        }
+
+        throw new Error("Resposta invalida do try-on");
+      } catch (error) {
+        if (cancelled) return;
+        setStatus("error");
+        setErrorMessage(error instanceof Error ? error.message : "Falha no try-on");
+      }
+    };
+
+    void start();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [personImageUrl, garmentImageUrl, orgId, category]);
+
+  React.useEffect(() => {
+    if (status !== "processing" || !requestId) return;
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const poll = async () => {
+      try {
+        const params = new URLSearchParams({
+          request_id: requestId,
+          org_id: orgId,
+        });
+        const response = await fetch(`/api/tryon/auto?${params.toString()}`, { cache: "no-store" });
+        const payload = (await response.json().catch(() => null)) as
+          | { status?: string; generated_image_url?: string; error?: string }
+          | null;
+
+        if (cancelled) return;
+
+        if (!response.ok) {
+          throw new Error(payload?.error || "Falha ao consultar try-on");
+        }
+
+        if (payload?.status === "completed" && payload.generated_image_url) {
+          setStatus("done");
+          setGeneratedImageUrl(payload.generated_image_url);
+          return;
+        }
+
+        if (payload?.status === "failed") {
+          setStatus("error");
+          setErrorMessage("Venus nao conseguiu gerar esse look agora.");
+          return;
+        }
+
+        timer = setTimeout(() => {
+          void poll();
+        }, 2000);
+      } catch {
+        if (cancelled) return;
+        timer = setTimeout(() => {
+          void poll();
+        }, 2500);
+      }
+    };
+
+    void poll();
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [status, requestId, orgId]);
+
+  if (!personImageUrl || !garmentImageUrl) {
+    return (
+      <div className="overflow-hidden rounded-[22px] border border-white/8 bg-white/[0.02] p-4">
+        <div className="rounded-[18px] border border-dashed border-white/10 bg-black/30 px-4 py-10 text-center">
+          <Text className="text-[10px] font-bold uppercase tracking-[0.34em] text-[#D4AF37]">Try-on automatico</Text>
+          <Text className="mt-2 text-sm text-white/55">A Venus vai mostrar o try-on assim que houver foto do cliente e do look.</Text>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "done" && generatedImageUrl) {
+    return (
+      <div className="overflow-hidden rounded-[22px] border border-white/8 bg-white/[0.02]">
+        <img src={generatedImageUrl} alt={`Try-on de ${lookName}`} className="h-auto w-full object-cover" />
+      </div>
+    );
+  }
+
+  if (status === "error") {
+    return (
+      <div className="overflow-hidden rounded-[22px] border border-white/8 bg-white/[0.02] p-4">
+        <div className="rounded-[18px] border border-white/10 bg-black/30 px-4 py-10 text-center">
+          <Text className="text-[10px] font-bold uppercase tracking-[0.34em] text-[#D4AF37]">Try-on automatico</Text>
+          <Text className="mt-2 text-sm text-white/55">{errorMessage || "A Venus vai tentar novamente em breve."}</Text>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-[22px] border border-white/8 bg-white/[0.02] p-4">
+      <div className="flex min-h-[16rem] flex-col items-center justify-center rounded-[18px] border border-white/10 bg-black/30 px-4 py-10 text-center">
+        <Loader2 className="h-6 w-6 animate-spin text-[#D4AF37]" />
+        <Text className="mt-3 text-[10px] font-bold uppercase tracking-[0.34em] text-[#D4AF37]">
+          Venus gerando seu look...
+        </Text>
+        <Text className="mt-2 max-w-[18rem] text-sm text-white/55">
+          {status === "processing" ? "A imagem esta em processamento. Assim que ficar pronta, ela aparece aqui." : "Estamos montando o try-on agora."}
+        </Text>
+      </div>
+    </div>
+  );
+}
+
 function ResultDashboardContent() {
   const searchParams = useSearchParams();
   const isSaved = searchParams.get("saved") === "true";
@@ -32,7 +227,9 @@ function ResultDashboardContent() {
   const hardCapOperation = id?.startsWith("HARD_CAP_BLOCKED") ? id.split(":")[1] || "saved_result_generation" : null;
   const tenantBlockReason = id?.startsWith("TENANT_BLOCKED") ? id.split(":")[1] || "tenant_not_found" : null;
   const { data: onboardingData } = useOnboarding();
+  const { userPhoto } = useUserImage();
   const [tenantContext, setTenantContext] = React.useState<{
+    orgId?: string | null;
     whatsappNumber?: string | null;
     orgSlug?: string | null;
     branchName?: string | null;
@@ -61,6 +258,7 @@ function ResultDashboardContent() {
           analysis?: VisualAnalysisPayload | null;
           finalResult?: unknown;
           tenant?: {
+            orgId?: string | null;
             whatsappNumber?: string | null;
             orgSlug?: string | null;
             branchName?: string | null;
@@ -104,6 +302,8 @@ function ResultDashboardContent() {
 
   const featuredShareLook = rankedLooks?.[0] || surface.looks?.[0];
   const result = React.useMemo(() => ({ looks: surface.looks }), [surface.looks]);
+  const tryOnPersonImage = userPhoto || onboardingData.scanner.bodyPhoto || onboardingData.scanner.facePhoto || "";
+  const resolvedOrgId = tenantContext?.orgId || tenantContext?.orgSlug || "";
   const profileSignal = (
     visualAnalysis?.keySignals?.length
       ? visualAnalysis.keySignals.slice(0, 3)
@@ -460,114 +660,131 @@ function ResultDashboardContent() {
               paddingLeft: "20px",
             }}
           >
-            CURADORIA PARA VOCÊ
+            CURADORIA PARA VOCE
           </p>
           <div style={{ display: "flex", flexDirection: "column", gap: "16px", padding: "0 20px" }}>
-            {result?.looks?.map((look: any, i: number) => (
-              <div
-                key={i}
-                style={{
-                  background: "#111",
-                  border: "0.5px solid #222",
-                  borderRadius: "12px",
-                  overflow: "hidden",
-                }}
-              >
+            {result?.looks?.map((look: LookData, i: number) => {
+              const primaryItem = look.items?.[0] as (LookData["items"][number] & { image_url?: string }) | undefined;
+              const previewImageUrl = primaryItem?.photoUrl || primaryItem?.image_url || "";
+              const category = inferTryOnCategory(look, primaryItem);
+
+              return (
                 <div
+                  key={look.id}
                   style={{
-                    padding: "10px 14px",
-                    borderBottom: "0.5px solid #1a1a1a",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
+                    background: "#111",
+                    border: "0.5px solid #222",
+                    borderRadius: "12px",
+                    overflow: "hidden",
                   }}
                 >
-                  <span style={{ fontSize: "13px", fontWeight: 600, color: "#f0ece4" }}>{look.name || `Look ${i + 1}`}</span>
-                  <span
+                  <div
                     style={{
-                      fontSize: "8px",
-                      padding: "2px 8px",
-                      borderRadius: "20px",
-                      background: "#1a1200",
-                      border: "0.5px solid #C9A84C",
-                      color: "#C9A84C",
-                      fontFamily: "monospace",
-                      letterSpacing: "1px",
+                      padding: "10px 14px",
+                      borderBottom: "0.5px solid #1a1a1a",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
                     }}
                   >
-                    {i === 0 ? "BASE" : i === 1 ? "APOIO" : "DESTAQUE"}
-                  </span>
-                </div>
-                <div style={{ padding: "12px 14px" }}>
-                  {look.items?.slice(0, 2).map((item: any, j: number) => (
-                    <div
-                      key={j}
+                    <span style={{ fontSize: "13px", fontWeight: 600, color: "#f0ece4" }}>{look.name || `Look ${i + 1}`}</span>
+                    <span
                       style={{
-                        display: "flex",
-                        gap: "10px",
-                        alignItems: "flex-start",
-                        marginBottom: j === 0 ? "10px" : "0",
+                        fontSize: "8px",
+                        padding: "2px 8px",
+                        borderRadius: "20px",
+                        background: "#1a1200",
+                        border: "0.5px solid #C9A84C",
+                        color: "#C9A84C",
+                        fontFamily: "monospace",
+                        letterSpacing: "1px",
                       }}
                     >
-                      {item.image_url || item.photoUrl ? (
-                        <img
-                          src={item.image_url || item.photoUrl}
-                          alt={item.name}
-                          style={{
-                            width: "80px",
-                            height: "100px",
-                            objectFit: "cover",
-                            borderRadius: "8px",
-                            flexShrink: 0,
-                          }}
-                        />
-                      ) : (
-                        <div
-                          style={{
-                            width: "80px",
-                            height: "100px",
-                            background: "#1a1a1a",
-                            borderRadius: "8px",
-                            border: "0.5px solid #222",
-                            flexShrink: 0,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            fontSize: "20px",
-                          }}
-                        >
-                          👗
+                      {i === 0 ? "BASE" : i === 1 ? "APOIO" : "DESTAQUE"}
+                    </span>
+                  </div>
+
+                  <div style={{ padding: "12px 14px" }}>
+                    <AutoTryOnPreview
+                      personImageUrl={tryOnPersonImage}
+                      garmentImageUrl={previewImageUrl}
+                      orgId={resolvedOrgId}
+                      category={category}
+                      lookName={look.name}
+                    />
+                  </div>
+
+                  <div style={{ padding: "0 14px 14px" }}>
+                    {look.items?.slice(0, 2).map((item: LookData["items"][number], j: number) => (
+                      <div
+                        key={item.id || j}
+                        style={{
+                          display: "flex",
+                          gap: "10px",
+                          alignItems: "flex-start",
+                          marginBottom: j === 0 ? "10px" : "0",
+                        }}
+                      >
+                        {item.photoUrl ? (
+                          <img
+                            src={item.photoUrl}
+                            alt={item.name}
+                            style={{
+                              width: "80px",
+                              height: "100px",
+                              objectFit: "cover",
+                              borderRadius: "8px",
+                              flexShrink: 0,
+                            }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              width: "80px",
+                              height: "100px",
+                              background: "#1a1a1a",
+                              borderRadius: "8px",
+                              border: "0.5px solid #222",
+                              flexShrink: 0,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontSize: "20px",
+                            }}
+                          >
+                            👗
+                          </div>
+                        )}
+                        <div style={{ flex: 1 }}>
+                          <p style={{ fontSize: "12px", fontWeight: 500, color: "#f0ece4", marginBottom: "4px" }}>
+                            {item.name || "Peca selecionada"}
+                          </p>
+                          <p style={{ fontSize: "11px", color: "#666", marginBottom: "8px" }}>
+                            {item.contextOfUse || item.premiumTitle || "Selecionada para o seu perfil"}
+                          </p>
+                          <a
+                            href={`https://wa.me/5511967011133?text=Oi! Tenho interesse no look ${look.name || ""}, na peca ${item.name || ""}`}
+                            style={{
+                              display: "block",
+                              background: "#C9A84C",
+                              color: "#0a0a0a",
+                              borderRadius: "6px",
+                              padding: "7px 10px",
+                              fontSize: "10px",
+                              fontWeight: 700,
+                              textDecoration: "none",
+                              textAlign: "center",
+                            }}
+                          >
+                            Falar com a Venus →
+                          </a>
                         </div>
-                      )}
-                      <div style={{ flex: 1 }}>
-                        <p style={{ fontSize: "12px", fontWeight: 500, color: "#f0ece4", marginBottom: "4px" }}>
-                          {item.name || "Peça selecionada"}
-                        </p>
-                        <p style={{ fontSize: "11px", color: "#666", marginBottom: "8px" }}>
-                          {item.why || "Selecionada para o seu perfil"}
-                        </p>
-                        <a
-                          href={`https://wa.me/5511967011133?text=Oi! Tenho interesse no look ${look.name || ""}, na peça ${item.name || ""}`}
-                          style={{
-                            display: "block",
-                            background: "#C9A84C",
-                            color: "#0a0a0a",
-                            borderRadius: "6px",
-                            padding: "7px 10px",
-                            fontSize: "10px",
-                            fontWeight: 700,
-                            textDecoration: "none",
-                            textAlign: "center",
-                          }}
-                        >
-                          Falar com a Venus →
-                        </a>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
 
@@ -733,3 +950,4 @@ export default function ResultDashboardPage() {
     </Suspense>
   );
 }
+

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { AnimatePresence, motion } from "framer-motion";
 import { SendHorizonal } from "lucide-react";
@@ -35,20 +35,6 @@ type ChatStep =
       kind: "text";
       prompt: string;
       placeholder: string;
-    }
-  | {
-      key: "favoriteColors";
-      kind: "multi";
-      prompt: string;
-      placeholder: string;
-      options: ChoiceOption[];
-    }
-  | {
-      key: "avoidColors";
-      kind: "multi";
-      prompt: string;
-      placeholder: string;
-      options: ChoiceOption[];
     };
 
 type Message = {
@@ -61,8 +47,8 @@ const CHAT_STEPS: ChatStep[] = [
   {
     key: "line",
     kind: "single",
-    prompt: "Antes de tudo — qual linha sustenta sua imagem?",
-    placeholder: "Digite ou toque numa opção.",
+    prompt: "Antes de tudo - qual linha sustenta sua imagem?",
+    placeholder: "Digite ou toque numa opcao.",
     options: [
       { label: "Feminina", value: "Feminina", conversationValue: "feminina" },
       { label: "Masculina", value: "Masculina", conversationValue: "masculina" },
@@ -72,52 +58,25 @@ const CHAT_STEPS: ChatStep[] = [
   {
     key: "imageGoal",
     kind: "single",
-    prompt: "Que leitura você quer que a roupa entregue?",
-    placeholder: "Digite ou toque numa opção.",
+    prompt: "Que leitura voce quer que a roupa entregue?",
+    placeholder: "Digite ou toque numa opcao.",
     options: [
       { label: "Autoridade", value: "Autoridade", conversationValue: "autoridade" },
-      { label: "Elegância", value: "Elegância", conversationValue: "elegância" },
-      { label: "Presença", value: "Presença", conversationValue: "presença" },
+      { label: "Elegancia", value: "Elegancia", conversationValue: "elegancia" },
+      { label: "Presenca", value: "Presenca", conversationValue: "presenca" },
       { label: "Criatividade", value: "Criatividade", conversationValue: "criatividade" },
-      { label: "Discrição sofisticada", value: "Discrição sofisticada", conversationValue: "discrição sofisticada" },
+      { label: "Discricao sofisticada", value: "Discricao sofisticada", conversationValue: "discricao sofisticada" },
     ],
   },
   {
     key: "styleDirection",
     kind: "text",
-    prompt:
-      "Me conta uma coisa — quando você se olha no espelho e pensa 'hoje tá certo', o que você está vestindo?",
+    prompt: "Me conta uma coisa - quando voce se olha no espelho e pensa 'hoje ta certo', o que voce esta vestindo?",
     placeholder: "Escreva sua resposta livre.",
-  },
-  {
-    key: "favoriteColors",
-    kind: "multi",
-    prompt: "Quais cores sustentam melhor sua presença?",
-    placeholder: "Digite ou selecione os chips.",
-    options: [
-      { label: "Neutros", value: "Neutros", conversationValue: "neutros" },
-      { label: "Terrosos", value: "Terrosos", conversationValue: "terrosos" },
-      { label: "Cores frias", value: "Cores frias", conversationValue: "cores frias" },
-      { label: "Cores quentes", value: "Cores quentes", conversationValue: "cores quentes" },
-      { label: "Pastéis", value: "Pastéis", conversationValue: "pastéis" },
-    ],
-  },
-  {
-    key: "avoidColors",
-    kind: "multi",
-    prompt: "E o que você evita — o que enfraquece sua imagem?",
-    placeholder: "Digite ou selecione os chips.",
-    options: [
-      { label: "Neutros", value: "Neutros", conversationValue: "neutros" },
-      { label: "Terrosos", value: "Terrosos", conversationValue: "terrosos" },
-      { label: "Cores frias", value: "Cores frias", conversationValue: "cores frias" },
-      { label: "Cores quentes", value: "Cores quentes", conversationValue: "cores quentes" },
-      { label: "Pastéis", value: "Pastéis", conversationValue: "pastéis" },
-    ],
   },
 ];
 
-const INTRO_MESSAGE = "Oi. Eu sou a Venus Stylist. Vou ler sua presença em cinco perguntas.";
+const INTRO_MESSAGE = "Oi. Eu sou a Venus Stylist. Vou ler sua presença em três perguntas e cruzar sua foto com a colorimetria.";
 const CLOSING_MESSAGE = "Perfeito. Agora vou ler sua presença.";
 
 function normalize(text: string) {
@@ -138,16 +97,6 @@ function findSingleOption(step: Extract<ChatStep, { kind: "single" }>, raw: stri
     const optionVariants = [option.label, option.value, option.conversationValue];
     return optionVariants.some((variant) => normalize(variant) === normalized);
   }) || null;
-}
-
-function findMultiOptions(step: Extract<ChatStep, { kind: "multi" }>, raw: string) {
-  const normalized = normalize(raw);
-  if (!normalized) return [];
-
-  return step.options.filter((option) => {
-    const optionVariants = [option.label, option.value, option.conversationValue];
-    return optionVariants.some((variant) => normalized.includes(normalize(variant)));
-  });
 }
 
 function TypingBubble() {
@@ -237,7 +186,6 @@ function ChatContent() {
   const [activeStepIndex, setActiveStepIndex] = useState<number | null>(null);
   const [isTyping, setIsTyping] = useState(true);
   const [inputValue, setInputValue] = useState("");
-  const [selectedValues, setSelectedValues] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isFinishing, setIsFinishing] = useState(false);
 
@@ -339,50 +287,6 @@ function ChatContent() {
     }
 
     setInputValue("");
-    setSelectedValues([]);
-    setError(null);
-    setActiveStepIndex(null);
-    scheduleNextStep((activeStepIndex ?? 0) + 1);
-  };
-
-  const commitMultiValues = (values: string[]) => {
-    if (!currentStep || currentStep.kind !== "multi" || isTyping || isFinishing) return;
-    if (values.length === 0) {
-      setError("Escolha ao menos uma opção ou digite uma resposta válida.");
-      return;
-    }
-
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `${currentStep.key}-answer`,
-        role: "client",
-        text: values.join(", "),
-      },
-    ]);
-
-    if (currentStep.key === "favoriteColors") {
-      updateData("colors", { favoriteColors: values.map((value) => {
-        const option = currentStep.options.find((item) => item.label === value || item.value === value || item.conversationValue === value);
-        return option?.value || value;
-      }) });
-      updateConversation({ favoriteColors: values.map((value) => {
-        const option = currentStep.options.find((item) => item.label === value || item.value === value || item.conversationValue === value);
-        return option?.conversationValue || value;
-      }) });
-    } else if (currentStep.key === "avoidColors") {
-      updateData("colors", { avoidColors: values.map((value) => {
-        const option = currentStep.options.find((item) => item.label === value || item.value === value || item.conversationValue === value);
-        return option?.value || value;
-      }) });
-      updateConversation({ avoidColors: values.map((value) => {
-        const option = currentStep.options.find((item) => item.label === value || item.value === value || item.conversationValue === value);
-        return option?.conversationValue || value;
-      }) });
-    }
-
-    setInputValue("");
-    setSelectedValues([]);
     setError(null);
     setActiveStepIndex(null);
     scheduleNextStep((activeStepIndex ?? 0) + 1);
@@ -408,7 +312,6 @@ function ChatContent() {
       ]);
       updateConversation({ styleDirection: trimmed });
       setInputValue("");
-      setSelectedValues([]);
       setError(null);
       setActiveStepIndex(null);
       scheduleNextStep((activeStepIndex ?? 0) + 1);
@@ -424,26 +327,11 @@ function ChatContent() {
       }
 
       if (!typed) {
-        setError("Escolha uma opção ou digite exatamente uma das respostas acima.");
+        setError("Escolha uma opcao ou digite exatamente uma das respostas acima.");
       } else {
-        setError("Não reconheci essa resposta. Use uma das opções acima.");
+        setError("Nao reconheci essa resposta. Use uma das opcoes acima.");
       }
-      return;
     }
-
-    const typed = inputValue.trim();
-    const fromText = typed ? findMultiOptions(currentStep, typed) : [];
-    const values = selectedValues.length > 0 ? selectedValues : fromText.map((option) => option.value);
-    commitMultiValues(values);
-  };
-
-  const toggleMultiChoice = (option: ChoiceOption) => {
-    if (!currentStep || currentStep.kind !== "multi" || isTyping || isFinishing) return;
-
-    setError(null);
-    setSelectedValues((prev) =>
-      prev.includes(option.value) ? prev.filter((value) => value !== option.value) : [...prev, option.value]
-    );
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -453,17 +341,7 @@ function ChatContent() {
     }
   };
 
-  const canSend =
-    !!currentStep &&
-    !isTyping &&
-    !isFinishing &&
-    (currentStep.kind === "text"
-      ? inputValue.trim().length > 0
-      : currentStep.kind === "single"
-        ? Boolean(inputValue.trim())
-        : selectedValues.length > 0 || Boolean(inputValue.trim()));
-
-  const displayedSelected = currentStep?.kind === "multi" ? selectedValues : [];
+  const canSend = !!currentStep && !isTyping && !isFinishing && (currentStep.kind === "text" ? inputValue.trim().length > 0 : Boolean(inputValue.trim()));
 
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden bg-[#0a0a0a] text-white">
@@ -517,10 +395,7 @@ function ChatContent() {
               {currentStep.kind !== "text" ? (
                 <div className="flex flex-wrap gap-2.5">
                   {currentStep.options.map((option) => {
-                    const isSelected =
-                      currentStep.kind === "single"
-                        ? inputValue.trim() === option.value || inputValue.trim() === option.label || inputValue.trim() === option.conversationValue
-                        : displayedSelected.includes(option.value);
+                    const isSelected = inputValue.trim() === option.value || inputValue.trim() === option.label || inputValue.trim() === option.conversationValue;
 
                     return (
                       <ChoiceChip
@@ -528,20 +403,14 @@ function ChatContent() {
                         label={option.label}
                         selected={isSelected}
                         disabled={isTyping || isFinishing}
-                        onClick={() => {
-                          if (currentStep.kind === "single") {
-                            handleChoiceSelect(option);
-                            return;
-                          }
-                          toggleMultiChoice(option);
-                        }}
+                        onClick={() => handleChoiceSelect(option)}
                       />
                     );
                   })}
                 </div>
               ) : (
                 <div className="rounded-[24px] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/48">
-                  Responda em texto livre. A Venus lê o contexto, não só palavras-chave.
+                  Responda em texto livre. A Venus le o contexto, nao so palavras-chave.
                 </div>
               )}
             </div>
@@ -560,7 +429,7 @@ function ChatContent() {
               onKeyDown={handleKeyDown}
               rows={currentStep?.kind === "text" ? 3 : 1}
               disabled={!currentStep || isTyping || isFinishing}
-              placeholder={currentStep?.placeholder || "Aguarde a próxima pergunta."}
+              placeholder={currentStep?.placeholder || "Aguarde a proxima pergunta."}
               className="min-h-14 flex-1 resize-none rounded-[26px] border border-white/10 bg-white/[0.04] px-4 py-4 text-[15px] leading-6 text-white outline-none placeholder:text-white/28 focus:border-[#D4AF37]/35 disabled:cursor-not-allowed disabled:opacity-50"
             />
 
@@ -574,12 +443,6 @@ function ChatContent() {
               <SendHorizonal className="h-4 w-4" />
             </button>
           </div>
-
-          {currentStep?.kind === "multi" ? (
-            <p className="mt-2 text-[11px] text-white/38">
-              Toque em uma ou mais opções e envie. Você também pode digitar a resposta.
-            </p>
-          ) : null}
         </div>
       </div>
     </div>
