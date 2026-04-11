@@ -371,7 +371,7 @@ function ResultDashboardContent() {
           </div>
 
           {featuredShareLook && (
-            <div className="pt-4">
+            <div className="pt-0">
               <SocialShareActions
                 look={featuredShareLook}
                 styleIdentity={surface.hero.dominantStyle}
