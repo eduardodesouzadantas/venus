@@ -3,10 +3,9 @@
 import React, { Suspense, useMemo } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowRight, Activity, Bookmark, BrainCircuit, History, LayoutGrid, PackageCheck, Sparkles, Star, Target, Watch, BookOpen } from "lucide-react";
+import { ArrowRight, Activity, Bookmark, BrainCircuit, History, LayoutGrid, PackageCheck, Sparkles, Target, Watch, BookOpen } from "lucide-react";
 import { Text } from "@/components/ui/Text";
 import { VenusButton } from "@/components/ui/VenusButton";
-import { LookCardSwipeable } from "@/components/ui/LookCardSwipeable";
 import { SavedProfileToast } from "@/components/ui/SavedProfileToast";
 import { SaveResultsModal } from "@/components/onboarding/SaveResultsModal";
 import { SocialShareActions } from "@/components/ui/SocialShareActions";
@@ -14,7 +13,6 @@ import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
 import { getEngagedIds, getStatsSummary } from "@/lib/analytics/tracker";
 import type { BehaviorStatsSummary } from "@/lib/analytics/tracker";
 import type { UserStats } from "@/lib/ai/orchestrator";
-import type { LookData } from "@/types/result";
 import type { VisualAnalysisPayload } from "@/types/visual-analysis";
 import { orchestrateExperience } from "@/lib/ai/orchestrator";
 import { buildResultSurface } from "@/lib/result/surface";
@@ -105,6 +103,7 @@ function ResultDashboardContent() {
   }, [surface.looks, statsSummary, engagedLookIds]);
 
   const featuredShareLook = rankedLooks?.[0] || surface.looks?.[0];
+  const result = React.useMemo(() => ({ looks: surface.looks }), [surface.looks]);
   const profileSignal = (
     visualAnalysis?.keySignals?.length
       ? visualAnalysis.keySignals.slice(0, 3)
@@ -450,43 +449,123 @@ function ResultDashboardContent() {
       </div>
 
       <div className="flex flex-col space-y-6 px-5">
-        <section id="looks" className="order-[0] space-y-6 sm:space-y-8">
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Sparkles className="h-4 w-4 text-slate-300" />
-                <span className="px-2 text-[10px] font-bold uppercase tracking-widest">Looks sugeridos</span>
-              </div>
-              {aiInsight.intentScore > 60 && (
-                <span className="animate-pulse rounded-full bg-red-500/10 px-3 py-1 text-[8px] font-bold uppercase tracking-widest text-red-500">
-                  Intenção alta: prioridade de contato
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3">
-            {surface.lookHierarchy.map((item) => (
-              <div key={item.label} className="rounded-[24px] border border-white/5 bg-white/[0.03] p-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-[9px] font-bold uppercase tracking-widest text-slate-200">{item.label}</span>
-                  <span className="text-[9px] font-bold uppercase tracking-widest text-white/30">{item.title}</span>
+        <section id="looks" style={{ paddingTop: "24px", paddingBottom: "24px" }}>
+          <p
+            style={{
+              fontSize: "10px",
+              fontFamily: "monospace",
+              letterSpacing: "2px",
+              color: "#C9A84C",
+              marginBottom: "16px",
+              paddingLeft: "20px",
+            }}
+          >
+            CURADORIA PARA VOCÊ
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px", padding: "0 20px" }}>
+            {result?.looks?.map((look: any, i: number) => (
+              <div
+                key={i}
+                style={{
+                  background: "#111",
+                  border: "0.5px solid #222",
+                  borderRadius: "12px",
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    padding: "10px 14px",
+                    borderBottom: "0.5px solid #1a1a1a",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <span style={{ fontSize: "13px", fontWeight: 600, color: "#f0ece4" }}>{look.name || `Look ${i + 1}`}</span>
+                  <span
+                    style={{
+                      fontSize: "8px",
+                      padding: "2px 8px",
+                      borderRadius: "20px",
+                      background: "#1a1200",
+                      border: "0.5px solid #C9A84C",
+                      color: "#C9A84C",
+                      fontFamily: "monospace",
+                      letterSpacing: "1px",
+                    }}
+                  >
+                    {i === 0 ? "BASE" : i === 1 ? "APOIO" : "DESTAQUE"}
+                  </span>
                 </div>
-                <Text className="mt-2 text-xs leading-relaxed text-white/70">{item.description}</Text>
-              </div>
-            ))}
-          </div>
-
-          <div className="space-y-10 sm:space-y-16">
-            {rankedLooks.map((look: LookData, index: number) => (
-              <div key={look.id} className="relative">
-                {(index === 0 || aiInsight.intensity === "HIGH") && (
-                  <div className="absolute -top-5 left-2 flex items-center gap-2 sm:-top-6">
-                    <Star size={10} className="text-slate-300" />
-                    <span className="text-[8px] font-bold uppercase tracking-widest text-white/40">Este é o look mais coerente com o seu perfil</span>
-                  </div>
-                )}
-                <LookCardSwipeable look={look} strategy={aiInsight.strategy} intensity={aiInsight.intensity} />
+                <div style={{ padding: "12px 14px" }}>
+                  {look.items?.slice(0, 2).map((item: any, j: number) => (
+                    <div
+                      key={j}
+                      style={{
+                        display: "flex",
+                        gap: "10px",
+                        alignItems: "flex-start",
+                        marginBottom: j === 0 ? "10px" : "0",
+                      }}
+                    >
+                      {item.image_url || item.photoUrl ? (
+                        <img
+                          src={item.image_url || item.photoUrl}
+                          alt={item.name}
+                          style={{
+                            width: "80px",
+                            height: "100px",
+                            objectFit: "cover",
+                            borderRadius: "8px",
+                            flexShrink: 0,
+                          }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: "80px",
+                            height: "100px",
+                            background: "#1a1a1a",
+                            borderRadius: "8px",
+                            border: "0.5px solid #222",
+                            flexShrink: 0,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: "20px",
+                          }}
+                        >
+                          👗
+                        </div>
+                      )}
+                      <div style={{ flex: 1 }}>
+                        <p style={{ fontSize: "12px", fontWeight: 500, color: "#f0ece4", marginBottom: "4px" }}>
+                          {item.name || "Peça selecionada"}
+                        </p>
+                        <p style={{ fontSize: "11px", color: "#666", marginBottom: "8px" }}>
+                          {item.why || "Selecionada para o seu perfil"}
+                        </p>
+                        <a
+                          href={`https://wa.me/5511967011133?text=Oi! Tenho interesse no look ${look.name || ""}, na peça ${item.name || ""}`}
+                          style={{
+                            display: "block",
+                            background: "#C9A84C",
+                            color: "#0a0a0a",
+                            borderRadius: "6px",
+                            padding: "7px 10px",
+                            fontSize: "10px",
+                            fontWeight: 700,
+                            textDecoration: "none",
+                            textAlign: "center",
+                          }}
+                        >
+                          Falar com a Venus →
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
