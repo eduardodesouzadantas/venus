@@ -449,7 +449,7 @@ function ResultDashboardContent() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-11 px-5 sm:gap-14 sm:px-6">
+      <div className="flex flex-col space-y-6 px-5">
         <section id="looks" className="order-[0] space-y-6 sm:space-y-8">
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
@@ -465,7 +465,7 @@ function ResultDashboardContent() {
             </div>
           </div>
 
-          <div className="hidden grid-cols-1 gap-3 sm:grid">
+          <div className="grid grid-cols-1 gap-3">
             {surface.lookHierarchy.map((item) => (
               <div key={item.label} className="rounded-[24px] border border-white/5 bg-white/[0.03] p-4">
                 <div className="flex items-center justify-between">
