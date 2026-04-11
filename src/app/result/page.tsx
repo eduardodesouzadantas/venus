@@ -370,23 +370,6 @@ function ResultDashboardContent() {
             </VenusButton>
           </div>
 
-          {featuredShareLook && (
-            <div className="pt-0">
-              <SocialShareActions
-                look={featuredShareLook}
-                styleIdentity={surface.hero.dominantStyle}
-                imageGoal={onboardingData.intent.imageGoal || surface.diagnostic.desiredGoal}
-                essenceLabel={surface.essence.label}
-                essenceSummary={surface.essence.summary}
-                profileSignal={profileSignal}
-                intentScore={aiInsight.intentScore}
-                brandName="Venus Engine"
-                appName="Venus Engine"
-                resultUrl={typeof window !== "undefined" ? window.location.href : undefined}
-              />
-            </div>
-          )}
-
           <div className="rounded-[30px] border border-white/6 bg-white/[0.03] p-4 sm:rounded-[34px] sm:p-5">
             <div className="flex items-start justify-between gap-4">
               <div className="space-y-2">
@@ -466,53 +449,8 @@ function ResultDashboardContent() {
         </div>
       </div>
 
-      <div className="space-y-11 px-5 sm:space-y-14 sm:px-6">
-        <section className="space-y-5 sm:space-y-6">
-          <div className="flex items-center gap-3">
-            <Target className="h-4 w-4 text-slate-300" />
-            <span className="text-[10px] font-bold uppercase tracking-widest">Leitura pessoal</span>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4">
-            <div className="space-y-3 rounded-[28px] border border-white/5 bg-white/[0.03] p-5 sm:rounded-[32px] sm:p-6">
-              <span className="text-[9px] font-bold uppercase tracking-widest text-white/30">O que o perfil pede</span>
-              <Text className="text-[15px] italic text-white/90 sm:text-sm">&quot;{surface.diagnostic.desiredGoal}&quot;</Text>
-            </div>
-            <div className="space-y-3 rounded-[28px] border border-white/8 bg-white/[0.03] p-5 sm:rounded-[32px] sm:p-6">
-              <span className="text-[9px] font-bold uppercase tracking-widest text-slate-300">Como o resultado fecha o gap</span>
-              <Text className="text-[15px] text-white/90 sm:text-sm">{surface.diagnostic.gapSolution}</Text>
-            </div>
-          </div>
-        </section>
-
-        <section className="space-y-5 sm:space-y-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <LayoutGrid className="h-4 w-4 text-white/40" />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Sua paleta pessoal</span>
-            </div>
-            <span className="text-[9px] font-bold uppercase tracking-widest text-slate-300">{surface.palette.family}</span>
-          </div>
-
-          <div className="flex h-[4.5rem] gap-2.5 overflow-hidden rounded-[28px] sm:h-20 sm:gap-3 sm:rounded-[32px]">
-            {surface.palette.colors.map((color, index) => (
-              <div key={index} className="group relative flex-1 transition-all hover:flex-[2]" style={{ backgroundColor: color.hex }}>
-                <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-                  <span className="text-[8px] font-bold uppercase tracking-widest text-white">{color.name}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="space-y-4">
-          <div className="rounded-[28px] border border-white/5 bg-white/[0.03] p-5 sm:rounded-[32px] sm:p-6">
-            <Text className="text-[9px] font-bold uppercase tracking-widest text-white/30">Por que isso combina com você</Text>
-            <Text className="mt-2 text-[15px] leading-relaxed text-white/80 sm:text-sm">{surface.palette.description}</Text>
-          </div>
-        </section>
-
-        <section id="looks" className="space-y-6 sm:space-y-8">
+      <div className="flex flex-col gap-11 px-5 sm:gap-14 sm:px-6">
+        <section id="looks" className="order-[0] space-y-6 sm:space-y-8">
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -554,7 +492,69 @@ function ResultDashboardContent() {
           </div>
         </section>
 
-        <section className="space-y-6 sm:space-y-8">
+        {featuredShareLook && (
+          <div className="order-[10]">
+            <SocialShareActions
+              look={featuredShareLook}
+              styleIdentity={surface.hero.dominantStyle}
+              imageGoal={onboardingData.intent.imageGoal || surface.diagnostic.desiredGoal}
+              essenceLabel={surface.essence.label}
+              essenceSummary={surface.essence.summary}
+              profileSignal={profileSignal}
+              intentScore={aiInsight.intentScore}
+              brandName="Venus Engine"
+              appName="Venus Engine"
+              resultUrl={typeof window !== "undefined" ? window.location.href : undefined}
+            />
+          </div>
+        )}
+
+        <section className="order-[20] space-y-5 sm:space-y-6">
+          <div className="flex items-center gap-3">
+            <Target className="h-4 w-4 text-slate-300" />
+            <span className="text-[10px] font-bold uppercase tracking-widest">Leitura pessoal</span>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4">
+            <div className="space-y-3 rounded-[28px] border border-white/5 bg-white/[0.03] p-5 sm:rounded-[32px] sm:p-6">
+              <span className="text-[9px] font-bold uppercase tracking-widest text-white/30">O que o perfil pede</span>
+              <Text className="text-[15px] italic text-white/90 sm:text-sm">&quot;{surface.diagnostic.desiredGoal}&quot;</Text>
+            </div>
+            <div className="space-y-3 rounded-[28px] border border-white/8 bg-white/[0.03] p-5 sm:rounded-[32px] sm:p-6">
+              <span className="text-[9px] font-bold uppercase tracking-widest text-slate-300">Como o resultado fecha o gap</span>
+              <Text className="text-[15px] text-white/90 sm:text-sm">{surface.diagnostic.gapSolution}</Text>
+            </div>
+          </div>
+        </section>
+
+        <section className="order-[30] space-y-5 sm:space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <LayoutGrid className="h-4 w-4 text-white/40" />
+              <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Sua paleta pessoal</span>
+            </div>
+            <span className="text-[9px] font-bold uppercase tracking-widest text-slate-300">{surface.palette.family}</span>
+          </div>
+
+          <div className="flex h-[4.5rem] gap-2.5 overflow-hidden rounded-[28px] sm:h-20 sm:gap-3 sm:rounded-[32px]">
+            {surface.palette.colors.map((color, index) => (
+              <div key={index} className="group relative flex-1 transition-all hover:flex-[2]" style={{ backgroundColor: color.hex }}>
+                <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+                  <span className="text-[8px] font-bold uppercase tracking-widest text-white">{color.name}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="order-[40] space-y-4">
+          <div className="rounded-[28px] border border-white/5 bg-white/[0.03] p-5 sm:rounded-[32px] sm:p-6">
+            <Text className="text-[9px] font-bold uppercase tracking-widest text-white/30">Por que isso combina com você</Text>
+            <Text className="mt-2 text-[15px] leading-relaxed text-white/80 sm:text-sm">{surface.palette.description}</Text>
+          </div>
+        </section>
+
+        <section className="order-[50] space-y-6 sm:space-y-8">
           <div className="flex items-center gap-3">
             <PackageCheck className="h-4 w-4 text-white/40" />
             <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Como o look te favorece</span>
@@ -575,7 +575,7 @@ function ResultDashboardContent() {
           </div>
         </section>
 
-        <section className="space-y-5 sm:space-y-6">
+        <section className="order-[60] space-y-5 sm:space-y-6">
           <div className="flex items-center gap-3">
             <History className="h-4 w-4 text-red-500/40" />
             <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">O que evitar</span>
@@ -590,7 +590,7 @@ function ResultDashboardContent() {
           </div>
         </section>
 
-        <div className="flex flex-col items-center space-y-3 pb-10 pt-14 text-center sm:space-y-4 sm:pt-20">
+        <div className="order-[70] flex flex-col items-center space-y-3 pb-10 pt-14 text-center sm:space-y-4 sm:pt-20">
           <Text className="text-[9px] font-bold uppercase tracking-[0.5em] text-white/20">{surface.footerLabel}</Text>
           <Text className="text-[10px] font-bold uppercase tracking-[0.28em] text-white/40 sm:tracking-[0.35em]">
             Seu próximo passo já está acima: WhatsApp, salvar ou compartilhar os looks.
