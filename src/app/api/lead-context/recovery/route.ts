@@ -81,21 +81,37 @@ export async function GET(request: NextRequest) {
         .maybeSingle();
 
       if (recentLead) {
-        const { data: recentContext } = await supabase
-          .from("lead_context")
-          .select("*")
-          .eq("org_id", resolvedOrgId)
-          .eq("user_id", recentLead.id)
-          .maybeSingle();
+        try {
+          const { data: recentContext, error: recentContextError } = await supabase
+            .from("lead_context")
+            .select("*")
+            .eq("org_id", resolvedOrgId)
+            .eq("user_id", recentLead.id)
+            .maybeSingle();
 
-        if (recentContext) {
-          return NextResponse.json({
-            ok: true,
-            recovered: true,
+          if (recentContextError) {
+            console.warn("[LEAD_CONTEXT][RECOVERY] recent context unavailable", {
+              resultId,
+              resolvedOrgId,
+              error: recentContextError,
+            });
+          }
+
+          if (recentContext) {
+            return NextResponse.json({
+              ok: true,
+              recovered: true,
+              resolvedOrgId,
+              lastTryOn: recentContext.last_tryon,
+              analysis: recentContext.style_profile,
+              tenant: recentContext.profile_data,
+            });
+          }
+        } catch (error) {
+          console.warn("[LEAD_CONTEXT][RECOVERY] fallback context lookup failed", {
+            resultId,
             resolvedOrgId,
-            lastTryOn: recentContext.last_tryon,
-            analysis: recentContext.style_profile,
-            tenant: recentContext.profile_data,
+            error,
           });
         }
       }

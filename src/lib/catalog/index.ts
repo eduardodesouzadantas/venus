@@ -1,5 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
-import { resolveCurrentMerchantOrg } from "@/lib/tenant/core";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export interface Product {
   id: string;
@@ -30,19 +29,14 @@ export interface Product {
 }
 
 export async function getB2BProducts(orgId?: string | null): Promise<Product[]> {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-    return [];
-  }
-
   try {
-    const supabase = await createClient();
-    const resolvedOrgId = orgId || (await resolveCurrentMerchantOrg(supabase)).org?.id || null;
-
+    const resolvedOrgId = (orgId || "").trim();
     if (!resolvedOrgId) {
       return [];
     }
 
-    const { data, error } = await supabase
+    const admin = createAdminClient();
+    const { data, error } = await admin
       .from("products")
       .select("*")
       .eq("org_id", resolvedOrgId)
@@ -55,7 +49,7 @@ export async function getB2BProducts(orgId?: string | null): Promise<Product[]> 
 
     return (data || []) as Product[];
   } catch (err) {
-    console.warn("Skipping DB Fetch due to network layer failure", err);
+    console.warn("Skipping DB Fetch due to product catalog failure", err);
     return [];
   }
 }

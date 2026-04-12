@@ -39,13 +39,6 @@ export default function ProcessingPage() {
     isGenerating.current = true;
     setError(null);
 
-    const strippedData = { ...data };
-    strippedData.scanner = {
-      ...data.scanner,
-      facePhoto: data.scanner.facePhoto ? "Foto enviada (frontend)" : "",
-      bodyPhoto: data.scanner.bodyPhoto ? "Foto enviada (frontend)" : "",
-    };
-
     let cancelled = false;
 
     async function persistAndNavigate() {
@@ -56,7 +49,7 @@ export default function ProcessingPage() {
           orgSlug: data?.tenant?.orgSlug || null,
         });
 
-        const dbReferenceId = await processAndPersistLead(strippedData);
+        const dbReferenceId = await processAndPersistLead(data);
         console.info("[PROCESSING] processAndPersistLead returned", { dbReferenceId });
 
         if (!isValidResultId(dbReferenceId)) {

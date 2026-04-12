@@ -85,6 +85,26 @@ const asRecord = (value: unknown): Record<string, unknown> | null => {
 
 const asArray = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
 
+function isMissingLeadContextTableError(error: unknown) {
+  const code = typeof error === "object" && error && "code" in error ? String((error as { code?: unknown }).code || "") : "";
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "object" && error && "message" in error
+        ? String((error as { message?: unknown }).message || "")
+        : typeof error === "string"
+          ? error
+          : "";
+
+  return (
+    code === "PGRST205" ||
+    code === "42P01" ||
+    message.includes("Could not find the table 'public.lead_context' in the schema cache") ||
+    message.includes("permission denied for schema tenant") ||
+    message.includes("lead_context")
+  );
+}
+
 const INTENT_SCORE_DELTAS: Record<LeadIntentEventType, number> = {
   tryon_generated: 2,
   variation_requested: 1,
@@ -235,7 +255,18 @@ export async function loadLeadContextByIdentity(supabase: SupabaseClient, input:
     .eq("user_id", lead.id)
     .maybeSingle();
 
-  if (error) throw error;
+  if (error) {
+    if (isMissingLeadContextTableError(error)) {
+      console.warn("[LEAD_CONTEXT] table unavailable, continuing without context", {
+        orgId: lead.org_id,
+        leadId: lead.id,
+        error,
+      });
+      return { lead, context: null as LeadContextRecord | null };
+    }
+
+    throw error;
+  }
 
   return { lead, context: (data as LeadContextRecord | null) ?? null };
 }
@@ -268,7 +299,7 @@ export async function upsertLeadContext(supabase: SupabaseClient, input: LeadCon
 export async function upsertLeadContextByLeadId(
   supabase: SupabaseClient,
   input: { orgId: string; leadId: string } & LeadContextPatch
-) {
+): Promise<LeadContextRecord | null> {
   const orgId = normalizeText(input.orgId);
   const leadId = normalizeText(input.leadId);
 
@@ -283,7 +314,18 @@ export async function upsertLeadContextByLeadId(
     .eq("user_id", leadId)
     .maybeSingle();
 
-  if (existingError) throw existingError;
+  if (existingError) {
+    if (isMissingLeadContextTableError(existingError)) {
+      console.warn("[LEAD_CONTEXT] table unavailable, skipping sync", {
+        orgId,
+        leadId,
+        error: existingError,
+      });
+      return null;
+    }
+
+    throw existingError;
+  }
 
   const current = (existing as LeadContextRecord | null) ?? null;
   const currentTryOnCount =
@@ -334,7 +376,18 @@ export async function upsertLeadContextByLeadId(
     .select("*")
     .single();
 
-  if (error) throw error;
+  if (error) {
+    if (isMissingLeadContextTableError(error)) {
+      console.warn("[LEAD_CONTEXT] table unavailable during sync, skipping", {
+        orgId,
+        leadId,
+        error,
+      });
+      return null;
+    }
+
+    throw error;
+  }
   return data as LeadContextRecord;
 }
 
