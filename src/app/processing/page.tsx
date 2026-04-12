@@ -35,6 +35,8 @@ export default function ProcessingPage() {
   const [phaseIndex, setPhaseIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [retryTick, setRetryTick] = useState(0);
+  const [savedResultId, setSavedResultId] = useState<string | null>(null);
+  const [status, setStatus] = useState<"processing" | "completed">("processing");
   const isGenerating = useRef(false);
 
   useEffect(() => {
@@ -55,6 +57,8 @@ export default function ProcessingPage() {
 
     async function persistAndNavigate() {
       try {
+        setStatus("processing");
+        setSavedResultId(null);
         console.info("[PROCESSING] persistence flow started", {
           hasOnboardingData: Boolean(data),
           orgId: data?.tenant?.orgId || null,
@@ -103,7 +107,9 @@ export default function ProcessingPage() {
           throw new Error("RESULT_PERSISTENCE_MISSING_ORG");
         }
 
-        if (!cancelled) {
+        if (!cancelled && dbReferenceId && status === "processing" && savedResultId !== dbReferenceId) {
+          setSavedResultId(dbReferenceId);
+          setStatus("completed");
           router.push(`/result?id=${dbReferenceId}`);
         }
       } catch (e) {
@@ -123,7 +129,7 @@ export default function ProcessingPage() {
     return () => {
       cancelled = true;
     };
-  }, [data, router, retryTick]);
+  }, [data, router, retryTick, status]);
 
   const handleRetry = () => {
     setError(null);
