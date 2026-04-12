@@ -4,9 +4,15 @@ export interface ColorimetryAnalysisResponse {
   skinTone: string;
   undertone: string;
   contrast: string;
+  colorSeason: string;
+  colorArchetype: string;
   favoriteColors: string[];
   avoidColors: string[];
-  colorArchetype: string;
+  faceShape: string;
+  idealNeckline: string;
+  idealFit: string;
+  idealFabrics: string[];
+  avoidFabrics: string[];
   justification: string;
 }
 
@@ -36,7 +42,6 @@ export async function analyzeColorimetry(imageBase64: string): Promise<Colorimet
     typeof payload.skinTone !== "string" ||
     typeof payload.undertone !== "string" ||
     typeof payload.contrast !== "string" ||
-    typeof payload.colorArchetype !== "string" ||
     typeof payload.justification !== "string" ||
     !isColorArray(payload.favoriteColors) ||
     !isColorArray(payload.avoidColors)
@@ -48,9 +53,15 @@ export async function analyzeColorimetry(imageBase64: string): Promise<Colorimet
     skinTone: payload.skinTone,
     undertone: payload.undertone,
     contrast: payload.contrast,
+    colorSeason: payload.colorSeason ?? "",
+    colorArchetype: payload.colorArchetype ?? "",
     favoriteColors: payload.favoriteColors,
     avoidColors: payload.avoidColors,
-    colorArchetype: payload.colorArchetype,
+    faceShape: payload.faceShape ?? "",
+    idealNeckline: payload.idealNeckline ?? "",
+    idealFit: payload.idealFit ?? "",
+    idealFabrics: isColorArray(payload.idealFabrics) ? payload.idealFabrics : [],
+    avoidFabrics: isColorArray(payload.avoidFabrics) ? payload.avoidFabrics : [],
     justification: payload.justification,
   };
 }

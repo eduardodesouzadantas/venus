@@ -14,6 +14,17 @@ export type VenusConversationMessage = {
   created_at?: string | null;
 };
 
+export type WardrobeItem = {
+  id: string;
+  name: string | null;
+  category: string | null;
+  color: string | null;
+  season: string | null;
+  image_url: string | null;
+  analysis: Record<string, unknown>;
+  created_at: string;
+};
+
 export type VenusContext = {
   orgId: string;
   orgSlug: string;
@@ -35,4 +46,5 @@ export type VenusContext = {
   catalogSummary: string;
   history: VenusConversationMessage[];
   state: VenusIntent;
+  wardrobe?: WardrobeItem[];
 };

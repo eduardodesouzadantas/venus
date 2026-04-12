@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { revalidatePath } from "next/cache";
 import { resolveAgencySession, updateAgencyOrgState } from "@/lib/agency";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,29 @@ function readRedirect(value: FormDataEntryValue | null) {
   const raw = typeof value === "string" ? value.trim() : "";
   if (!raw.startsWith("/agency")) return "/agency";
   return raw;
+}
+
+export async function PATCH(request: NextRequest, context: RouteContext) {
+  try {
+    const { orgId } = await context.params;
+    await resolveAgencySession();
+    const body = (await request.json()) as { commission_active?: boolean; commission_rate?: number };
+    const admin = createAdminClient();
+    const updates: Record<string, unknown> = {};
+    if (typeof body.commission_active === "boolean") updates.commission_active = body.commission_active;
+    if (typeof body.commission_rate === "number") updates.commission_rate = body.commission_rate;
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
+    }
+    const { error } = await admin.from("orgs").update(updates).eq("id", orgId);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    revalidatePath(`/agency/orgs/${orgId}`);
+    revalidatePath(`/agency/merchants/${orgId}`);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Update failed";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {

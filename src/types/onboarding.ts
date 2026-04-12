@@ -6,6 +6,22 @@ export interface OnboardingConversationData {
   avoidColors: string[];
 }
 
+export interface ColorimetryData {
+  skinTone: string;
+  undertone: string;
+  contrast: string;
+  colorSeason: string;
+  colorArchetype: string;
+  favoriteColors: string[];
+  avoidColors: string[];
+  faceShape: string;
+  idealNeckline: string;
+  idealFit: string;
+  idealFabrics: string[];
+  avoidFabrics: string[];
+  justification: string;
+}
+
 export interface OnboardingData {
   intent: {
     styleDirection: "Masculina" | "Feminina" | "Neutra" | "";
@@ -35,6 +51,7 @@ export interface OnboardingData {
     bodyPhoto: string; // Base64 or ObjectURL string stub
     skipped: boolean;
   };
+  colorimetry?: ColorimetryData;
   contact?: {
     name: string;
     phone: string;

@@ -37,7 +37,19 @@ function buildHistorySummary(ctx: VenusContext) {
     .join(" | ");
 }
 
+function buildWardrobeSummary(ctx: VenusContext): string {
+  if (!ctx.wardrobe || ctx.wardrobe.length === 0) return "";
+  const items = ctx.wardrobe.slice(0, 5);
+  return items
+    .map((item) => {
+      const parts = [item.name || "peça", item.category, item.color].filter(Boolean);
+      return `• ${parts.join(" — ")}`;
+    })
+    .join("\n");
+}
+
 function buildSystemPrompt(ctx: VenusContext): string {
+  const wardrobeSummary = buildWardrobeSummary(ctx);
   return `Você é Venus, personal stylist da ${ctx.orgName}.
 Tem 15 anos de experiência em consultoria de imagem.
 
@@ -50,7 +62,11 @@ CONTEXTO DO CLIENTE:
 - Peça de interesse: ${ctx.productName || ctx.look || "não definida"}${ctx.productSize ? ` — Tamanho ${ctx.productSize}` : ""}
 - Estoque: ${ctx.stockSummary}
 - Histórico: ${buildHistorySummary(ctx)}
-- Catálogo: ${ctx.catalogSummary || "sem catálogo relevante"}
+- Catálogo: ${ctx.catalogSummary || "sem catálogo relevante"}${wardrobeSummary ? `\n- GUARDA-ROUPA DO CLIENTE:\n${wardrobeSummary}` : ""}
+
+INSTRUÇÕES SOBRE O GUARDA-ROUPA:
+- Quando relevante, mencione peças do guarda-roupa do cliente para sugerir combinações com produtos da loja.
+- Exemplo: "Vi que você tem um blazer cinza — essa calça slim complementa perfeitamente."
 
 COMO FALAR:
 - Linguagem elegante, direta, emocional — nunca robótica

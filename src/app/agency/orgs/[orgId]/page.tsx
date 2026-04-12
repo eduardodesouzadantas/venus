@@ -26,6 +26,7 @@ import {
   formatOperationalValueRate,
 } from "@/lib/agency/value-summary";
 import { formatOperationalAgeDays } from "@/lib/agency/aging-summary";
+import { CommissionPanel } from "@/components/agency/CommissionPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -1533,6 +1534,10 @@ export default async function AgencyOrgDetailPage({
           ) : (
             <EmptyState title="Sem recomendação" description="Não houve sinais suficientes para propor uma próxima ação nesta janela." />
           )}
+        </SectionShell>
+
+        <SectionShell title="Comissão por Vendas" description="Ative e configure a comissão por vendas desta loja. A Venus Engine registrará automaticamente as comissões confirmadas.">
+          <CommissionPanel orgId={org.id} commissionActive={(org as unknown as Record<string, unknown>).commission_active as boolean | undefined} commissionRate={(org as unknown as Record<string, unknown>).commission_rate as number | undefined} />
         </SectionShell>
       </div>
     </div>

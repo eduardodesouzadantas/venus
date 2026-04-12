@@ -1,12 +1,13 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { OnboardingData, OnboardingConversationData, defaultOnboardingData } from "@/types/onboarding";
+import { OnboardingData, OnboardingConversationData, ColorimetryData, defaultOnboardingData } from "@/types/onboarding";
 
 interface OnboardingContextProps {
   data: OnboardingData;
   updateData: <K extends keyof OnboardingData>(step: K, values: Partial<OnboardingData[K]>) => void;
   updateConversation: (values: Partial<OnboardingConversationData>) => void;
+  setColorimetry: (c: ColorimetryData) => void;
 }
 
 const OnboardingContext = createContext<OnboardingContextProps | undefined>(undefined);
@@ -48,6 +49,7 @@ function mergeOnboardingData(parsed: Partial<OnboardingData>, queryOrgSlug: stri
       ...(parsed.tenant || {}),
       orgSlug: queryOrgSlug || parsed.tenant?.orgSlug,
     },
+    colorimetry: parsed.colorimetry,
   };
 }
 
@@ -115,10 +117,14 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     }));
   };
 
+  const setColorimetry = (c: ColorimetryData) => {
+    setData((prev) => ({ ...prev, colorimetry: c }));
+  };
+
   // if (!isLoaded) return null; foi removido para permitir SSR livre e hidratar na ponta.
 
   return (
-    <OnboardingContext.Provider value={{ data, updateData, updateConversation }}>
+    <OnboardingContext.Provider value={{ data, updateData, updateConversation, setColorimetry }}>
       {children}
     </OnboardingContext.Provider>
   );

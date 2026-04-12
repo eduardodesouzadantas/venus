@@ -11,6 +11,10 @@ const MIGRATIONS = [
   "docs/product_variants.sql",
   "docs/tryon_events.sql",
   "docs/share_system.sql",
+  "docs/campaign_logs.sql",
+  "docs/commission_events.sql",
+  "docs/orgs_commission.sql",
+  "docs/wardrobe.sql",
 ].filter((relativePath) => {
   if (relativePath === "docs/merchant_groups.sql") {
     return true;

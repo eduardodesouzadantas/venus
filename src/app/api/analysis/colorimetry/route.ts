@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 type ColorimetryPayload = {
   image_base64?: string;
   imageDataUrl?: string;
+  imageBase64?: string;
 };
 
 function normalizeText(value: unknown): string {
@@ -34,7 +35,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
 
-  const imageBase64 = normalizeText(body.image_base64 || body.imageDataUrl);
+  const imageBase64 = normalizeText(
+    body.image_base64 || body.imageDataUrl || body.imageBase64
+  );
   if (!imageBase64) {
     return NextResponse.json({ error: "Missing image_base64" }, { status: 400 });
   }
@@ -54,15 +57,29 @@ export async function POST(req: NextRequest) {
         {
           role: "system",
           content:
-            "Voce e uma colorista profissional com 20 anos de experiencia. Analise a foto do rosto e devolva apenas JSON valido. Nao mencione idade, etnia, saude ou outros atributos sensiveis. Foque em pele, subtom, contraste natural, paleta e armonia visual.",
+            "Você é colorista e visagista profissional com 20 anos de experiência. Analise fotos e retorne APENAS JSON válido. Não mencione idade, etnia, saúde ou outros atributos sensíveis. Foque em pele, subtom, contraste natural, paleta, harmonia visual, formato de rosto e orientações de moda.",
         },
         {
           role: "user",
           content: [
             {
               type: "text",
-              text:
-                "Analise esta foto e determine: skinTone (claro, medio, escuro), undertone (frio, quente, neutro), contrast (baixo, medio, alto), favoriteColors (5 cores), avoidColors (3 cores), colorArchetype (Primavera, Verao, Outono, Inverno ou subvariante) e justification (2 frases). Responda APENAS em JSON com as chaves skinTone, undertone, contrast, favoriteColors, avoidColors, colorArchetype e justification.",
+              text: `Analise esta foto e retorne JSON com exatamente estas chaves:
+{
+  "skinTone": "claro|médio|escuro",
+  "undertone": "frio|quente|neutro",
+  "contrast": "baixo|médio|alto",
+  "colorSeason": "nome da estação (ex: Inverno Puro, Verão Suave, Outono Quente, Primavera Clara)",
+  "colorArchetype": "Primavera|Verão|Outono|Inverno ou subvariante",
+  "favoriteColors": ["5 cores que favorecem em português"],
+  "avoidColors": ["3 cores que enfraquecem"],
+  "faceShape": "oval|redondo|quadrado|coração|losango|retangular",
+  "idealNeckline": "decote ideal (ex: Decote em V profundo, Gola estruturada)",
+  "idealFit": "caimento ideal (ex: Slim com ombro estruturado, Fluido e solto)",
+  "idealFabrics": ["3 tecidos que valorizam"],
+  "avoidFabrics": ["2 tecidos que não favorecem"],
+  "justification": "2 frases explicando a leitura visual"
+}`,
             },
             {
               type: "image_url" as const,
@@ -86,9 +103,15 @@ export async function POST(req: NextRequest) {
       skinTone: normalizeText(parsed.skinTone),
       undertone: normalizeText(parsed.undertone),
       contrast: normalizeText(parsed.contrast),
+      colorSeason: normalizeText(parsed.colorSeason),
+      colorArchetype: normalizeText(parsed.colorArchetype),
       favoriteColors: normalizeStringArray(parsed.favoriteColors, 5),
       avoidColors: normalizeStringArray(parsed.avoidColors, 3),
-      colorArchetype: normalizeText(parsed.colorArchetype),
+      faceShape: normalizeText(parsed.faceShape),
+      idealNeckline: normalizeText(parsed.idealNeckline),
+      idealFit: normalizeText(parsed.idealFit),
+      idealFabrics: normalizeStringArray(parsed.idealFabrics, 3),
+      avoidFabrics: normalizeStringArray(parsed.avoidFabrics, 2),
       justification: normalizeText(parsed.justification),
     };
 
@@ -98,13 +121,13 @@ export async function POST(req: NextRequest) {
       !payload.contrast ||
       payload.favoriteColors.length === 0 ||
       payload.avoidColors.length === 0 ||
-      !payload.colorArchetype ||
       !payload.justification
     ) {
       return NextResponse.json({ error: "Invalid AI payload" }, { status: 500 });
     }
 
-    return NextResponse.json(payload);
+    // Also expose under success/colorimetry shape for callers that use that format
+    return NextResponse.json({ ...payload, success: true, colorimetry: payload });
   } catch (error) {
     console.error("[analysis/colorimetry] error:", error);
     return NextResponse.json(

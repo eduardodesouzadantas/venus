@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { VenusContext, VenusConversationMessage } from "./types";
+import type { VenusContext, VenusConversationMessage, WardrobeItem } from "./types";
 
 function normalize(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -152,6 +152,20 @@ export async function loadContext(phone_number: string, org_id: string): Promise
 
   const conversationId = normalize(conversationData?.id);
 
+  let wardrobe: WardrobeItem[] = [];
+  try {
+    const { data } = await admin
+      .from("wardrobe_items")
+      .select("id, name, category, color, season, image_url, analysis, created_at")
+      .eq("client_phone", phone_number)
+      .eq("org_id", org_id)
+      .order("created_at", { ascending: false })
+      .limit(20);
+    wardrobe = (data || []) as WardrobeItem[];
+  } catch {
+    wardrobe = [];
+  }
+
   let messages: VenusConversationMessage[] = [];
   if (conversationId) {
     try {
@@ -255,6 +269,7 @@ export async function loadContext(phone_number: string, org_id: string): Promise
     catalogSummary: catalogLines.join("\n"),
     history: messages,
     state: "curiosidade",
+    wardrobe: wardrobe.length > 0 ? wardrobe : undefined,
   };
 }
 

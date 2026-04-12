@@ -10,7 +10,7 @@ import { analyzeColorimetry } from "@/lib/analysis/colorimetry-client";
 
 export default function FaceScannerPage() {
   const router = useRouter();
-  const { updateData, updateConversation } = useOnboarding();
+  const { updateData, updateConversation, setColorimetry } = useOnboarding();
   const { setUserPhoto } = useUserImage();
 
   const handleFaceCaptured = async (imageData: string) => {
@@ -19,6 +19,7 @@ export default function FaceScannerPage() {
 
     const analysis = await analyzeColorimetry(imageData);
     if (analysis) {
+      setColorimetry(analysis);
       updateData("colors", {
         favoriteColors: analysis.favoriteColors,
         avoidColors: analysis.avoidColors,

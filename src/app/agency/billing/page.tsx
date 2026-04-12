@@ -106,6 +106,42 @@ async function loadRevenueHistory() {
   return (result.data || []) as RevenueHistoryRow[];
 }
 
+type CommissionRow = {
+  org_id: string | null;
+  commission_amount: number | null;
+  confirmed_at: string | null;
+};
+
+type CommissionSummary = {
+  orgId: string;
+  orgName: string;
+  total: number;
+};
+
+async function loadCommissions(orgIds: string[]): Promise<{ total: number; byOrg: CommissionSummary[] }> {
+  if (orgIds.length === 0) return { total: 0, byOrg: [] };
+  const admin = createAdminClient();
+  const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+  const result = await queryWithTimeout(
+    admin
+      .from("commission_events")
+      .select("org_id, commission_amount, confirmed_at")
+      .in("org_id", orgIds)
+      .gte("confirmed_at", firstOfMonth),
+    { data: [], error: null }
+  );
+  if (result.error) return { total: 0, byOrg: [] };
+  const rows = (result.data || []) as CommissionRow[];
+  const map = new Map<string, number>();
+  for (const row of rows) {
+    if (!row.org_id) continue;
+    map.set(row.org_id, (map.get(row.org_id) || 0) + (row.commission_amount || 0));
+  }
+  const total = Array.from(map.values()).reduce((sum, v) => sum + v, 0);
+  const byOrg = Array.from(map.entries()).map(([orgId, orgTotal]) => ({ orgId, orgName: orgId, total: orgTotal }));
+  return { total, byOrg };
+}
+
 export default async function AgencyBillingPage() {
   try {
     await resolveAgencySession();
@@ -117,6 +153,9 @@ export default async function AgencyBillingPage() {
     listAgencyBillingRows({ range: "all" }).catch(() => [] as AgencyBillingRow[]),
     loadRevenueHistory().catch(() => [] as RevenueHistoryRow[]),
   ]);
+
+  const orgIds = rows.map((r) => r.id).filter(Boolean);
+  const commissions = await loadCommissions(orgIds).catch(() => ({ total: 0, byOrg: [] as CommissionSummary[] }));
 
   const activeRows = rows.filter((row) => row.status === "active" && !row.kill_switch);
   const mrrTotal = activeRows.reduce((sum, row) => sum + planPrice(row.plan_id), 0);
@@ -145,6 +184,24 @@ export default async function AgencyBillingPage() {
         <Kpi label="Pendências" value={String(pendingRows.length)} sub="inadimplência, risco ou bloqueio" tone={pendingRows.length ? "amber" : "green"} />
         <Kpi label="Receita operacional 30d" value={formatMoney(revenueTotal)} sub={`custo registrado ${formatMoney(costTotal)}`} tone="gold" />
       </section>
+
+      {commissions.total > 0 && (
+        <section className="border-b border-[#1e2820] bg-[#0a0f0b] px-6 py-5">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="font-mono text-[10px] uppercase tracking-[2px] text-[#6b7d6c]">COMISSÃO POR VENDAS — MÊS ATUAL</p>
+            <p className="font-mono text-lg font-bold text-[#C9A84C]">{formatMoney(commissions.total)}</p>
+          </div>
+          <div className="flex flex-wrap gap-4">
+            {commissions.byOrg.map((item) => (
+              <div key={item.orgId} className="flex items-center gap-2 rounded border border-[#1e2820] bg-[#0f1410] px-3 py-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#C9A84C]" />
+                <span className="font-mono text-xs text-[#e8f0e9]">{item.orgName}</span>
+                <span className="font-mono text-xs font-bold text-[#C9A84C]">{formatMoney(item.total)}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="grid gap-[1px] bg-[#1e2820] lg:grid-cols-[1fr_360px]">
         <div className="space-y-6 bg-[#080c0a] p-6">
