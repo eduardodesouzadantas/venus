@@ -116,6 +116,7 @@ function isReservationExpired(row: ProcessingReservationRow, now = new Date()) {
 }
 
 async function loadProcessingReservation(supabase: SupabaseClient, orgId: string, reservationKey: string) {
+  console.info("[PROCESSING_RESERVATION] lookup start", { orgId, reservationKey });
   const { data, error } = await supabase
     .from("tenant_processing_reservations")
     .select("*")
@@ -124,9 +125,16 @@ async function loadProcessingReservation(supabase: SupabaseClient, orgId: string
     .maybeSingle();
 
   if (error) {
+    console.error("[PROCESSING_RESERVATION] lookup fail", { orgId, reservationKey, error });
     throw error;
   }
 
+  console.info("[PROCESSING_RESERVATION] lookup success", {
+    orgId,
+    reservationKey,
+    found: Boolean(data),
+    status: (data as ProcessingReservationRow | null)?.status || null,
+  });
   return (data as ProcessingReservationRow | null) ?? null;
 }
 
@@ -141,13 +149,19 @@ async function persistProcessingReservation(
     .single();
 
   if (error || !data) {
-    console.error("[PROCESSING_RESERVATION] table write failure", {
+    console.error("[PROCESSING_RESERVATION] table write fail", {
       row,
       error,
     });
     throw new Error(error?.message || "Failed to persist processing reservation");
   }
 
+  console.info("[PROCESSING_RESERVATION] table write success", {
+    orgId: data.org_id || row.org_id || null,
+    reservationKey: data.reservation_key || row.reservation_key || null,
+    status: data.status || null,
+    savedResultId: data.saved_result_id || null,
+  });
   return data as ProcessingReservationRow;
 }
 
@@ -167,9 +181,24 @@ export async function reserveProcessingReservation(
     throw new Error("Missing processing reservation identifiers");
   }
 
+  console.info("[PROCESSING_RESERVATION] reserve start", {
+    orgId,
+    reservationKey,
+    ownerToken,
+    ttlSeconds: normalizeTtlSeconds(input.ttlSeconds),
+  });
+
   const ttlSeconds = normalizeTtlSeconds(input.ttlSeconds);
   const now = new Date();
   const existing = await loadProcessingReservation(supabase, orgId, reservationKey);
+  console.info("[PROCESSING_RESERVATION] reserve loaded", {
+    orgId,
+    reservationKey,
+    found: Boolean(existing),
+    status: existing?.status || null,
+    savedResultId: existing?.saved_result_id || null,
+    expiresAt: existing?.expires_at || null,
+  });
 
   if (existing) {
     if (existing.status === "completed" && existing.saved_result_id) {
@@ -205,6 +234,13 @@ export async function reserveProcessingReservation(
   if (!acquired) {
     throw new Error("Failed to load processing reservation");
   }
+  console.info("[PROCESSING_RESERVATION] reserve acquired", {
+    orgId,
+    reservationKey,
+    status: acquired.status,
+    savedResultId: acquired.saved_result_id,
+    expiresAt: acquired.expires_at,
+  });
   return acquired;
 }
 
@@ -227,6 +263,13 @@ export async function completeProcessingReservation(
 
   const now = new Date();
   const existing = await loadProcessingReservation(supabase, orgId, reservationKey);
+  console.info("[PROCESSING_RESERVATION] complete loaded", {
+    orgId,
+    reservationKey,
+    found: Boolean(existing),
+    status: existing?.status || null,
+    savedResultId: existing?.saved_result_id || null,
+  });
 
   if (!existing) {
     throw new Error("Processing reservation not found");
@@ -260,6 +303,12 @@ export async function completeProcessingReservation(
   if (!completed) {
     throw new Error("Failed to load processing reservation");
   }
+  console.info("[PROCESSING_RESERVATION] complete ok", {
+    orgId,
+    reservationKey,
+    savedResultId: completed.saved_result_id,
+    status: completed.status,
+  });
   return completed;
 }
 
@@ -281,6 +330,13 @@ export async function failProcessingReservation(
 
   const now = new Date();
   const existing = await loadProcessingReservation(supabase, orgId, reservationKey);
+  console.info("[PROCESSING_RESERVATION] fail loaded", {
+    orgId,
+    reservationKey,
+    found: Boolean(existing),
+    status: existing?.status || null,
+    savedResultId: existing?.saved_result_id || null,
+  });
 
   if (!existing) {
     throw new Error("Processing reservation not found");
@@ -314,6 +370,12 @@ export async function failProcessingReservation(
   if (!failed) {
     throw new Error("Failed to load processing reservation");
   }
+  console.info("[PROCESSING_RESERVATION] fail ok", {
+    orgId,
+    reservationKey,
+    status: failed.status,
+    errorMessage: failed.error_message,
+  });
   return failed;
 }
 

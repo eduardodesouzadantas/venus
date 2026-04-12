@@ -110,6 +110,14 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
     const supabase = createAdminClient();
     const startedAtMs = Date.now();
     const explicitOrgSlug = normalizeTenantSlug(userData.tenant?.orgSlug);
+    console.info("[SAVED_RESULTS] processAndPersistLead start", {
+      explicitOrgSlug,
+      hasContact: Boolean(userData.contact?.phone || userData.contact?.email),
+      hasScannerPhotos: Boolean(userData.scanner?.facePhoto || userData.scanner?.bodyPhoto),
+      hasSupabaseUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
+      hasServiceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+      deploymentEnv: process.env.VERCEL_ENV || process.env.NODE_ENV || null,
+    });
     const explicitTenant = explicitOrgSlug ? await fetchTenantBySlug(supabase, explicitOrgSlug) : null;
     const resolvedTenantResult = explicitOrgSlug
       ? explicitTenant?.org && isTenantActive(explicitTenant.org)
@@ -123,6 +131,8 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
         explicitOrgSlug,
         userPhone: userData.contact?.phone || null,
         userEmail: userData.contact?.email || null,
+        hasSupabaseUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
+        hasServiceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
       });
       throw error;
     }
@@ -131,12 +141,21 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
       org: NonNullable<Exclude<typeof resolvedTenantResult, null>["org"]>;
       source: string;
     };
+    console.info("[SAVED_RESULTS] tenant resolved", {
+      orgId: resolvedTenant.org.id,
+      orgSlug: resolvedTenant.org.slug,
+      source: resolvedTenant.source,
+    });
 
     const safeUserData = stripOnboardingBinaryArtifacts(userData);
     const idempotencyKey = createProcessAndPersistLeadIdempotencyKey({
       orgId: resolvedTenant.org.id,
       source: resolvedTenant.source,
       userData: safeUserData,
+    });
+    console.info("[SAVED_RESULTS] idempotency key generated", {
+      orgId: resolvedTenant.org.id,
+      idempotencyKey,
     });
 
     const { data: existingSavedResult, error: existingSavedResultError } = await supabase
@@ -151,6 +170,11 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
     }
 
     if (existingSavedResult?.id) {
+      console.info("[SAVED_RESULTS] existing result reused", {
+        orgId: resolvedTenant.org.id,
+        idempotencyKey,
+        savedResultId: existingSavedResult.id,
+      });
       await recordOperationalTenantEvent(supabase, {
         orgId: resolvedTenant.org.id,
         eventSource: "app",
@@ -174,6 +198,11 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
     }
 
     const processingOwnerToken = createProcessingOwnerToken();
+    console.info("[PROCESSING_RESERVATION] reservation flow start", {
+      orgId: resolvedTenant.org.id,
+      reservationKey: idempotencyKey,
+      ownerToken: processingOwnerToken,
+    });
     const reservedProcessing = await reserveProcessingReservation(supabase, {
       orgId: resolvedTenant.org.id,
       reservationKey: idempotencyKey,
@@ -376,6 +405,10 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
     }
 
     const generationStartedAtMs = Date.now();
+    console.info("[SAVED_RESULTS] generation start", {
+      orgId: resolvedTenant.org.id,
+      reservationKey: idempotencyKey,
+    });
     const visualAnalysis = await generateVisualProfileAnalysis(userData);
     let result: ResultPayload;
     try {
@@ -453,6 +486,10 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
 
     try {
       const persistStartedAtMs = Date.now();
+      console.info("[SAVED_RESULTS] direct persist start", {
+        orgId: resolvedTenant.org.id,
+        reservationKey: idempotencyKey,
+      });
       const persisted = await persistSavedResultAndLead(supabase, {
         orgId: resolvedTenant.org.id,
         idempotencyKey,
@@ -568,6 +605,16 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
         savedResultId: persisted.savedResultId,
       }).catch((reservationError) => {
         console.warn("[SAVED_RESULTS] failed to finalize processing reservation", reservationError);
+      });
+      console.info("[SAVED_RESULTS] processAndPersistLead success", {
+        orgId: resolvedTenant.org.id,
+        reservationKey: idempotencyKey,
+        savedResultId: persisted.savedResultId,
+        leadId: persisted.leadId,
+      });
+      console.info("[SAVED_RESULTS] final result id returned", {
+        orgId: resolvedTenant.org.id,
+        resultId: persisted.savedResultId,
       });
 
       return persisted.savedResultId;

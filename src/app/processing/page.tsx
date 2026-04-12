@@ -50,7 +50,14 @@ export default function ProcessingPage() {
 
     async function persistAndNavigate() {
       try {
+        console.info("[PROCESSING] persistence flow started", {
+          hasOnboardingData: Boolean(data),
+          orgId: data?.tenant?.orgId || null,
+          orgSlug: data?.tenant?.orgSlug || null,
+        });
+
         const dbReferenceId = await processAndPersistLead(strippedData);
+        console.info("[PROCESSING] processAndPersistLead returned", { dbReferenceId });
 
         if (!isValidResultId(dbReferenceId)) {
           throw new Error("RESULT_PERSISTENCE_INVALID_ID");
@@ -60,12 +67,34 @@ export default function ProcessingPage() {
           cache: "no-store",
         });
 
-        if (!validationResponse.ok) {
-          throw new Error("RESULT_PERSISTENCE_LOOKUP_FAILED");
+        const validationText = await validationResponse.text().catch(() => "");
+        let validationPayload: any = null;
+        if (validationText) {
+          try {
+            validationPayload = JSON.parse(validationText);
+          } catch {
+            validationPayload = null;
+          }
         }
-
-        const validationPayload = await validationResponse.json().catch(() => null);
+        if (!validationResponse.ok) {
+          console.error("[PROCESSING] result validation lookup failed", {
+            dbReferenceId,
+            status: validationResponse.status,
+            bodyText: validationText,
+          });
+          throw new Error("RESULT_PERSISTENCE_LOOKUP_FAILED");
+        } else {
+          console.info("[PROCESSING] result validation lookup ok", {
+            dbReferenceId,
+            tenantOrgId: validationPayload?.tenant?.orgId || null,
+          });
+        }
         if (!validationPayload?.tenant?.orgId) {
+          console.error("[PROCESSING] result validation missing tenant org", {
+            dbReferenceId,
+            responseOk: validationResponse.ok,
+            payloadKeys: validationPayload ? Object.keys(validationPayload) : [],
+          });
           throw new Error("RESULT_PERSISTENCE_MISSING_ORG");
         }
 

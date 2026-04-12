@@ -341,8 +341,20 @@ export async function findOrCreateLead(supabase: SupabaseClient, input: LeadUpse
       .single();
 
     if (error || !data) {
+      console.error("[LEADS] update fail", {
+        orgId,
+        savedResultId,
+        leadId: existingLead.id,
+        error,
+      });
       throw new Error(error?.message || "Failed to update lead");
     }
+
+    console.info("[LEADS] update success", {
+      orgId,
+      savedResultId,
+      leadId: existingLead.id,
+    });
 
     return { lead: data as LeadRecord, created: false };
   }
@@ -366,8 +378,19 @@ export async function findOrCreateLead(supabase: SupabaseClient, input: LeadUpse
     .single();
 
   if (error || !data) {
+    console.error("[LEADS] insert fail", {
+      orgId,
+      savedResultId,
+      error,
+    });
     throw new Error(error?.message || "Failed to create lead");
   }
+
+  console.info("[LEADS] insert success", {
+    orgId,
+    savedResultId,
+    leadId: (data as LeadRecord).id,
+  });
 
   return { lead: data as LeadRecord, created: true };
 }
@@ -432,6 +455,14 @@ export async function updateLeadOperationalState(supabase: SupabaseClient, input
     });
 
   try {
+    console.info("[LEADS] updateLeadOperationalState start", {
+      orgId,
+      leadId,
+      status: input.status || null,
+      hasFollowUp,
+      expectedUpdatedAt: input.expectedUpdatedAt || null,
+    });
+
     const { lead: currentLead, error: lookupError } = await getLeadById(supabase, orgId, leadId);
     if (lookupError) {
       throw lookupError;
@@ -440,6 +471,13 @@ export async function updateLeadOperationalState(supabase: SupabaseClient, input
     if (!currentLead) {
       throw new Error("Failed to update lead status");
     }
+
+    console.info("[LEADS] updateLeadOperationalState lead loaded", {
+      orgId,
+      leadId,
+      currentStatus: currentLead.status,
+      currentUpdatedAt: currentLead.updated_at || null,
+    });
 
     const nextStatus = resolveLeadStatus(currentLead.status, input.status);
     const nextFollowUpAt = hasFollowUp ? input.nextFollowUpAt || null : currentLead.next_follow_up_at;
@@ -476,6 +514,13 @@ export async function updateLeadOperationalState(supabase: SupabaseClient, input
       throw new Error(input.expectedUpdatedAt ? "Lead changed while editing" : "Failed to update lead status");
     }
 
+    console.info("[LEADS] updateLeadOperationalState updated", {
+      orgId,
+      leadId,
+      nextStatus,
+      nextFollowUpAt,
+    });
+
     await recordOperationalTenantEvent(supabase, {
       orgId,
       actorUserId: input.actorUserId || null,
@@ -502,6 +547,12 @@ export async function updateLeadOperationalState(supabase: SupabaseClient, input
         reason_code: formatOperationalReason("lead_update", "success"),
         ...captureOperationalTiming(startedAtMs),
       },
+    });
+    console.info("[LEADS] updateLeadOperationalState event recorded", {
+      orgId,
+      leadId,
+      idempotencyKey,
+      eventType: "lead.update_succeeded",
     });
 
     return { lead: data as LeadRecord };
@@ -581,6 +632,7 @@ type SavedResultRecord = {
 };
 
 async function getSavedResultByIdempotencyKey(supabase: SupabaseClient, orgId: string, idempotencyKey: string) {
+  console.info("[SAVED_RESULTS] lookup start", { orgId, idempotencyKey });
   const { data, error } = await supabase
     .from("saved_results")
     .select("*")
@@ -589,9 +641,16 @@ async function getSavedResultByIdempotencyKey(supabase: SupabaseClient, orgId: s
     .maybeSingle();
 
   if (error) {
+    console.error("[SAVED_RESULTS] lookup fail", { orgId, idempotencyKey, error });
     return { savedResult: null as SavedResultRecord | null, error };
   }
 
+  console.info("[SAVED_RESULTS] lookup success", {
+    orgId,
+    idempotencyKey,
+    found: Boolean(data),
+    savedResultId: (data as SavedResultRecord | null)?.id || null,
+  });
   return { savedResult: (data as SavedResultRecord | null) ?? null, error: null };
 }
 
@@ -610,7 +669,7 @@ export async function persistSavedResultAndLead(supabase: SupabaseClient, input:
   const normalizedUserName = normalizeString(input.userName) || null;
   const normalizedLeadName = normalizeString(input.leadName) || null;
   const normalizedLeadEmail = normalizeLeadEmail(input.leadEmail || null) || null;
-  const normalizedLeadPhone = normalizeLeadPhone(input.leadPhone || null) || null;
+    const normalizedLeadPhone = normalizeLeadPhone(input.leadPhone || null) || null;
   const normalizedLeadSource = normalizeString(input.leadSource) || "app";
   const normalizedLeadStatus = input.leadStatus || "new";
   const normalizedIntentScore = typeof input.intentScore === "number" && !Number.isNaN(input.intentScore) ? input.intentScore : null;
@@ -622,6 +681,13 @@ export async function persistSavedResultAndLead(supabase: SupabaseClient, input:
   if (lookupError) {
     throw lookupError;
   }
+
+  console.info("[SAVED_RESULTS] lookup complete", {
+    orgId,
+    idempotencyKey,
+    found: Boolean(existingSavedResult),
+    savedResultId: existingSavedResult?.id || null,
+  });
 
   let savedResultId = existingSavedResult?.id || "";
   let savedResultCreated = false;
@@ -661,6 +727,11 @@ export async function persistSavedResultAndLead(supabase: SupabaseClient, input:
       const row = data as SavedResultRecord;
       savedResultId = row.id;
       savedResultCreated = true;
+      console.info("[SAVED_RESULTS] insert ok", {
+        orgId,
+        idempotencyKey,
+        savedResultId,
+      });
     }
   }
 
@@ -686,6 +757,13 @@ export async function persistSavedResultAndLead(supabase: SupabaseClient, input:
       throw new Error("Failed to persist lead");
     }
 
+    console.info("[LEADS] findOrCreateLead ok", {
+      orgId,
+      idempotencyKey,
+      leadId: lead.id,
+      created: leadCreated,
+    });
+
     console.info("[SAVED_RESULTS] direct persistence state", {
       orgId,
       idempotencyKey,
@@ -695,38 +773,99 @@ export async function persistSavedResultAndLead(supabase: SupabaseClient, input:
       leadCreated,
     });
 
-    await recordOperationalTenantEvent(supabase, {
-      orgId,
-      eventSource,
-      eventType: "app.saved_result_created",
-      dedupeKeyParts: [orgId, savedResultId, "saved_result_created"],
-      payload: {
-        org_id: orgId,
-        saved_result_id: savedResultId,
-        lead_id: lead.id,
-        idempotency_key: idempotencyKey,
-        created: savedResultCreated,
-        reason_code: formatOperationalReason("persist_result", "success"),
-      },
-    });
+    try {
+      console.info("[TENANT_EVENTS] app.saved_result_created start", {
+        orgId,
+        idempotencyKey,
+        savedResultId,
+      });
+      await recordOperationalTenantEvent(supabase, {
+        orgId,
+        eventSource,
+        eventType: "app.saved_result_created",
+        dedupeKeyParts: [orgId, savedResultId, "saved_result_created"],
+        payload: {
+          org_id: orgId,
+          saved_result_id: savedResultId,
+          lead_id: lead.id,
+          idempotency_key: idempotencyKey,
+          created: savedResultCreated,
+          reason_code: formatOperationalReason("persist_result", "success"),
+        },
+      });
+      console.info("[TENANT_EVENTS] app.saved_result_created success", {
+        orgId,
+        idempotencyKey,
+        savedResultId,
+      });
+    } catch (error) {
+      console.error("[TENANT_EVENTS] app.saved_result_created fail", {
+        orgId,
+        idempotencyKey,
+        savedResultId,
+        error,
+      });
+      throw error;
+    }
 
-    await recordOperationalTenantEvent(supabase, {
-      orgId,
-      eventSource,
-      eventType: leadCreated ? "lead.created_from_app" : "lead.updated_from_app",
-      dedupeKeyParts: [orgId, lead.id, savedResultId, leadCreated ? "created" : "updated"],
-      payload: {
-        lead_id: lead.id,
-        saved_result_id: savedResultId,
-        org_id: orgId,
-        created: leadCreated,
-      },
-    });
+    try {
+      console.info("[TENANT_EVENTS] lead sync start", {
+        orgId,
+        idempotencyKey,
+        leadId: lead.id,
+      });
+      await recordOperationalTenantEvent(supabase, {
+        orgId,
+        eventSource,
+        eventType: leadCreated ? "lead.created_from_app" : "lead.updated_from_app",
+        dedupeKeyParts: [orgId, lead.id, savedResultId, leadCreated ? "created" : "updated"],
+        payload: {
+          lead_id: lead.id,
+          saved_result_id: savedResultId,
+          org_id: orgId,
+          created: leadCreated,
+        },
+      });
+      console.info("[TENANT_EVENTS] lead sync success", {
+        orgId,
+        idempotencyKey,
+        leadId: lead.id,
+      });
+    } catch (error) {
+      console.error("[TENANT_EVENTS] lead sync fail", {
+        orgId,
+        idempotencyKey,
+        leadId: lead.id,
+        error,
+      });
+      throw error;
+    }
 
-    await bumpTenantUsageDaily(supabase, orgId, {
-      events_count: 1,
-      leads: leadCreated ? 1 : 0,
-    });
+    try {
+      console.info("[TENANT_USAGE] update start", {
+        orgId,
+        idempotencyKey,
+        eventsCountDelta: 1,
+        leadsDelta: leadCreated ? 1 : 0,
+      });
+      await bumpTenantUsageDaily(supabase, orgId, {
+        events_count: 1,
+        leads: leadCreated ? 1 : 0,
+      });
+      console.info("[TENANT_USAGE] update success", {
+        orgId,
+        idempotencyKey,
+        eventsCountDelta: 1,
+        leadsDelta: leadCreated ? 1 : 0,
+      });
+    } catch (error) {
+      console.error("[TENANT_USAGE] update fail", {
+        orgId,
+        idempotencyKey,
+        error,
+      });
+      throw error;
+    }
 
     return {
       savedResultId,

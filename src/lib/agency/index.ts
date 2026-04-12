@@ -211,7 +211,7 @@ async function loadAgencySnapshot(agencyOrgId?: string | null) {
       { data: [], error: null }
     ),
     queryWithTimeout(
-      admin.from("saved_results").select("org_id, created_at, updated_at").order("created_at", { ascending: false }).limit(50),
+      admin.from("saved_results").select("org_id, created_at").order("created_at", { ascending: false }).limit(50),
       { data: [], error: null }
     ),
     queryWithTimeout(
