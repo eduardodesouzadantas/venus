@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
+import type { OnboardingData } from "@/types/onboarding";
 import { processAndPersistLead } from "@/lib/recommendation/actions";
 import { RESULT_ID_PATTERN, isValidResultId } from "@/lib/result/id";
 
@@ -16,6 +17,17 @@ const PHASES = [
   "Refinando a leitura de stylist...",
   "Gerando seu resultado...",
 ];
+
+function buildProcessingSnapshot(data: OnboardingData): OnboardingData {
+  return {
+    ...data,
+    scanner: {
+      ...data.scanner,
+      facePhoto: "",
+      bodyPhoto: "",
+    },
+  };
+}
 
 export default function ProcessingPage() {
   const router = useRouter();
@@ -49,7 +61,7 @@ export default function ProcessingPage() {
           orgSlug: data?.tenant?.orgSlug || null,
         });
 
-        const dbReferenceId = await processAndPersistLead(data);
+        const dbReferenceId = await processAndPersistLead(buildProcessingSnapshot(data));
         console.info("[PROCESSING] processAndPersistLead returned", { dbReferenceId });
 
         if (!isValidResultId(dbReferenceId)) {
