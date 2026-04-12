@@ -74,6 +74,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const payload = (await request.json().catch(() => null)) as WhatsAppWebhookPayload | null;
+  console.log("[DEBUG][WHATSAPP_WEBHOOK] Incoming payload:", JSON.stringify(payload));
+
   if (!payload?.entry?.length) {
     return NextResponse.json({ ok: true });
   }
@@ -230,9 +232,9 @@ export async function POST(request: Request) {
               : null;
         const nextIntentScore = intentEventType
           ? updateIntentScore(intentEventType, currentIntentScore, {
-              now: timestamp,
-              lastActivityAt: previousActivityAt,
-            })
+            now: timestamp,
+            lastActivityAt: previousActivityAt,
+          })
           : seedLead.lead.intent_score ?? currentIntentScore;
 
         if (intentEventType === "variation_requested") {
@@ -320,14 +322,16 @@ export async function POST(request: Request) {
                             ? 35
                             : 40;
 
+            console.log(`[DEBUG][WHATSAPP_WEBHOOK] Lead Context loaded for ${userPhone}. Intent detected: ${intent}`);
+
             const enrichedContext = await upsertLeadContextByLeadId(admin, {
               orgId: org.id,
               leadId: seedLead.lead.id,
               intentScore: intentEventType
                 ? updateIntentScore(intentEventType, detectedIntentScore, {
-                    now: timestamp,
-                    lastActivityAt: previousActivityAt,
-                  })
+                  now: timestamp,
+                  lastActivityAt: previousActivityAt,
+                })
                 : detectedIntentScore,
               emotionalState: {
                 intent,
@@ -342,7 +346,9 @@ export async function POST(request: Request) {
               },
             });
 
+            console.log(`[DEBUG][WHATSAPP_WEBHOOK] Decision Engine running for ${userPhone}`);
             const decision = decideNextAction(enrichedContext);
+            console.log(`[DEBUG][WHATSAPP_WEBHOOK] Decision Outcome: ${decision.chosenAction} (Confidence: ${decision.confidence})`);
 
             await upsertLeadContextByLeadId(admin, {
               orgId: org.id,
@@ -369,10 +375,19 @@ export async function POST(request: Request) {
               if (recentVenus) {
                 console.log("[VENUS] resposta recente detectada - skip");
               } else {
-                const venusReply = await generateReply({ ...context, state: intent }, text);
+                console.log(`[DEBUG][WHATSAPP_WEBHOOK] Generating AI reply for ${userPhone}`);
+                let venusReply = "";
+
+                try {
+                  venusReply = await generateReply({ ...context, state: intent }, text);
+                } catch (replyErr) {
+                  console.error("[DEBUG][WHATSAPP_WEBHOOK] AI Reply Generation Failed:", replyErr);
+                  venusReply = "Oi! Estou processando sua mensagem com carinho. Só um instante que já te respondo com todos os detalhes.";
+                }
 
                 if (venusReply) {
-                  await fetch(`https://graph.facebook.com/v25.0/${phoneNumberId}/messages`, {
+                  console.log(`[DEBUG][WHATSAPP_WEBHOOK] Sending response to Graph API for ${userPhone}`);
+                  const graphResponse = await fetch(`https://graph.facebook.com/v25.0/${phoneNumberId}/messages`, {
                     method: "POST",
                     headers: {
                       Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
@@ -385,6 +400,13 @@ export async function POST(request: Request) {
                       text: { body: venusReply },
                     }),
                   });
+
+                  const graphResult = await graphResponse.json().catch(() => ({}));
+                  console.log(`[DEBUG][WHATSAPP_WEBHOOK] Graph API Response:`, JSON.stringify(graphResult));
+
+                  if (!graphResponse.ok) {
+                    console.error("[DEBUG][WHATSAPP_WEBHOOK] Failed to send message via Graph API");
+                  }
 
                   await admin.from("whatsapp_messages").insert({
                     conversation_id: finalConversationId,

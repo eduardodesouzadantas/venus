@@ -2,7 +2,7 @@
 
 import React, { Suspense, useMemo } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { ArrowRight, Sparkles, Loader2 } from "lucide-react";
 import { Text } from "@/components/ui/Text";
 import { VenusButton } from "@/components/ui/VenusButton";
@@ -27,6 +27,7 @@ function inferTryOnCategory(product: any): "tops" | "bottoms" | "one-pieces" {
 
 function ResultDashboardContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const id = searchParams.get("id");
   const { data: onboardingData } = useOnboarding();
   const { userPhoto } = useUserImage();
@@ -46,7 +47,6 @@ function ResultDashboardContent() {
   const [pendingTryOnProduct, setPendingTryOnProduct] = React.useState<{ id: string; name?: string | null; photoUrl?: string | null; category?: string | null } | null>(null);
   const [decision, setDecision] = React.useState<DecisionResult | null>(null);
 
-
   React.useEffect(() => {
     if (!id) {
       setLoading(false);
@@ -55,22 +55,50 @@ function ResultDashboardContent() {
 
     async function load() {
       try {
+        console.log(`[DEBUG][RESULT_PAGE] Fetching result: ${id}`);
         const response = await fetch(`/api/result/${encodeURIComponent(id || "")}`, { cache: "no-store" });
-        if (!response.ok) throw new Error("Result not found");
+
+        if (!response.ok) {
+          console.warn(`[DEBUG][RESULT_PAGE] Result ${id} 404. Attempting recovery via Lead Context...`);
+          // Try to recover via Lead Context (assuming we have orgId in onboardingData)
+          const orgId = onboardingData.tenant?.orgId;
+          const recoveryRes = await fetch(`/api/lead-context/recovery?result_id=${encodeURIComponent(id || "")}&org_id=${encodeURIComponent(orgId || "")}`);
+
+          if (recoveryRes.ok) {
+            const recoveryPayload = await recoveryRes.json();
+            console.log(`[DEBUG][RESULT_PAGE] Recovery success:`, recoveryPayload);
+            if (recoveryPayload.tenant) setTenantContext(recoveryPayload.tenant);
+            if (recoveryPayload.lastTryOn) setPersistedTryOn(recoveryPayload.lastTryOn);
+
+            // Reconstruct a believable surface if original analysis is lost
+            const fallbackAnalysis = recoveryPayload.analysis || {
+              essence: { label: onboardingData.intent?.styleDirection || "Sua Essência", reason: "Sincronia baseada no seu perfil pessoal." },
+              palette: { family: "Personalizada", colors: [] },
+              looks: []
+            };
+            setSurface(buildResultSurface(onboardingData, fallbackAnalysis));
+            return;
+          }
+
+          throw new Error("Finalizando sintonização...");
+        }
+
         const payload = await response.json();
+        console.log(`[DEBUG][RESULT_PAGE] Result loaded successfully`);
         if (payload.tenant) setTenantContext(payload.tenant);
         if (payload.lastTryOn) setPersistedTryOn(payload.lastTryOn);
 
         const builtSurface = buildResultSurface(onboardingData, payload.analysis);
         setSurface(builtSurface);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load results");
+        console.error(`[DEBUG][RESULT_PAGE] Load error:`, err);
+        setError(err instanceof Error ? err.message : "Sintonizando...");
       } finally {
         setLoading(false);
       }
     }
     load();
-  }, [id, onboardingData, tryOnImageUrl]); // Refresh when new image is generated
+  }, [id, onboardingData, tryOnImageUrl]);
 
   if (loading) {
     return (
@@ -86,8 +114,27 @@ function ResultDashboardContent() {
   if (error || !surface) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-[#0a0a0a] px-6 text-center">
-        <p className="text-sm text-white/40">{error || "Resultado não encontrado"}</p>
-        <Link href="/" className="mt-6 text-[10px] font-bold uppercase tracking-widest text-[#C9A84C]">Voltar ao início</Link>
+        <div className="flex flex-col items-center gap-6">
+          <div className="relative">
+            <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-[#C9A84C]" />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="h-2 w-2 rounded-full bg-[#C9A84C] animate-pulse" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <p className="font-serif text-xl text-white">Quase lá...</p>
+            <p className="max-w-xs text-sm text-white/40 leading-relaxed">
+              Estamos finalizando a sintonização do seu look. Essa conexão leva alguns segundos.
+            </p>
+          </div>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-4 rounded-full border border-white/10 bg-white/5 px-8 py-3 text-[10px] font-bold uppercase tracking-widest text-[#C9A84C] transition-colors hover:bg-white/10"
+          >
+            Tentar Sincronizar Agora
+          </button>
+          <Link href="/" className="text-[10px] font-bold uppercase tracking-widest text-white/20 hover:text-white transition-colors">Voltar ao início</Link>
+        </div>
       </div>
     );
   }
@@ -173,7 +220,6 @@ function ResultDashboardContent() {
     setPendingTryOnProduct(null);
   }, [tryOnStatus, tryOnImageUrl, resolvedOrgId, id, pendingTryOnProduct, tryOnPersonImage, result.looks]);
 
-  // Decision Engine Trigger
   React.useEffect(() => {
     if (loading || !result) return;
 
@@ -181,9 +227,9 @@ function ResultDashboardContent() {
     const nextAction = decideNextAction({
       intent_score: intentScore,
       last_tryon: tryOnImageUrl ? { image_url: tryOnImageUrl, status: "completed" } : persistedTryOn,
-      last_products_viewed: [], // To be populated if needed
+      last_products_viewed: [],
       last_recommendations: result.looks || [],
-      whatsapp_context: {}, // To be populated from session
+      whatsapp_context: {},
       emotional_state: {},
       timestamps: {
         last_interaction_at: new Date().toISOString(),
@@ -217,10 +263,8 @@ function ResultDashboardContent() {
 
   return (
     <main className="min-h-screen bg-[#0a0a0a] pb-24 text-[#f0ece4] selection:bg-[#C9A84C]/30">
-      {/* SEÇÃO HERO - TRY-ON CENTRIC */}
       <section className="px-5 pt-8">
         <div className="relative mx-auto max-w-lg">
-          {/* Container "Dark Luxury" */}
           <div className="relative aspect-[3/4] overflow-hidden rounded-[32px] border border-white/10 bg-white/[0.02] shadow-[0_22px_70px_rgba(0,0,0,0.6)]">
             {isGenerating ? (
               <div className="flex h-full w-full flex-col items-center justify-center bg-black/60 p-8 text-center backdrop-blur-sm">
@@ -235,8 +279,6 @@ function ResultDashboardContent() {
                 <p className="mt-4 text-[13px] text-white/60">
                   {currentLoadingMessage}
                 </p>
-
-                {/* Progress Bar */}
                 <div className="mt-10 h-1 w-48 overflow-hidden rounded-full bg-white/5">
                   <div
                     className="h-full bg-gradient-to-r from-[#C9A84C]/50 to-[#C9A84C] transition-all duration-500 ease-out"
@@ -267,10 +309,8 @@ function ResultDashboardContent() {
               </div>
             )}
 
-            {/* Overlay Gradient (Luxury Feel) */}
             <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-black/80 via-transparent to-transparent" />
 
-            {/* Validation Tag / Memory Tag */}
             {displayImageUrl && !isGenerating && (
               <div className="absolute top-6 left-6 flex flex-col gap-2">
                 {isPreviousLook && (
@@ -287,7 +327,6 @@ function ResultDashboardContent() {
             )}
           </div>
 
-          {/* Consultative Content */}
           <div className="mt-10 space-y-6 text-center">
             <div className="space-y-3">
               <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#C9A84C]">Sua Presença</p>
@@ -304,7 +343,6 @@ function ResultDashboardContent() {
               </p>
             </div>
 
-            {/* Primary CTAs */}
             <div className="flex flex-col gap-3 pt-4">
               <Link
                 href={whatsappUrl}
@@ -333,20 +371,18 @@ function ResultDashboardContent() {
               )}
 
               <button
-                onClick={() => setShowSaveModal(true)}
+                onClick={() => router.push('/')}
                 className="flex h-14 items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-6 text-[11px] font-bold uppercase tracking-widest text-white/90 transition-colors hover:bg-white/10"
               >
-                Gerar outro look
+                Novo Perfil
               </button>
             </div>
           </div>
         </div>
       </section>
 
-      {/* DASHBOARD DETAILS - (More Discrete) */}
       <section className="mt-16 bg-white/[0.02] border-y border-white/5 py-12 px-5">
         <div className="mx-auto max-w-lg space-y-10">
-          {/* Palette */}
           <div>
             <p className="mb-6 font-mono text-[9px] uppercase tracking-[0.3em] text-[#C9A84C]">Análise de Paleta • {result.palette.family}</p>
             <div className="flex gap-2">
@@ -359,7 +395,6 @@ function ResultDashboardContent() {
             </div>
           </div>
 
-          {/* Core Signals */}
           <div className="grid grid-cols-2 gap-4">
             <div className="rounded-2xl border border-white/5 bg-black/20 p-5">
               <p className="text-[9px] text-white/40 uppercase tracking-widest mb-2 font-mono">Caimento</p>
@@ -373,21 +408,17 @@ function ResultDashboardContent() {
         </div>
       </section>
 
-      {/* FOOTER NAV RE-SYNC */}
       <section className="px-5 py-12 pb-20">
         <div className="mx-auto max-w-lg text-center space-y-6">
           <p className="text-[12px] text-white/40">Venus Engine v1.0 • Catalog Synchronization</p>
           <div className="flex justify-center gap-4">
-            {["Novidades", "Outlet", "Sair"].map(item => (
-              <button key={item} className="text-[10px] font-bold uppercase tracking-widest text-white/30 hover:text-[#C9A84C] transition-colors">
-                {item}
-              </button>
-            ))}
+            <Link href="/" className="text-[10px] font-bold uppercase tracking-widest text-white/30 hover:text-[#C9A84C] transition-colors">
+              Início
+            </Link>
           </div>
         </div>
       </section>
 
-      {/* WHATSAPP FIXED BANNER */}
       <div className="fixed bottom-0 left-0 right-0 z-[150] flex h-14 items-center justify-between bg-[#C9A84C] px-4 shadow-[0_-10px_40px_rgba(0,0,0,0.3)]">
         <span className="text-[10px] font-bold uppercase tracking-wider text-black flex items-center gap-2">
           <div className="h-2 w-2 rounded-full bg-black animate-pulse" />
