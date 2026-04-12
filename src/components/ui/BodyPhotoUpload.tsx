@@ -106,9 +106,9 @@ export function BodyPhotoUpload({ onPhotoSelected, onUseCamera }: BodyPhotoUploa
           </div>
 
           <div className="space-y-2">
-            <h3 className="text-lg font-semibold text-white">Escolha uma foto de corpo inteiro</h3>
+            <h3 className="text-lg font-semibold text-white">Envie uma foto de corpo inteiro</h3>
             <p className="text-sm text-white/60 max-w-[280px]">
-              De preferência foto em pé, com algum espaço acima da cabeça e abaixo dos pés
+              A Venus lê melhor quando a silhueta está inteira, em pé e com luz frontal.
             </p>
           </div>
 

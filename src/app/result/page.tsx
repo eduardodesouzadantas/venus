@@ -429,7 +429,7 @@ function ResultDashboardContent() {
           >
             Continuar revelação
           </button>
-          <Link href="/" className="text-[10px] font-bold uppercase tracking-widest text-white/20 hover:text-white transition-colors">Voltar ao início</Link>
+          <Link href="/" className="text-[10px] font-bold uppercase tracking-widest text-white/20 hover:text-white transition-colors">Nova leitura</Link>
         </div>
       </div>
     );

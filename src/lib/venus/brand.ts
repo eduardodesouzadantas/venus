@@ -13,11 +13,11 @@ type VenusResultNarrativeInput = {
 };
 
 export function buildVenusStylistIntro() {
-  return "Oi. Eu sou a Venus Stylist. Vou ler sua presença como consultora, cruzar sua foto com colorimetria e fechar sua leitura com elegância.";
+  return "Oi. Eu sou a Venus Stylist. Vou ler sua presença como consultora, cruzar sua foto com colorimetria e devolver uma curadoria elegante.";
 }
 
 export function buildVenusBodyScannerIntro() {
-  return "Agora a Venus fecha a leitura do corpo";
+  return "Agora a Venus fecha a leitura do corpo com precisão";
 }
 
 export function buildVenusResultNarrative(input: VenusResultNarrativeInput) {
@@ -42,7 +42,7 @@ export function buildVenusResultNarrative(input: VenusResultNarrativeInput) {
       subtitle:
         "A imagem existe, está elegante e já comunica direção. Falta só um ajuste fino antes de subir como vitrine final.",
       primaryCta: "Refazer foto",
-      secondaryCta: "Ver no WhatsApp",
+      secondaryCta: "Continuar no WhatsApp",
       helper:
         input.reason ||
         "A leitura estrutural é boa, mas a apresentação ainda não sobe para hero.",
@@ -56,7 +56,7 @@ export function buildVenusResultNarrative(input: VenusResultNarrativeInput) {
       ? "O resultado veio de um legado sem produto validado para try-on. Vamos refazer com uma foto melhor para liberar a versão premium."
       : "A imagem ainda não atingiu integridade suficiente para virar hero. Com uma nova foto, a revelação fica mais precisa.",
     primaryCta: "Tirar nova foto",
-    secondaryCta: input.hasArtifact ? "Voltar ao início" : "Refazer leitura",
+    secondaryCta: input.hasArtifact ? "Nova leitura" : "Refazer leitura",
     helper:
       input.reason ||
       "O resultado não atingiu integridade suficiente para exibição premium.",

@@ -125,7 +125,7 @@ export default function DramaticResultPage() {
 
   useEffect(() => {
     if (currentSection >= 2) {
-      const baseCaption = `Acabei de descobrir meu estilo com a Venus ✨
+      const baseCaption = `A Venus Stylist acabou de revelar meu estilo ✨
 A IA entendeu minha essência: ${surface.essence.label}
 Quer descobrir o seu?`;
 
@@ -171,8 +171,8 @@ Quer descobrir o seu?`;
           userPhotoUrl: userPhoto,
           lookImageUrl: lookImageUrl,
           lookName: featuredLook?.name || "Look",
-          brandName: "Venus Engine",
-          appName: "Venus Engine",
+          brandName: "Venus Stylist",
+          appName: "Venus",
           styleDirection: surface.essence.styleDirection,
           imageGoal: onboardingData.intent.imageGoal || surface.diagnostic.desiredGoal,
           essenceLabel: surface.essence.label,
@@ -227,7 +227,7 @@ Quer descobrir o seu?`;
   const handleShareWhatsApp = () => {
     setHasPosted(true);
     registerSocialAction("share");
-    const message = encodeURIComponent(`${shareCaption}\n\nPostado via Venus Engine`);
+    const message = encodeURIComponent(`${shareCaption}\n\nPostado via Venus Stylist`);
     window.open(`https://wa.me/?text=${message}`, "_blank");
   };
 
