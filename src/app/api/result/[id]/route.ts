@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { hasLegacyTryOnProducts } from "@/lib/result/surface";
 
 type RouteContext = {
   params: Promise<{ id: string }> | { id: string };
@@ -41,6 +42,15 @@ export async function GET(_: Request, context: RouteContext) {
     }
 
     const payload = (data.payload ?? {}) as Record<string, unknown>;
+    const finalResult = (payload.finalResult ?? null) as Record<string, unknown> | null;
+    const finalLooks = Array.isArray(finalResult?.looks) ? (finalResult?.looks as Array<Record<string, unknown>>) : [];
+    if (hasLegacyTryOnProducts(finalLooks as any)) {
+      console.warn("[RESULT_API] legacy try-on looks detected", {
+        resultId: id,
+        orgId: (payload.tenant as Record<string, unknown> | null)?.orgId || null,
+        lookIds: finalLooks.map((look) => look?.id || null),
+      });
+    }
 
     const response = {
       id: data.id,

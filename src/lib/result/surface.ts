@@ -57,6 +57,12 @@ function normalizeText(value: unknown): string {
   return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
 }
 
+export function hasLegacyTryOnProducts(looks: LookData[] | null | undefined): boolean {
+  return Array.isArray(looks)
+    ? looks.some((look) => !normalizeText(look.product_id) || look.items.some((item) => !normalizeText(item.product_id)))
+    : false;
+}
+
 function normalizeGoalKey(goal: string): GoalKey {
   const normalized = normalizeText(goal).toLowerCase();
   if (normalized.includes("autor")) return "Autoridade";

@@ -32,6 +32,7 @@ const {
 } = require("../src/lib/ai/result-normalizer.ts");
 const {
   buildResultSurface,
+  hasLegacyTryOnProducts,
 } = require("../src/lib/result/surface.ts");
 const {
   ensureTryOnProductId,
@@ -504,6 +505,7 @@ run("result surface preserves UUID product ids and keeps UI ids separate", () =>
   assert.equal(surface.looks[0].product_id, uuid);
   assert.equal(surface.looks[0].items[0].product_id, uuid);
   assert.notEqual(surface.looks[0].product_id, surface.looks[0].id);
+  assert.equal(hasLegacyTryOnProducts(surface.looks), false);
 });
 
 run("synthetic result surface does not invent product ids", () => {
@@ -512,6 +514,35 @@ run("synthetic result surface does not invent product ids", () => {
   assert.equal(surface.looks[0].id, "surface-look-1");
   assert.equal(surface.looks[0].product_id, "");
   assert.equal(surface.looks[0].items[0].product_id, "");
+  assert.equal(hasLegacyTryOnProducts(surface.looks), true);
+});
+
+run("legacy saved_result looks without product ids remain blocked", () => {
+  const legacySurface = buildResultSurface(sampleOnboarding, null, {
+    looks: [
+      {
+        id: "surface-look-1-1",
+        name: "Look legado",
+        intention: "Entrada limpa",
+        type: "HÃ­brido Seguro",
+        items: [
+          {
+            id: "surface-look-1-1",
+            photoUrl: "https://example.com/item.jpg",
+            brand: "Acervo legado",
+            name: "Blazer estruturado",
+          },
+        ],
+        accessories: [],
+        explanation: "Entrada limpa",
+        whenToWear: "Rotina",
+      },
+    ],
+  });
+
+  assert.equal(legacySurface.looks[0].product_id, "");
+  assert.equal(legacySurface.looks[0].items[0].product_id, "");
+  assert.equal(hasLegacyTryOnProducts(legacySurface.looks), true);
 });
 
 run("try-on UUID helper rejects UI ids and accepts real UUIDs", () => {

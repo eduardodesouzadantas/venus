@@ -13,7 +13,7 @@ import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
 import { useUserImage } from "@/lib/onboarding/UserImageContext";
 import { syncLeadContext } from "@/lib/lead-context/client";
 import { useTryOn, TRYON_LOADING_MESSAGES } from "@/hooks/useTryOn";
-import { buildResultSurface, type ResultSurface } from "@/lib/result/surface";
+import { buildResultSurface, hasLegacyTryOnProducts, type ResultSurface } from "@/lib/result/surface";
 import { RESULT_ID_PATTERN, isValidResultId } from "@/lib/result/id";
 import { decideNextAction } from "@/lib/decision-engine/engine";
 import { DecisionResult } from "@/lib/decision-engine/types";
@@ -63,6 +63,9 @@ function ResultDashboardContent() {
   const paletteColors = Array.isArray(palette.colors) ? palette.colors : [];
   const bodyFit = onboardingData?.body?.fit ?? "Ajuste preciso";
   const colorContrast = onboardingData?.colors?.contrast ?? "Natural";
+  const hasLegacyTryOnLooks = hasLegacyTryOnProducts(looks);
+  const tryOnAvailable = !!looks[0]?.product_id;
+  const primaryTryOnProductId = looks[0]?.product_id || "";
 
   const org = useMemo(() => ({
     name: tenantContext?.branchName || tenantContext?.orgSlug || "sua loja",
@@ -81,6 +84,19 @@ function ResultDashboardContent() {
     if (tryOnProgress < 70) return TRYON_LOADING_MESSAGES[1];
     return TRYON_LOADING_MESSAGES[2];
   })();
+
+  React.useEffect(() => {
+    if (!surface) return;
+
+    if (hasLegacyTryOnLooks) {
+      console.warn("[TRYON_LEGACY_LOOKS]", {
+        resultId: id,
+        orgId: resolvedOrgId || onboardingData?.tenant?.orgId || null,
+        lookIds: looks.map((look) => look.id),
+        productIds: looks.flatMap((look) => [look.product_id, ...look.items.map((item) => item.product_id || "")]),
+      });
+    }
+  }, [surface, hasLegacyTryOnLooks, id, resolvedOrgId, onboardingData?.tenant?.orgId, looks]);
 
   // ── WhatsApp URL (memo, always called) ──
   const whatsappUrl = useMemo(() => {
@@ -401,11 +417,27 @@ function ResultDashboardContent() {
                   A Venus está pronta para projetar seu primeiro look.
                 </p>
                 <VenusButton
-                  onClick={() => looks[0]?.product_id && handleGenerateTryOn(looks[0].product_id)}
+                  onClick={() => {
+                    if (!tryOnAvailable) {
+                      console.warn("[TRYON] blocked by legacy look without product_id", {
+                        resultId: id,
+                        orgId: resolvedOrgId || onboardingData?.tenant?.orgId || null,
+                        lookId: looks[0]?.id || null,
+                      });
+                      return;
+                    }
+                    handleGenerateTryOn(primaryTryOnProductId);
+                  }}
+                  disabled={!tryOnAvailable}
                   className="mt-8"
                 >
-                  Gerar minha imagem
+                  {tryOnAvailable ? "Gerar minha imagem" : "Try-on indisponível"}
                 </VenusButton>
+                {!tryOnAvailable && (
+                  <p className="mt-3 text-[11px] leading-relaxed text-white/40">
+                    Esse resultado veio de um legado salvo antes do Venus registrar o UUID real do produto.
+                  </p>
+                )}
               </div>
             )}
 
