@@ -6,7 +6,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { VenusAvatar } from "@/components/venus/VenusAvatar";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
-import type { OnboardingData } from "@/types/onboarding";
+import { defaultOnboardingData, type OnboardingData } from "@/types/onboarding";
 
 type ChatRole = "venus" | "client";
 
@@ -108,29 +108,31 @@ function findSingleOption(step: Extract<ChatStep, { kind: "single" }>, raw: stri
 }
 
 function buildVisionCue(data: OnboardingData) {
+  const safeData = data ?? defaultOnboardingData;
   const cues: string[] = [];
-  if (data.colorimetry.colorSeason) cues.push(data.colorimetry.colorSeason.toLowerCase());
-  if (data.colorimetry.contrast) cues.push(`contraste ${data.colorimetry.contrast.toLowerCase()}`);
-  if (data.colorimetry.faceShape) cues.push(`rosto ${data.colorimetry.faceShape}`);
-  if (data.body.faceLines) cues.push(`traços ${data.body.faceLines.toLowerCase()}`);
-  if (data.body.fit) cues.push(`caimento ${data.body.fit.toLowerCase()}`);
+  if (safeData.colorimetry?.colorSeason) cues.push(safeData.colorimetry.colorSeason.toLowerCase());
+  if (safeData.colorimetry?.contrast) cues.push(`contraste ${safeData.colorimetry.contrast.toLowerCase()}`);
+  if (safeData.colorimetry?.faceShape) cues.push(`rosto ${safeData.colorimetry.faceShape}`);
+  if (safeData.body?.faceLines) cues.push(`traços ${safeData.body.faceLines.toLowerCase()}`);
+  if (safeData.body?.fit) cues.push(`caimento ${safeData.body.fit.toLowerCase()}`);
   return cues.length > 0 ? cues.slice(0, 3).join(" • ") : "a sua presença";
 }
 
 function buildStepPrompt(stepKey: ChatStep["key"], data: OnboardingData) {
-  const visionCue = buildVisionCue(data);
+  const safeData = data ?? defaultOnboardingData;
+  const visionCue = buildVisionCue(safeData);
 
   switch (stepKey) {
     case "line":
-      return data.colorimetry.justification
+      return safeData.colorimetry?.justification
         ? `Pelo que eu já leio em você, ${visionCue}. Você quer que essa imagem imponha autoridade, entregue elegância ou fique mais neutra?`
         : "Antes de tudo - qual linha sustenta sua imagem?";
     case "imageGoal":
-      return data.colorimetry.justification
+      return safeData.colorimetry?.justification
         ? "Agora eu quero afinar a intenção: o que a roupa precisa fazer pela sua presença quando alguém te vê?"
         : "Que leitura você quer que a roupa entregue?";
     case "styleDirection":
-      return data.colorimetry.justification
+      return safeData.colorimetry?.justification
         ? "Me conta um exemplo real: quando você olha no espelho e pensa 'hoje está certo', o que você está vestindo?"
         : "Me conta uma coisa - quando voce se olha no espelho e pensa 'hoje ta certo', o que voce esta vestindo?";
     case "avoidColorNote":
@@ -216,6 +218,13 @@ function ChatContent() {
   const searchParams = useSearchParams();
   const orgSlug = searchParams.get("org") || "";
   const { data, updateData, updateConversation } = useOnboarding();
+  const result = data ?? defaultOnboardingData;
+
+  console.log("[CHAT_RENDER]", { result });
+
+  if (!result) {
+    return <div className="min-h-screen bg-[#0a0a0a] text-white">Carregando...</div>;
+  }
 
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -238,11 +247,11 @@ function ChatContent() {
   const latestDataRef = useRef(data);
 
   useEffect(() => {
-    latestDataRef.current = data;
-  }, [data]);
+    latestDataRef.current = result;
+  }, [result]);
 
   const currentStep = activeStepIndex !== null ? CHAT_STEPS[activeStepIndex] : null;
-  const currentPrompt = currentStep ? buildStepPrompt(currentStep.key, data) : "";
+  const currentPrompt = currentStep ? buildStepPrompt(currentStep.key, result) : "";
   const nextHref = useMemo(() => {
     return orgSlug ? `/scanner/opt-in?org=${encodeURIComponent(orgSlug)}` : "/scanner/opt-in";
   }, [orgSlug]);
