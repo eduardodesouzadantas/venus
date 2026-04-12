@@ -28,6 +28,10 @@ function inferTryOnCategory(product: any): "tops" | "bottoms" | "one-pieces" {
 }
 
 function ResultDashboardContent() {
+  // ──────────────────────────────────────────────────────────────
+  // ALL HOOKS MUST BE CALLED UNCONDITIONALLY AT THE TOP
+  // React Error #310 happens when hooks are called after early returns.
+  // ──────────────────────────────────────────────────────────────
   const searchParams = useSearchParams();
   const router = useRouter();
   const id = searchParams.get("id");
@@ -50,6 +54,48 @@ function ResultDashboardContent() {
   const [pendingTryOnProduct, setPendingTryOnProduct] = React.useState<{ id: string; name?: string | null; photoUrl?: string | null; category?: string | null } | null>(null);
   const [decision, setDecision] = React.useState<DecisionResult | null>(null);
 
+  // ── Derived values (safe even when surface is null) ──
+  const looks = useMemo(() => (surface?.looks && Array.isArray(surface.looks) ? surface.looks : []), [surface]);
+  const essenceLabel = surface?.essence?.label ?? "Sua Presença";
+  const palette = surface?.palette ?? { family: "Personalizada", colors: [] as any[], metal: "Prateado", contrast: "Médio Alto" };
+  const paletteFamily = palette.family ?? "Personalizada";
+  const paletteColors = Array.isArray(palette.colors) ? palette.colors : [];
+  const bodyFit = onboardingData?.body?.fit ?? "Ajuste preciso";
+  const colorContrast = onboardingData?.colors?.contrast ?? "Natural";
+
+  const org = useMemo(() => ({
+    name: tenantContext?.branchName || tenantContext?.orgSlug || "sua loja",
+    whatsapp_phone: tenantContext?.whatsappNumber || "5511967011133",
+  }), [tenantContext]);
+
+  const tryOnPersonImage = userPhoto || onboardingData?.scanner?.bodyPhoto || onboardingData?.scanner?.facePhoto || "";
+  const resolvedOrgId = tenantContext?.orgId || onboardingData?.tenant?.orgId || "";
+  const displayImageUrl = tryOnImageUrl || persistedTryOn?.image_url;
+  const isPreviousLook = !tryOnImageUrl && !!persistedTryOn?.image_url;
+  const isGenerating = tryOnStatus === "queued" || tryOnStatus === "processing";
+  const firstTryOnProduct = looks[0]?.items?.[0] || null;
+
+  const currentLoadingMessage = (() => {
+    if (tryOnProgress < 30) return TRYON_LOADING_MESSAGES[0];
+    if (tryOnProgress < 70) return TRYON_LOADING_MESSAGES[1];
+    return TRYON_LOADING_MESSAGES[2];
+  })();
+
+  // ── WhatsApp URL (memo, always called) ──
+  const whatsappUrl = useMemo(() => {
+    if (!surface) return "";
+    const message = buildWhatsAppHandoffMessage({
+      contactName: onboardingData?.contact?.name,
+      styleIdentity: essenceLabel,
+      imageGoal: onboardingData?.intent?.imageGoal,
+      lookSummary: looks as any,
+      lastTryOn: tryOnImageUrl ? { image_url: tryOnImageUrl, status: "completed" } : persistedTryOn,
+      decision: decision ? { action: decision.chosenAction, reason: decision.reason } : undefined,
+    });
+    return buildWhatsAppHandoffUrl(message, tenantContext?.whatsappNumber || "5511967011133") || "";
+  }, [surface, onboardingData, essenceLabel, looks, tryOnImageUrl, persistedTryOn, decision, tenantContext]);
+
+  // ── Global error instrumentation (always called) ──
   React.useEffect(() => {
     const handleError = (event: ErrorEvent) => {
       console.error("[CLIENT_FATAL]", {
@@ -74,6 +120,7 @@ function ResultDashboardContent() {
     };
   }, []);
 
+  // ── Data loading effect (always called) ──
   React.useEffect(() => {
     if (redirecting) {
       return;
@@ -106,11 +153,10 @@ function ResultDashboardContent() {
             if (recoveryPayload.tenant) setTenantContext(recoveryPayload.tenant);
             if (recoveryPayload.lastTryOn) setPersistedTryOn(recoveryPayload.lastTryOn);
 
-            // Reconstruct a believable surface if original analysis is lost
             const fallbackAnalysis = recoveryPayload.analysis || {
-              essence: { label: onboardingData.intent?.styleDirection || "Sua Essência", reason: "Sincronia baseada no seu perfil pessoal." },
+              essence: { label: onboardingData?.intent?.styleDirection || "Sua Essência", reason: "Sincronia baseada no seu perfil pessoal." },
               palette: { family: "Personalizada", colors: [] },
-              looks: []
+              looks: [],
             };
             setSurface(buildResultSurface(onboardingData, fallbackAnalysis));
             return;
@@ -146,6 +192,109 @@ function ResultDashboardContent() {
     }
     load();
   }, [id, onboardingData, redirecting, router, tryOnImageUrl]);
+
+  // ── Try-on sync effect (always called) ──
+  React.useEffect(() => {
+    if (tryOnStatus !== "completed" || !tryOnImageUrl || !resolvedOrgId || !id || !pendingTryOnProduct) {
+      return;
+    }
+
+    void syncLeadContext({
+      orgId: resolvedOrgId,
+      savedResultId: id,
+      eventType: "tryon_generated",
+      action: "SUGGEST_NEW_LOOK",
+      outcome: "REQUESTED_VARIATION",
+      lastTryon: {
+        personImageUrl: tryOnPersonImage || null,
+        garmentImageUrl: pendingTryOnProduct.photoUrl || null,
+        generatedImageUrl: tryOnImageUrl,
+        lookName: pendingTryOnProduct.name || looks[0]?.name || null,
+        lookId: pendingTryOnProduct.id,
+        category: pendingTryOnProduct.category || inferTryOnCategory(pendingTryOnProduct),
+        requestId: null,
+        updatedAt: new Date().toISOString(),
+      },
+      lastAction: "SUGGEST_NEW_LOOK",
+      lastActionOutcome: "REQUESTED_VARIATION",
+    });
+
+    setPendingTryOnProduct(null);
+  }, [tryOnStatus, tryOnImageUrl, resolvedOrgId, id, pendingTryOnProduct, tryOnPersonImage, looks]);
+
+  // ── Decision engine effect (always called) ──
+  React.useEffect(() => {
+    if (loading || !surface) return;
+
+    const intentScore = (onboardingData?.intent?.satisfaction || 5) as number;
+    const nextAction = decideNextAction({
+      intent_score: intentScore,
+      last_tryon: tryOnImageUrl ? { image_url: tryOnImageUrl, status: "completed" } : persistedTryOn,
+      last_products_viewed: [],
+      last_recommendations: looks || [],
+      whatsapp_context: {},
+      emotional_state: {},
+      timestamps: {
+        last_interaction_at: new Date().toISOString(),
+      },
+    });
+
+    setDecision(nextAction);
+    console.log("[Decision Engine] Next Action:", nextAction);
+  }, [tryOnImageUrl, persistedTryOn, surface, loading, onboardingData?.intent?.satisfaction, looks]);
+
+  // ── Handlers ──
+  const handleGenerateTryOn = React.useCallback(
+    (productId: string) => {
+      if (!tryOnPersonImage || !resolvedOrgId || !id) return;
+      const selectedProduct = looks[0]?.items?.find((item) => item.id === productId) || firstTryOnProduct;
+      setPendingTryOnProduct(
+        selectedProduct
+          ? {
+            id: selectedProduct.id,
+            name: selectedProduct.name,
+            photoUrl: selectedProduct.photoUrl || null,
+            category: selectedProduct.category || null,
+          }
+          : null
+      );
+      startTryOn({
+        model_image: tryOnPersonImage,
+        product_id: productId,
+        org_id: resolvedOrgId,
+        saved_result_id: id,
+      });
+    },
+    [tryOnPersonImage, resolvedOrgId, id, looks, firstTryOnProduct, startTryOn]
+  );
+
+  const openWhatsApp = React.useCallback(
+    async (url: string) => {
+      if (resolvedOrgId && id) {
+        void syncLeadContext({
+          orgId: resolvedOrgId,
+          savedResultId: id,
+          eventType: "whatsapp_clicked",
+          action: "SEND_WHATSAPP_MESSAGE",
+          outcome: "WHATSAPP_CLICKED",
+          whatsappContext: {
+            source: "result_page",
+            destination: url,
+            whatsappClickedAt: new Date().toISOString(),
+            lastAction: "SEND_WHATSAPP_MESSAGE",
+            lastActionOutcome: "WHATSAPP_CLICKED",
+          },
+        });
+      }
+
+      window.open(url, "_blank", "noopener,noreferrer");
+    },
+    [resolvedOrgId, id]
+  );
+
+  // ──────────────────────────────────────────────────────────────
+  // EARLY RETURNS (after ALL hooks have been called)
+  // ──────────────────────────────────────────────────────────────
 
   if (redirecting) {
     return (
@@ -197,138 +346,11 @@ function ResultDashboardContent() {
     );
   }
 
-  const result = surface;
-  const safeResult = result ?? {};
-  const looks = Array.isArray(safeResult.looks) ? safeResult.looks : [];
-  const essenceLabel = safeResult.essence?.label ?? "Sua Presença";
-  const palette = safeResult.palette ?? {};
-  const paletteFamily = palette.family ?? "Personalizada";
-  const paletteColors = Array.isArray(palette.colors) ? palette.colors : [];
-  const bodyFit = onboardingData.body?.fit ?? "Ajuste preciso";
-  const colorContrast = onboardingData.colors?.contrast ?? "Natural";
-  const org = {
-    name: tenantContext?.branchName || tenantContext?.orgSlug || "sua loja",
-    whatsapp_phone: tenantContext?.whatsappNumber || "5511967011133"
-  };
+  // ──────────────────────────────────────────────────────────────
+  // MAIN RENDER (surface is guaranteed non-null here)
+  // ──────────────────────────────────────────────────────────────
 
-  const whatsappUrl = useMemo(() => {
-    if (!result || !surface) return "";
-    const message = buildWhatsAppHandoffMessage({
-      contactName: onboardingData.contact?.name,
-      styleIdentity: essenceLabel,
-      imageGoal: onboardingData.intent?.imageGoal,
-      lookSummary: looks as any,
-      lastTryOn: tryOnImageUrl ? { image_url: tryOnImageUrl, status: "completed" } : persistedTryOn,
-      decision: decision ? { action: decision.chosenAction, reason: decision.reason } : undefined,
-    });
-    return buildWhatsAppHandoffUrl(message, tenantContext?.whatsappNumber || "5511967011133") || "";
-  }, [result, surface, onboardingData, tryOnImageUrl, persistedTryOn, decision, tenantContext]);
-
-  const tryOnPersonImage = userPhoto || onboardingData.scanner?.bodyPhoto || onboardingData.scanner?.facePhoto || "";
-  const resolvedOrgId = tenantContext?.orgId || onboardingData.tenant?.orgId || "";
-  const displayImageUrl = tryOnImageUrl || persistedTryOn?.image_url;
-  const isPreviousLook = !tryOnImageUrl && !!persistedTryOn?.image_url;
-  const isGenerating = tryOnStatus === "queued" || tryOnStatus === "processing";
-  const firstTryOnProduct = looks[0]?.items?.[0] || null;
-
-  const currentLoadingMessage = (() => {
-    if (tryOnProgress < 30) return TRYON_LOADING_MESSAGES[0];
-    if (tryOnProgress < 70) return TRYON_LOADING_MESSAGES[1];
-    return TRYON_LOADING_MESSAGES[2];
-  })();
-
-  const handleGenerateTryOn = (productId: string) => {
-    if (!tryOnPersonImage || !resolvedOrgId || !id) return;
-    const selectedProduct = looks[0]?.items?.find((item) => item.id === productId) || firstTryOnProduct;
-    setPendingTryOnProduct(
-      selectedProduct
-        ? {
-          id: selectedProduct.id,
-          name: selectedProduct.name,
-          photoUrl: selectedProduct.photoUrl || null,
-          category: selectedProduct.category || null,
-        }
-        : null
-    );
-    startTryOn({
-      model_image: tryOnPersonImage,
-      product_id: productId,
-      org_id: resolvedOrgId,
-      saved_result_id: id
-    });
-  };
-
-  React.useEffect(() => {
-    if (tryOnStatus !== "completed" || !tryOnImageUrl || !resolvedOrgId || !id || !pendingTryOnProduct) {
-      return;
-    }
-
-    void syncLeadContext({
-      orgId: resolvedOrgId,
-      savedResultId: id,
-      eventType: "tryon_generated",
-      action: "SUGGEST_NEW_LOOK",
-      outcome: "REQUESTED_VARIATION",
-      lastTryon: {
-        personImageUrl: tryOnPersonImage || null,
-        garmentImageUrl: pendingTryOnProduct.photoUrl || null,
-        generatedImageUrl: tryOnImageUrl,
-        lookName: pendingTryOnProduct.name || looks[0]?.name || null,
-        lookId: pendingTryOnProduct.id,
-        category: pendingTryOnProduct.category || inferTryOnCategory(pendingTryOnProduct),
-        requestId: null,
-        updatedAt: new Date().toISOString(),
-      },
-      lastAction: "SUGGEST_NEW_LOOK",
-      lastActionOutcome: "REQUESTED_VARIATION",
-    });
-
-    setPendingTryOnProduct(null);
-  }, [tryOnStatus, tryOnImageUrl, resolvedOrgId, id, pendingTryOnProduct, tryOnPersonImage, looks]);
-
-  React.useEffect(() => {
-    if (loading || !result) return;
-
-    const intentScore = (onboardingData.intent?.satisfaction || 5) as number;
-    const nextAction = decideNextAction({
-      intent_score: intentScore,
-      last_tryon: tryOnImageUrl ? { image_url: tryOnImageUrl, status: "completed" } : persistedTryOn,
-      last_products_viewed: [],
-      last_recommendations: looks || [],
-      whatsapp_context: {},
-      emotional_state: {},
-      timestamps: {
-        last_interaction_at: new Date().toISOString(),
-      }
-    });
-
-    setDecision(nextAction);
-    console.log("[Decision Engine] Next Action:", nextAction);
-  }, [tryOnImageUrl, persistedTryOn, result, loading, onboardingData.intent?.satisfaction]);
-
-  const openWhatsApp = async (url: string) => {
-    if (resolvedOrgId && id) {
-      void syncLeadContext({
-        orgId: resolvedOrgId,
-        savedResultId: id,
-        eventType: "whatsapp_clicked",
-        action: "SEND_WHATSAPP_MESSAGE",
-        outcome: "WHATSAPP_CLICKED",
-        whatsappContext: {
-          source: "result_page",
-          destination: url,
-          whatsappClickedAt: new Date().toISOString(),
-          lastAction: "SEND_WHATSAPP_MESSAGE",
-          lastActionOutcome: "WHATSAPP_CLICKED",
-        },
-      });
-    }
-
-    window.open(url, "_blank", "noopener,noreferrer");
-  };
-
-  try {
-    return (
+  return (
     <main className="min-h-screen bg-[#0a0a0a] pb-24 text-[#f0ece4] selection:bg-[#C9A84C]/30">
       <section className="px-5 pt-8">
         <div className="relative mx-auto max-w-lg">
@@ -507,18 +529,7 @@ function ResultDashboardContent() {
 
       <SaveResultsModal isOpen={showSaveModal} onClose={() => setShowSaveModal(false)} surface={surface} />
     </main>
-    );
-  } catch (err) {
-    console.error("[RENDER CRASH]", err, result);
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a] px-6 text-center text-white">
-        <div className="max-w-sm space-y-3">
-          <p className="text-sm uppercase tracking-[0.3em] text-[#C9A84C]">Erro ao renderizar</p>
-          <p className="text-sm text-white/60">A leitura foi carregada, mas a tela encontrou um erro ao montar a interface.</p>
-        </div>
-      </div>
-    );
-  }
+  );
 }
 
 export default function ResultDashboardPage() {
