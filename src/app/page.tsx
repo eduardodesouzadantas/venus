@@ -13,13 +13,9 @@ export default async function IndexRouter({
     typeof resolved.org === "string" ? resolved.org : Array.isArray(resolved.org) ? resolved.org[0] || "" : ""
   );
 
-  // Se houver uma organização (cliente final chegando pelo link da loja)
   if (requestedOrg) {
-    // Redireciona para o Splash com o parâmetro da organização
     redirect(`/onboarding/chat?org=${requestedOrg}`);
   }
 
-  // Se não houver organização (visitante comum ou lojista via link de vendas)
-  // Redireciona para a landing page de apresentação
-  redirect("/para-lojistas");
+  redirect("/onboarding/chat");
 }
