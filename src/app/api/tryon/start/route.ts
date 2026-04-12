@@ -14,14 +14,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { model_image?: string; product_id?: string; org_id?: string };
+  let body: { model_image?: string; product_id?: string; org_id?: string; saved_result_id?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
 
-  const { model_image, product_id, org_id } = body;
+  const { model_image, product_id, org_id, saved_result_id } = body;
 
   if (!model_image || !product_id || !org_id) {
     return NextResponse.json({ error: "Missing required fields: model_image, product_id, org_id" }, { status: 400 });
@@ -94,6 +94,7 @@ export async function POST(req: NextRequest) {
       user_id: user.id,
       fal_request_id: requestId,
       status: "pending",
+      saved_result_id: saved_result_id || null,
     });
 
     return NextResponse.json({ request_id: requestId });

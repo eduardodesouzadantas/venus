@@ -51,11 +51,69 @@ export async function GET(req: NextRequest) {
       const result = await getTryOnResult(requestId);
       const imageUrl = result.images[0]?.url ?? null;
 
+      // 1. Atualizar evento técnico
       await supabase
         .from("tryon_events")
-        .update({ status: "completed", result_image_url: imageUrl, updated_at: new Date().toISOString() })
+        .update({
+          status: "completed",
+          result_image_url: imageUrl,
+          updated_at: new Date().toISOString()
+        })
         .eq("fal_request_id", requestId)
         .eq("org_id", orgId);
+
+      // 2. Persistência Canônica no contexto do Lead
+      const { data: eventWithResult } = await supabase
+        .from("tryon_events")
+        .select("saved_result_id, product_id, products(name, image_url)")
+        .eq("fal_request_id", requestId)
+        .single();
+
+      if (eventWithResult?.saved_result_id) {
+        const { data: savedResult } = await supabase
+          .from("saved_results")
+          .select("payload")
+          .eq("id", eventWithResult.saved_result_id)
+          .single();
+
+        if (savedResult) {
+          const payload = (savedResult.payload || {}) as any;
+          const product = (eventWithResult.products as any) || {};
+
+          const lastTryOn = {
+            image_url: imageUrl,
+            product_id: eventWithResult.product_id,
+            product_name: product.name,
+            product_image: product.image_url,
+            generated_at: new Date().toISOString(),
+            provider: "fal_ai",
+            status: "completed",
+            style_reason: "Look gerado com base na sua colorimetria e biótipo.",
+            cta_state: "ready_for_whatsapp"
+          };
+
+          const newPayload = {
+            ...payload,
+            last_tryon: lastTryOn,
+            // Incrementar intenção operacional
+            intent_delta: (payload.intent_delta || 0) + 15
+          };
+
+          await supabase
+            .from("saved_results")
+            .update({ payload: newPayload })
+            .eq("id", eventWithResult.saved_result_id);
+
+          // Atualizar lead se existir
+          await supabase
+            .from("leads")
+            .update({
+              intent_score: Math.min(100, (payload.onboardingContext?.intent?.satisfaction * 10 || 50) + (newPayload.intent_delta || 0)),
+              updated_at: new Date().toISOString()
+            })
+            .eq("saved_result_id", eventWithResult.saved_result_id);
+        }
+      }
 
       return NextResponse.json({ status: "completed", image_url: imageUrl });
     }

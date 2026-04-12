@@ -60,6 +60,12 @@ function getMinutesAgo(timestamp: number) {
 
 function getLookInterest(payload: Record<string, unknown> | null) {
   if (!payload) return "Curadoria Venus";
+
+  const lastTryOn = asRecord(payload.last_tryon);
+  if (lastTryOn?.product_name) {
+    return `Look Testado: ${lastTryOn.product_name}`;
+  }
+
   const finalResult = asRecord(payload.finalResult);
   const handoff = asRecord(payload.whatsappHandoff);
   const firstLook = Array.isArray(finalResult?.looks) ? (finalResult?.looks as Array<Record<string, unknown>>)[0] : null;

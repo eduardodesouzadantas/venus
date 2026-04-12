@@ -9,6 +9,31 @@ type SavedResultRow = {
   payload?: Record<string, unknown> | null;
 };
 
+type LeadRow = {
+  id: string;
+  org_id?: string | null;
+  name?: string | null;
+  phone?: string | null;
+  whatsapp_key?: string | null;
+  saved_result_id?: string | null;
+};
+
+type LeadContextRow = {
+  user_id: string;
+  org_id: string;
+  profile_data?: Record<string, unknown> | null;
+  style_profile?: Record<string, unknown> | null;
+  colorimetry?: Record<string, unknown> | null;
+  body_analysis?: Record<string, unknown> | null;
+  intent_score?: number | null;
+  emotional_state?: Record<string, unknown> | null;
+  last_tryon?: Record<string, unknown> | null;
+  last_products_viewed?: unknown[] | null;
+  last_recommendations?: unknown[] | null;
+  whatsapp_context?: Record<string, unknown> | null;
+  updated_at?: string | null;
+};
+
 type HandoffLook = {
   id?: string;
   name?: string;
@@ -65,6 +90,73 @@ const normalizeStringArray = (value: unknown): string[] => {
   return value.map((entry) => normalizeString(typeof entry === "string" ? entry : "")).filter(Boolean);
 };
 
+const extractViewedProducts = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => {
+      if (typeof entry === "string") return normalizeString(entry);
+      if (!entry || typeof entry !== "object") return "";
+      const record = entry as Record<string, unknown>;
+      return normalizeString((record.id as string | undefined) || (record.name as string | undefined));
+    })
+    .filter(Boolean);
+};
+
+const extractLookSummary = (value: unknown): WhatsAppLookSummary[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => mapLookSummary(entry))
+    .filter((entry): entry is WhatsAppLookSummary => Boolean(entry));
+};
+
+const mapLeadContextToUserContext = (lead: LeadRow, context: LeadContextRow, orgSlug?: string | null): UserContext | null => {
+  const profile = asRecord(context.profile_data);
+  const styleProfile = asRecord(context.style_profile);
+  const colorimetry = asRecord(context.colorimetry);
+  const bodyAnalysis = asRecord(context.body_analysis);
+  const emotionalState = asRecord(context.emotional_state);
+  const whatsapp = asRecord(context.whatsapp_context);
+
+  const phone =
+    normalizePhone(lead.phone || lead.whatsapp_key || (profile?.phone as string | undefined) || (whatsapp?.contactPhone as string | undefined));
+
+  if (!phone) {
+    return null;
+  }
+
+  const name =
+    normalizeString((profile?.name as string | undefined) || (whatsapp?.contactName as string | undefined) || lead.name || "Cliente Venus");
+
+  const styleIdentity =
+    normalizeString((styleProfile?.styleIdentity as string | undefined) || (styleProfile?.dominantStyle as string | undefined) || (whatsapp?.styleIdentity as string | undefined));
+
+  const imageGoal = normalizeString((styleProfile?.imageGoal as string | undefined) || (whatsapp?.imageGoal as string | undefined));
+  const paletteFamily =
+    normalizeString((styleProfile?.paletteFamily as string | undefined) || (colorimetry?.colorSeason as string | undefined) || (whatsapp?.paletteFamily as string | undefined));
+  const fit = normalizeString((bodyAnalysis?.fit as string | undefined) || (styleProfile?.fit as string | undefined) || (whatsapp?.fit as string | undefined));
+  const metal = normalizeString((colorimetry?.metal as string | undefined) || (styleProfile?.metal as string | undefined) || (whatsapp?.metal as string | undefined));
+
+  return {
+    name,
+    phone,
+    styleIdentity,
+    intentScore: typeof context.intent_score === "number" ? context.intent_score : Number(emotionalState?.intentScore || whatsapp?.intentScore || 0) || 0,
+    lastTryOn: context.last_tryon as any,
+    viewedProducts: extractViewedProducts(context.last_products_viewed),
+    lastLookId: normalizeString((context.last_tryon?.lookId as string | undefined) || (whatsapp?.lastLookId as string | undefined)),
+    tryOnCount: context.last_tryon ? 1 : 0,
+    orgSlug: orgSlug || normalizeString((whatsapp?.orgSlug as string | undefined)) || undefined,
+    styleDirection: normalizeString((styleProfile?.styleDirection as string | undefined) || (whatsapp?.styleDirection as string | undefined)),
+    imageGoal,
+    paletteFamily,
+    fit,
+    metal,
+    source: "automation",
+    lastHandoffId: normalizeString((whatsapp?.resultId as string | undefined) || (lead.saved_result_id as string | undefined)),
+    lookSummary: extractLookSummary(context.last_recommendations),
+  };
+};
+
 const mapLookItem = (value: unknown): WhatsAppLookItemContext | null => {
   const item = asRecord(value);
   if (!item) return null;
@@ -106,11 +198,11 @@ const mapLookItem = (value: unknown): WhatsAppLookItemContext | null => {
     conversionCopy: normalizeString(item.conversionCopy as string | undefined) || undefined,
     sellerSuggestions: item.sellerSuggestions && typeof item.sellerSuggestions === "object" && !Array.isArray(item.sellerSuggestions)
       ? {
-          pairsBestWith: normalizeStringArray((item.sellerSuggestions as Record<string, unknown>).pairsBestWith),
-          idealFor: normalizeString((item.sellerSuggestions as Record<string, unknown>).idealFor as string | undefined),
-          buyerProfiles: normalizeStringArray((item.sellerSuggestions as Record<string, unknown>).buyerProfiles),
-          bestContext: normalizeString((item.sellerSuggestions as Record<string, unknown>).bestContext as string | undefined),
-        }
+        pairsBestWith: normalizeStringArray((item.sellerSuggestions as Record<string, unknown>).pairsBestWith),
+        idealFor: normalizeString((item.sellerSuggestions as Record<string, unknown>).idealFor as string | undefined),
+        buyerProfiles: normalizeStringArray((item.sellerSuggestions as Record<string, unknown>).buyerProfiles),
+        bestContext: normalizeString((item.sellerSuggestions as Record<string, unknown>).bestContext as string | undefined),
+      }
       : undefined,
   };
 };
@@ -148,11 +240,11 @@ const mapLookSummary = (value: unknown): WhatsAppLookSummary | null => {
     conversionCopy: normalizeString(look.conversionCopy as string | undefined) || undefined,
     sellerSuggestions: look.sellerSuggestions && typeof look.sellerSuggestions === "object" && !Array.isArray(look.sellerSuggestions)
       ? {
-          pairsBestWith: normalizeStringArray((look.sellerSuggestions as Record<string, unknown>).pairsBestWith),
-          idealFor: normalizeString((look.sellerSuggestions as Record<string, unknown>).idealFor as string | undefined),
-          buyerProfiles: normalizeStringArray((look.sellerSuggestions as Record<string, unknown>).buyerProfiles),
-          bestContext: normalizeString((look.sellerSuggestions as Record<string, unknown>).bestContext as string | undefined),
-        }
+        pairsBestWith: normalizeStringArray((look.sellerSuggestions as Record<string, unknown>).pairsBestWith),
+        idealFor: normalizeString((look.sellerSuggestions as Record<string, unknown>).idealFor as string | undefined),
+        buyerProfiles: normalizeStringArray((look.sellerSuggestions as Record<string, unknown>).buyerProfiles),
+        bestContext: normalizeString((look.sellerSuggestions as Record<string, unknown>).bestContext as string | undefined),
+      }
       : undefined,
     items,
   };
@@ -262,39 +354,68 @@ async function loadRecentHandoffProfiles(targetOrgSlug?: string) {
   }
   const targetOrgId = resolvedOrg.org?.id || null;
 
-  let query = supabase
-    .from("saved_results")
-    .select("id, org_id, payload, created_at")
-    .order("created_at", { ascending: false })
-    .limit(100);
+  const [leadsResult, contextsResult, savedResultsResult] = await Promise.all([
+    supabase
+      .from("leads")
+      .select("id, org_id, name, phone, whatsapp_key, saved_result_id, created_at, updated_at")
+      .order("updated_at", { ascending: false })
+      .limit(200),
+    supabase
+      .from("lead_context")
+      .select("user_id, org_id, profile_data, style_profile, colorimetry, body_analysis, intent_score, emotional_state, last_tryon, last_products_viewed, last_recommendations, whatsapp_context, updated_at")
+      .order("updated_at", { ascending: false })
+      .limit(200),
+    supabase
+      .from("saved_results")
+      .select("id, org_id, payload, created_at")
+      .order("created_at", { ascending: false })
+      .limit(100),
+  ]);
 
-  if (targetOrgId) {
-    query = query.eq("org_id", targetOrgId);
-  }
-
-  const { data, error } = await query;
-
-  if (error || !data) {
-    console.warn("[WHATSAPP_CONTEXT_BRIDGE] failed to load saved results", error);
+  if (leadsResult.error || contextsResult.error || savedResultsResult.error) {
+    console.warn("[WHATSAPP_CONTEXT_BRIDGE] failed to load lead context", leadsResult.error || contextsResult.error || savedResultsResult.error);
     return cachedPhoneMapByOrg[cacheKey] || {};
   }
 
+  const leadRows = ((leadsResult.data || []) as LeadRow[]).filter((row) => {
+    if (!targetOrgId) return true;
+    return normalizeString(row.org_id) === targetOrgId;
+  });
+  const leadById = new Map(leadRows.map((row) => [row.id, row]));
+  const contextRows = ((contextsResult.data || []) as LeadContextRow[]).filter((row) => {
+    if (!targetOrgId) return true;
+    return normalizeString(row.org_id) === targetOrgId;
+  });
+
   const nextMap: Record<string, UserContext> = {};
 
-  for (const row of data as SavedResultRow[]) {
-    if (targetOrgId) {
-      const rowOrgId = normalizeString(row.org_id);
-      if (!rowOrgId || rowOrgId !== targetOrgId) continue;
-    }
-
-    const context = mapSavedResultToUserContext(row);
+  for (const row of contextRows) {
+    const lead = leadById.get(row.user_id);
+    if (!lead) continue;
+    const context = mapLeadContextToUserContext(lead, row, targetOrgSlug || undefined);
     if (!context) continue;
     const normalizedPhone = normalizePhone(context.phone);
     if (!normalizedPhone || nextMap[normalizedPhone]) continue;
-    nextMap[normalizedPhone] = {
-      ...context,
-      orgSlug: context.orgSlug || targetOrgSlug || undefined,
-    };
+    nextMap[normalizedPhone] = context;
+  }
+
+  if (!Object.keys(nextMap).length) {
+    const savedResults = savedResultsResult.data || [];
+    for (const row of savedResults as SavedResultRow[]) {
+      if (targetOrgId) {
+        const rowOrgId = normalizeString(row.org_id);
+        if (!rowOrgId || rowOrgId !== targetOrgId) continue;
+      }
+
+      const context = mapSavedResultToUserContext(row);
+      if (!context) continue;
+      const normalizedPhone = normalizePhone(context.phone);
+      if (!normalizedPhone || nextMap[normalizedPhone]) continue;
+      nextMap[normalizedPhone] = {
+        ...context,
+        orgSlug: context.orgSlug || targetOrgSlug || undefined,
+      };
+    }
   }
 
   cachedPhoneMapByOrg[cacheKey] = nextMap;

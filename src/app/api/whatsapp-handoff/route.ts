@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { enforceOrgHardCap } from "@/lib/billing/enforcement";
 import { extractLeadSignalsFromSavedResultPayload, findOrCreateLead } from "@/lib/leads";
+import { loadLeadContextByIdentity, updateIntentScore, upsertLeadContextByLeadId } from "@/lib/lead-context";
 import { bumpTenantUsageDaily, resolveAppTenantOrg } from "@/lib/tenant/core";
 import { enforceTenantOperationalState } from "@/lib/tenant/enforcement";
 
@@ -144,6 +145,53 @@ export async function POST(request: Request) {
       intentScore: leadSignals.intentScore ?? null,
       whatsappKey: leadSignals.whatsappKey || null,
       lastInteractionAt: leadSignals.lastInteractionAt || undefined,
+    });
+
+    const leadSnapshot = await loadLeadContextByIdentity(supabase, {
+      orgId: org.id,
+      leadId: lead.id,
+      savedResultId: body.resultId,
+    }).catch(() => ({ lead: null, context: null }));
+
+    const currentIntentScore =
+      typeof leadSnapshot.context?.intent_score === "number"
+        ? leadSnapshot.context.intent_score
+        : typeof lead.intent_score === "number"
+          ? lead.intent_score
+          : 0;
+
+    await upsertLeadContextByLeadId(supabase, {
+      orgId: org.id,
+      leadId: lead.id,
+      profileData: {
+        name: body.payload.contactName || lead.name || "",
+        phone: body.payload.contactPhone || lead.phone || "",
+        resultId: body.resultId,
+        orgSlug: org.slug,
+        source: "whatsapp",
+      },
+      styleProfile: {
+        styleIdentity: body.payload.styleIdentity || body.payload.dominantStyle || "",
+        dominantStyle: body.payload.dominantStyle || body.payload.styleIdentity || "",
+        imageGoal: body.payload.imageGoal || "",
+        paletteFamily: body.payload.paletteFamily || "",
+        fit: body.payload.fit || "",
+        metal: body.payload.metal || "",
+      },
+      emotionalState: {
+        source: "whatsapp",
+        updatedAt: new Date().toISOString(),
+      },
+      whatsappContext: {
+        ...body.payload,
+        orgSlug: org.slug,
+        orgId: org.id,
+      },
+      intentScore: updateIntentScore("whatsapp_clicked", currentIntentScore, {
+        now: new Date().toISOString(),
+        lastActivityAt: leadSnapshot.context?.updated_at || lead.last_interaction_at || null,
+      }),
+      lastRecommendations: Array.isArray(body.payload.lookSummary) ? body.payload.lookSummary : [],
     });
 
     await supabase.from("tenant_events").insert({

@@ -3,7 +3,12 @@
 import { createAdminClient } from "@/lib/supabase/admin"
 import { redirect } from "next/navigation"
 import { extractLeadSignalsFromSavedResultPayload, findOrCreateLead } from "@/lib/leads"
+import { updateIntentScore, upsertLeadContextByLeadId } from "@/lib/lead-context"
 import { bumpTenantUsageDaily, fetchTenantById, resolveAppTenantOrg } from "@/lib/tenant/core"
+
+function asRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
 
 export async function updateB2CResult(formData: FormData, dbResultId: string) {
   const supabase = createAdminClient()
@@ -48,6 +53,7 @@ export async function updateB2CResult(formData: FormData, dbResultId: string) {
     user_email: email,
     user_name: name,
   });
+  const onboardingIntentScore = updateIntentScore("onboarding_completed", leadSignals.intentScore ?? 0);
 
   const { error } = await supabase
     .from("saved_results")
@@ -96,9 +102,50 @@ export async function updateB2CResult(formData: FormData, dbResultId: string) {
       source: "app",
       status: "new",
       savedResultId: dbResultId,
-      intentScore: leadSignals.intentScore ?? null,
+      intentScore: onboardingIntentScore,
       whatsappKey: leadSignals.whatsappKey || null,
       lastInteractionAt: leadSignals.lastInteractionAt || undefined,
+    });
+
+    const onboardingRecord = asRecord(currentPayload.onboardingContext);
+    const onboardingIntent = onboardingRecord ? asRecord(onboardingRecord.intent) : null;
+    const currentColors = onboardingRecord ? asRecord(onboardingRecord.colors) : null;
+    const currentBody = onboardingRecord ? asRecord(onboardingRecord.body) : null;
+    const finalResultRecord = asRecord(currentPayload.finalResult);
+    const heroRecord = finalResultRecord ? asRecord(finalResultRecord.hero) : null;
+
+    await upsertLeadContextByLeadId(supabase, {
+      orgId: resolvedTenant.org.id,
+      leadId: lead.id,
+      profileData: {
+        name: name || lead.name || "",
+        email: email || lead.email || "",
+        savedResultId: dbResultId,
+        orgId: resolvedTenant.org.id,
+        orgSlug: resolvedTenant.org.slug,
+        source: "app",
+      },
+      styleProfile: {
+        styleIdentity: typeof heroRecord?.dominantStyle === "string" ? heroRecord.dominantStyle : "",
+        imageGoal: typeof onboardingIntent?.imageGoal === "string" ? onboardingIntent.imageGoal : "",
+        resultId: dbResultId,
+      },
+      colorimetry: {
+        favoriteColors: Array.isArray(currentColors?.favoriteColors) ? currentColors.favoriteColors : [],
+        avoidColors: Array.isArray(currentColors?.avoidColors) ? currentColors.avoidColors : [],
+      },
+      bodyAnalysis: {
+        fit: typeof currentBody?.fit === "string" ? currentBody.fit : "",
+      },
+      intentScore: onboardingIntentScore,
+      emotionalState: {
+        source: "app",
+        updatedAt: new Date().toISOString(),
+      },
+      whatsappContext: {
+        source: "app",
+        resultId: dbResultId,
+      },
     });
 
     await supabase.from("tenant_events").insert({

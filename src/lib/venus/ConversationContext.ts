@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { loadLeadContextByIdentity } from "@/lib/lead-context";
 import type { VenusContext, VenusConversationMessage } from "./types";
 
 function normalize(value: unknown) {
@@ -124,6 +125,13 @@ export async function loadContext(phone_number: string, org_id: string): Promise
     savedPayload = null;
   }
 
+  let leadSnapshot: Awaited<ReturnType<typeof loadLeadContextByIdentity>> | null = null;
+  try {
+    leadSnapshot = await loadLeadContextByIdentity(admin, { orgId: org_id, phone: phone_number });
+  } catch {
+    leadSnapshot = null;
+  }
+
   let productsRows: Array<Record<string, unknown>> = [];
   try {
     const { data } = await admin
@@ -187,23 +195,29 @@ export async function loadContext(phone_number: string, org_id: string): Promise
 
   const onboarding = onboardingData || {};
   const saved = savedPayload || {};
+  const leadContext = leadSnapshot?.context || null;
+  const leadProfile = asRecord(leadContext?.profile_data);
+  const leadStyle = asRecord(leadContext?.style_profile);
+  const leadColor = asRecord(leadContext?.colorimetry);
+  const leadBody = asRecord(leadContext?.body_analysis);
+  const leadWhatsapp = asRecord(leadContext?.whatsapp_context);
 
   const clientName =
-    collectFromRows([asRecord(conversationData?.user_context), onboarding, saved], [["name"], ["client_name"], ["customer_name"], ["user_name"]]) ||
+    collectFromRows([leadProfile, leadWhatsapp, asRecord(conversationData?.user_context), onboarding, saved], [["name"], ["client_name"], ["customer_name"], ["user_name"]]) ||
     normalize(conversationData?.user_name) ||
     "Cliente Venus";
 
-  const archetype = collectFromRows([onboarding, asRecord(onboarding.payload), asRecord(onboarding.metadata), saved], [["archetype"], ["user_archetype"], ["profile", "archetype"], ["payload", "archetype"]]);
-  const palette = collectFromRows([onboarding, asRecord(onboarding.payload), asRecord(onboarding.metadata), saved], [["palette"], ["paletteFamily"], ["palette", "name"], ["profile", "palette"]]);
-  const fit = collectFromRows([onboarding, asRecord(onboarding.payload), asRecord(onboarding.metadata), saved], [["fit"], ["fitPreference"], ["fit_preference"], ["profile", "fit"]]);
-  const intention = collectFromRows([onboarding, asRecord(onboarding.payload), asRecord(onboarding.metadata), saved], [["intention"], ["mainIntention"], ["main_intention"], ["goal"], ["profile", "intention"]]);
+  const archetype = collectFromRows([leadStyle, leadProfile, onboarding, asRecord(onboarding.payload), asRecord(onboarding.metadata), saved], [["dominantStyle"], ["styleIdentity"], ["archetype"], ["user_archetype"], ["profile", "archetype"], ["payload", "archetype"]]);
+  const palette = collectFromRows([leadColor, leadStyle, onboarding, asRecord(onboarding.payload), asRecord(onboarding.metadata), saved], [["colorSeason"], ["paletteFamily"], ["palette"], ["palette", "name"], ["profile", "palette"]]);
+  const fit = collectFromRows([leadBody, leadStyle, onboarding, asRecord(onboarding.payload), asRecord(onboarding.metadata), saved], [["fit"], ["fitPreference"], ["fit_preference"], ["profile", "fit"]]);
+  const intention = collectFromRows([leadStyle, leadWhatsapp, onboarding, asRecord(onboarding.payload), asRecord(onboarding.metadata), saved], [["imageGoal"], ["intention"], ["mainIntention"], ["main_intention"], ["goal"], ["profile", "intention"]]);
 
-  const look = collectFromRows([saved, asRecord(onboarding.payload), onboarding], [["look"], ["product_name"], ["productName"], ["product"], ["focus_product"], ["product_interest"]]);
-  const productName = collectFromRows([saved, asRecord(onboarding.payload), onboarding], [["product_name"], ["productName"], ["focus_product"], ["product_interest"], ["look"]]);
-  const productCategory = collectFromRows([saved, asRecord(onboarding.payload), onboarding], [["product_category"], ["productCategory"], ["category"]]);
-  const productStyle = collectFromRows([saved, asRecord(onboarding.payload), onboarding], [["product_style"], ["productStyle"], ["style"]]);
-  const productColor = collectFromRows([saved, asRecord(onboarding.payload), onboarding], [["product_color"], ["dominant_color"], ["color"], ["primary_color"]]);
-  const productSize = collectFromRows([saved, asRecord(onboarding.payload), onboarding], [["size"], ["product_size"], ["productSize"], ["variant_size"]]);
+  const look = collectFromRows([leadWhatsapp, leadStyle, leadBody, saved, asRecord(onboarding.payload), onboarding], [["look"], ["product_name"], ["productName"], ["product"], ["focus_product"], ["product_interest"]]);
+  const productName = collectFromRows([leadWhatsapp, leadStyle, saved, asRecord(onboarding.payload), onboarding], [["product_name"], ["productName"], ["focus_product"], ["product_interest"], ["look"]]);
+  const productCategory = collectFromRows([leadWhatsapp, saved, asRecord(onboarding.payload), onboarding], [["product_category"], ["productCategory"], ["category"]]);
+  const productStyle = collectFromRows([leadStyle, saved, asRecord(onboarding.payload), onboarding], [["product_style"], ["productStyle"], ["style"]]);
+  const productColor = collectFromRows([leadColor, saved, asRecord(onboarding.payload), onboarding], [["product_color"], ["dominant_color"], ["color"], ["primary_color"]]);
+  const productSize = collectFromRows([leadBody, saved, asRecord(onboarding.payload), onboarding], [["size"], ["product_size"], ["productSize"], ["variant_size"]]);
 
   const focusedProductName = normalize(productName || look).toLowerCase();
   const stockByProductId = new Map<string, number>();

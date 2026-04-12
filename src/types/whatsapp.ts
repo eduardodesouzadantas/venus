@@ -99,6 +99,17 @@ export interface UserContext {
   source?: "manual" | "handoff" | "automation" | "saved_result";
   lastHandoffId?: string;
   lookSummary?: WhatsAppLookSummary[];
+  lastTryOn?: {
+    image_url: string;
+    product_id: string;
+    product_name?: string;
+    product_image?: string;
+    generated_at: string;
+    provider: string;
+    status: string;
+    style_reason?: string;
+    cta_state?: string;
+  };
 }
 
 export interface WhatsAppConversation {

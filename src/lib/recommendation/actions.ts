@@ -8,6 +8,7 @@ import { generateOpenAIRecommendation } from "@/lib/ai";
 import { buildCatalogAwareFallbackResult } from "@/lib/ai/result-normalizer";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { extractLeadSignalsFromSavedResultPayload, persistSavedResultAndLead } from "@/lib/leads";
+import { buildLeadContextProfileFromOnboarding, upsertLeadContextByLeadId } from "@/lib/lead-context";
 import { fetchTenantBySlug, isTenantActive, normalizeTenantSlug, resolveAppTenantOrg } from "@/lib/tenant/core";
 import { generateVisualProfileAnalysis } from "@/lib/analysis/visual-profile";
 import {
@@ -473,6 +474,22 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
         whatsappKey: leadSignals.whatsappKey || safeUserData.contact?.phone || null,
         lastInteractionAt: leadSignals.lastInteractionAt || undefined,
         eventSource: "app",
+      });
+
+      await upsertLeadContextByLeadId(supabase, {
+        orgId: resolvedTenant.org.id,
+        leadId: persisted.leadId,
+        ...buildLeadContextProfileFromOnboarding({
+          data: safeUserData,
+          result,
+          leadName: safeUserData.contact?.name || null,
+          leadPhone: safeUserData.contact?.phone || null,
+          leadEmail: safeUserData.contact?.email || null,
+          orgId: resolvedTenant.org.id,
+          orgSlug: resolvedTenant.org.slug,
+          savedResultId: persisted.savedResultId,
+          intentScore: leadSignals.intentScore ?? Math.round(Number(safeUserData.intent.satisfaction || 0) * 10),
+        }),
       });
 
       await recordOperationalTenantEvent(supabase, {

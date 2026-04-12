@@ -25,6 +25,7 @@ import {
   buildWhatsAppHandoffUrl,
   getWhatsAppHandoffPhone,
 } from "@/lib/whatsapp/handoff";
+import { syncLeadContext } from "@/lib/lead-context/client";
 import { registerSocialAction } from "@/lib/social/economy";
 
 const dataUrlToFile = async (dataUrl: string, fileName: string) => {
@@ -43,6 +44,7 @@ export default function DramaticResultPage() {
     whatsappNumber?: string | null;
     orgSlug?: string | null;
     branchName?: string | null;
+    orgId?: string | null;
   } | null>(null);
   
   const whatsappHandoffPhone = tenantContext?.whatsappNumber || getWhatsAppHandoffPhone();
@@ -227,6 +229,22 @@ Quer descobrir o seu?`;
     registerSocialAction("share");
     const message = encodeURIComponent(`${shareCaption}\n\nPostado via Venus Engine`);
     window.open(`https://wa.me/?text=${message}`, "_blank");
+  };
+
+  const handleOpenWhatsApp = (url: string) => {
+    if (tenantContext?.orgId && id) {
+      void syncLeadContext({
+        orgId: tenantContext.orgId,
+        savedResultId: id,
+        eventType: "whatsapp_clicked",
+        whatsappContext: {
+          source: "dramatic_result_flow",
+          destination: url,
+        },
+      });
+    }
+
+    window.open(url, "_blank", "noopener,noreferrer");
   };
 
   const handleConfirmShare = async () => {
@@ -484,7 +502,7 @@ Quer descobrir o seu?`;
                     metal: onboardingData.colors.metal || surface.palette.metal,
                   });
                   const url = buildWhatsAppHandoffUrl(message, whatsappHandoffPhone);
-                  if (url) window.open(url, "_blank");
+                  if (url) handleOpenWhatsApp(url);
                 }}
                 className="h-12 w-full text-[10px] tracking-[0.3em]"
               >

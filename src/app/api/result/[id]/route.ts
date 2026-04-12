@@ -36,6 +36,7 @@ export async function GET(_: Request, context: RouteContext) {
       analysis: payload.visualAnalysis ?? null,
       finalResult: payload.finalResult ?? null,
       tenant: payload.tenant ?? null,
+      lastTryOn: payload.last_tryon ?? null,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     });

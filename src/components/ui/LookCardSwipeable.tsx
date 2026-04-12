@@ -9,6 +9,7 @@ import { TryOnModal } from "./TryOnModal";
 import { LookSelectionModal } from "./LookSelectionModal";
 import { trackBehavior } from "@/lib/analytics/tracker";
 import { PriceAnchoring } from "./PriceAnchoring";
+import { syncLeadContext } from "@/lib/lead-context/client";
 import type { AIRecommendation } from "@/lib/ai/orchestrator";
 import { useSearchParams } from "next/navigation";
 
@@ -31,7 +32,8 @@ export function LookCardSwipeable({
   const [selectedProduct, setSelectedProduct] = React.useState<SelectedProduct | null>(null);
   const [selectedLookForPurchase, setSelectedLookForPurchase] = React.useState<LookData | null>(null);
   const [isTryOnOpen, setIsTryOnOpen] = React.useState(false);
-  const [tenantContext, setTenantContext] = React.useState<{ whatsappNumber?: string | null } | null>(null);
+  const [tenantContext, setTenantContext] = React.useState<{ whatsappNumber?: string | null; orgId?: string | null } | null>(null);
+  const viewedProductsRef = React.useRef<Set<string>>(new Set());
 
   React.useEffect(() => {
     trackBehavior(look.id, "view", "look");
@@ -52,6 +54,24 @@ export function LookCardSwipeable({
     void loadTenantContext();
   }, [id]);
 
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const storageKey = tenantContext?.orgId ? `venus_viewed_products:${tenantContext.orgId}` : null;
+    if (!storageKey) {
+      viewedProductsRef.current = new Set();
+      return;
+    }
+
+    try {
+      const raw = window.sessionStorage.getItem(storageKey);
+      const parsed = raw ? (JSON.parse(raw) as string[]) : [];
+      viewedProductsRef.current = new Set(Array.isArray(parsed) ? parsed.filter(Boolean) : []);
+    } catch {
+      viewedProductsRef.current = new Set();
+    }
+  }, [tenantContext?.orgId]);
+
   const whatsappPhone = tenantContext?.whatsappNumber;
   const canOpenWhatsApp = Boolean(whatsappPhone);
 
@@ -69,8 +89,46 @@ export function LookCardSwipeable({
     default: "A peça foi escolhida por coerência com o seu perfil e com a leitura geral do look.",
   };
 
+  const rememberProductVisit = (productId: string) => {
+    if (!productId) return false;
+
+    const revisited = viewedProductsRef.current.has(productId);
+    viewedProductsRef.current.add(productId);
+
+    if (typeof window !== "undefined" && tenantContext?.orgId) {
+      try {
+        window.sessionStorage.setItem(
+          `venus_viewed_products:${tenantContext.orgId}`,
+          JSON.stringify(Array.from(viewedProductsRef.current).slice(-50))
+        );
+      } catch {
+        // sessionStorage pode falhar em modo privado
+      }
+    }
+
+    return revisited;
+  };
+
   const handleOpenProduct = (item: LookItem) => {
     trackBehavior(item.id, "click", "product");
+    const revisited = rememberProductVisit(item.id);
+    void syncLeadContext({
+      orgId: tenantContext?.orgId || "",
+      savedResultId: id || "",
+      eventType: revisited ? "product_revisited" : undefined,
+      lastProductsViewed: [
+        {
+          id: item.id,
+          name: item.name,
+          brand: item.brand,
+          category: item.category || null,
+          photoUrl: item.photoUrl || null,
+          lookId: look.id,
+          lookName: look.name,
+          interactionType: "click",
+        },
+      ],
+    });
     setSelectedProduct({
       ...item,
       price: mockPrices[item.id] || mockPrices.default,
@@ -80,6 +138,20 @@ export function LookCardSwipeable({
 
   const handleOpenMainLook = () => {
     trackBehavior(look.id, "click", "look");
+    void syncLeadContext({
+      orgId: tenantContext?.orgId || "",
+      savedResultId: id || "",
+      lastProductsViewed: (look.items || []).slice(0, 2).map((item) => ({
+        id: item.id,
+        name: item.name,
+        brand: item.brand,
+        category: item.category || null,
+        photoUrl: item.photoUrl || null,
+        lookId: look.id,
+        lookName: look.name,
+        interactionType: "look_click",
+      })),
+    });
     setSelectedProduct({
       id: look.id,
       name: look.name,
@@ -89,6 +161,23 @@ export function LookCardSwipeable({
       rationale: look.explanation || look.intention,
       conversionCopy: look.explanation || look.intention,
     } as SelectedProduct);
+  };
+
+  const openWhatsApp = (phone: string, message: string) => {
+    if (!phone) return;
+
+    void syncLeadContext({
+      orgId: tenantContext?.orgId || "",
+      savedResultId: id || "",
+      eventType: "whatsapp_clicked",
+      whatsappContext: {
+        source: "look_card",
+        lookId: look.id,
+        lookName: look.name,
+      },
+    });
+
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
   };
 
   const primaryJustification = [
@@ -166,6 +255,10 @@ export function LookCardSwipeable({
                 href={`https://wa.me/${whatsappPhone}?text=${encodeURIComponent(`Oi! Vi o look "${look.name}" e quero saber mais`)}`}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={(event) => {
+                  event.preventDefault();
+                  openWhatsApp(whatsappPhone || "", `Oi! Vi o look "${look.name}" e quero saber mais`);
+                }}
                 className="group/tryon flex items-center gap-2 rounded-full border border-white/20 bg-black/60 px-3 py-1.5 backdrop-blur-md transition-all active:scale-95 sm:px-4"
               >
                 <MessageCircle className="h-3 w-3 text-slate-300 group-hover/tryon:animate-pulse" />

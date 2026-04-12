@@ -3,202 +3,23 @@
 import React, { Suspense, useMemo } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowRight, Activity, Bookmark, BrainCircuit, History, LayoutGrid, Loader2, PackageCheck, Sparkles, Target, Watch, BookOpen, AlertCircle } from "lucide-react";
+import { ArrowRight, Sparkles, Loader2 } from "lucide-react";
 import { Text } from "@/components/ui/Text";
 import { VenusButton } from "@/components/ui/VenusButton";
-import { SavedProfileToast } from "@/components/ui/SavedProfileToast";
 import { SaveResultsModal } from "@/components/onboarding/SaveResultsModal";
 import { SocialShareActions } from "@/components/ui/SocialShareActions";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
 import { useUserImage } from "@/lib/onboarding/UserImageContext";
-import { getEngagedIds, getStatsSummary } from "@/lib/analytics/tracker";
-import type { BehaviorStatsSummary } from "@/lib/analytics/tracker";
-import type { UserStats } from "@/lib/ai/orchestrator";
-import type { LookData } from "@/types/result";
-import type { VisualAnalysisPayload } from "@/types/visual-analysis";
+import { syncLeadContext } from "@/lib/lead-context/client";
+import { useTryOn, TRYON_LOADING_MESSAGES } from "@/hooks/useTryOn";
 import { buildResultSurface, type ResultSurface } from "@/lib/result/surface";
-import {
-  buildWhatsAppHandoffMessage,
-  buildWhatsAppHandoffPayload,
-  buildWhatsAppHandoffUrl,
-  getWhatsAppHandoffPhone,
-} from "@/lib/whatsapp/handoff";
 
-function inferTryOnCategory(look: LookData, item?: LookData["items"][number]): "tops" | "bottoms" | "one-pieces" {
-  const source = `${look.type} ${look.name} ${item?.name || ""} ${item?.contextOfUse || ""}`.toLowerCase();
-  if (source.includes("dress") || source.includes("vestido")) return "one-pieces";
-  if (source.includes("calca") || source.includes("calça") || source.includes("saia") || source.includes("pants") || source.includes("skirt")) {
-    return "bottoms";
-  }
+// Categorization logic for the try-on engine
+function inferTryOnCategory(product: any): "tops" | "bottoms" | "one-pieces" {
+  const source = `${product.category || ""} ${product.name || ""}`.toLowerCase();
+  if (source.includes("vestido") || source.includes("dress") || source.includes("macacão")) return "one-pieces";
+  if (source.includes("calça") || source.includes("saia") || source.includes("short") || source.includes("bermuda")) return "bottoms";
   return "tops";
-}
-
-function AutoTryOnPreview({
-  personImageUrl,
-  garmentImageUrl,
-  orgId,
-  category,
-  lookName,
-}: {
-  personImageUrl: string;
-  garmentImageUrl: string;
-  orgId: string;
-  category: "tops" | "bottoms" | "one-pieces";
-  lookName: string;
-}) {
-  const [status, setStatus] = React.useState<"idle" | "loading" | "processing" | "done" | "error">("idle");
-  const [generatedImageUrl, setGeneratedImageUrl] = React.useState("");
-  const [requestId, setRequestId] = React.useState("");
-  const [errorMessage, setErrorMessage] = React.useState("");
-
-  React.useEffect(() => {
-    let cancelled = false;
-
-    if (!personImageUrl || !garmentImageUrl) {
-      setStatus("idle");
-      setGeneratedImageUrl("");
-      setRequestId("");
-      setErrorMessage("");
-      return;
-    }
-
-    const start = async () => {
-      setStatus("loading");
-      setErrorMessage("");
-      setGeneratedImageUrl("");
-
-      try {
-        const response = await fetch("/api/tryon/auto", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            personImageUrl,
-            garmentImageUrl,
-            orgId,
-            category,
-          }),
-        });
-
-        const payload = (await response.json().catch(() => null)) as
-          | { status?: string; generatedImageUrl?: string; requestId?: string; error?: string }
-          | null;
-
-        if (cancelled) return;
-
-        if (!response.ok) {
-          throw new Error(payload?.error || "Falha ao iniciar try-on");
-        }
-
-        if (payload?.generatedImageUrl) {
-          setStatus("done");
-          setGeneratedImageUrl(payload.generatedImageUrl);
-          return;
-        }
-
-        if (payload?.requestId) {
-          setStatus("processing");
-          setRequestId(payload.requestId);
-          return;
-        }
-
-        throw new Error("Resposta invalida do try-on");
-      } catch (error) {
-        if (cancelled) return;
-        setStatus("error");
-        setErrorMessage(error instanceof Error ? error.message : "Falha no try-on");
-      }
-    };
-
-    void start();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [personImageUrl, garmentImageUrl, orgId, category]);
-
-  React.useEffect(() => {
-    if (status !== "processing" || !requestId) return;
-
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    const poll = async () => {
-      try {
-        const params = new URLSearchParams({
-          requestId,
-          orgId,
-        });
-        const response = await fetch(`/api/tryon/auto?${params.toString()}`, { cache: "no-store" });
-        const payload = (await response.json().catch(() => null)) as
-          | { status?: string; generatedImageUrl?: string; error?: string }
-          | null;
-
-        if (cancelled) return;
-
-        if (!response.ok) {
-          throw new Error(payload?.error || "Falha ao consultar try-on");
-        }
-
-        if (payload?.status === "completed" && payload.generatedImageUrl) {
-          setStatus("done");
-          setGeneratedImageUrl(payload.generatedImageUrl);
-          return;
-        }
-
-        if (payload?.status === "failed") {
-          setStatus("error");
-          setErrorMessage("Venus nao conseguiu gerar esse look agora.");
-          return;
-        }
-
-        timer = setTimeout(() => {
-          void poll();
-        }, 2000);
-      } catch {
-        if (cancelled) return;
-        timer = setTimeout(() => {
-          void poll();
-        }, 2500);
-      }
-    };
-
-    void poll();
-
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, [status, requestId, orgId]);
-
-  if (!personImageUrl || !garmentImageUrl) {
-    return null;
-  }
-
-  if (status === "done" && generatedImageUrl) {
-    return (
-      <div className="overflow-hidden rounded-[22px] border border-white/8 bg-white/[0.02]">
-        <img src={generatedImageUrl} alt={`Try-on de ${lookName}`} className="h-auto w-full object-cover" />
-      </div>
-    );
-  }
-
-  if (status === "error") {
-    return (
-      <div className="overflow-hidden rounded-[22px] border border-white/8 bg-white/[0.02] p-4 text-center">
-        <Text className="text-[10px] font-bold uppercase tracking-[0.34em] text-[#C9A84C]">Try-on indisponível</Text>
-        <Text className="mt-2 text-xs text-white/55">{errorMessage || "Tente novamente mais tarde."}</Text>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex h-full w-full flex-col items-center justify-center bg-black/40 p-10 text-center">
-      <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#C9A84C] border-t-transparent" />
-      <Text className="mt-3 text-[9px] font-bold uppercase tracking-[0.2em] text-[#C9A84C]">GERANDO LOOK...</Text>
-    </div>
-  );
 }
 
 function ResultDashboardContent() {
@@ -206,11 +27,20 @@ function ResultDashboardContent() {
   const id = searchParams.get("id");
   const { data: onboardingData } = useOnboarding();
   const { userPhoto } = useUserImage();
+  const { status: tryOnStatus, imageUrl: tryOnImageUrl, error: tryOnError, startTryOn, progress: tryOnProgress } = useTryOn();
+
   const [surface, setSurface] = React.useState<ResultSurface | null>(null);
+  const [persistedTryOn, setPersistedTryOn] = React.useState<any>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [showSaveModal, setShowSaveModal] = React.useState(false);
-  const [tenantContext, setTenantContext] = React.useState<any>(null);
+  const [tenantContext, setTenantContext] = React.useState<{
+    whatsappNumber?: string | null;
+    orgSlug?: string | null;
+    orgId?: string | null;
+    branchName?: string | null;
+  } | null>(null);
+  const [pendingTryOnProduct, setPendingTryOnProduct] = React.useState<{ id: string; name?: string | null; photoUrl?: string | null; category?: string | null } | null>(null);
 
   React.useEffect(() => {
     if (!id) {
@@ -224,6 +54,7 @@ function ResultDashboardContent() {
         if (!response.ok) throw new Error("Result not found");
         const payload = await response.json();
         if (payload.tenant) setTenantContext(payload.tenant);
+        if (payload.lastTryOn) setPersistedTryOn(payload.lastTryOn);
 
         const builtSurface = buildResultSurface(onboardingData, payload.analysis);
         setSurface(builtSurface);
@@ -234,7 +65,7 @@ function ResultDashboardContent() {
       }
     }
     load();
-  }, [id, onboardingData]);
+  }, [id, onboardingData, tryOnImageUrl]); // Refresh when new image is generated
 
   if (loading) {
     return (
@@ -263,180 +94,243 @@ function ResultDashboardContent() {
   };
 
   const tryOnPersonImage = userPhoto || onboardingData.scanner.bodyPhoto || onboardingData.scanner.facePhoto || "";
-  const resolvedOrgId = tenantContext?.orgId || onboardingData.tenant?.orgId || onboardingData.tenant?.orgSlug || tenantContext?.orgSlug || "";
+  const resolvedOrgId = tenantContext?.orgId || onboardingData.tenant?.orgId || "";
+  const displayImageUrl = tryOnImageUrl || persistedTryOn?.image_url;
+  const isGenerating = tryOnStatus === "queued" || tryOnStatus === "processing";
+  const firstTryOnProduct = result.looks[0]?.items?.[0] || null;
+
+  const currentLoadingMessage = (() => {
+    if (tryOnProgress < 30) return TRYON_LOADING_MESSAGES[0];
+    if (tryOnProgress < 70) return TRYON_LOADING_MESSAGES[1];
+    return TRYON_LOADING_MESSAGES[2];
+  })();
+
+  const handleGenerateTryOn = (productId: string) => {
+    if (!tryOnPersonImage || !resolvedOrgId || !id) return;
+    const selectedProduct = result.looks[0]?.items?.find((item) => item.id === productId) || firstTryOnProduct;
+    setPendingTryOnProduct(
+      selectedProduct
+        ? {
+            id: selectedProduct.id,
+            name: selectedProduct.name,
+            photoUrl: selectedProduct.photoUrl || null,
+            category: selectedProduct.category || null,
+          }
+        : null
+    );
+    startTryOn({
+      model_image: tryOnPersonImage,
+      product_id: productId,
+      org_id: resolvedOrgId,
+      saved_result_id: id
+    });
+  };
+
+  React.useEffect(() => {
+    if (tryOnStatus !== "completed" || !tryOnImageUrl || !resolvedOrgId || !id || !pendingTryOnProduct) {
+      return;
+    }
+
+    void syncLeadContext({
+      orgId: resolvedOrgId,
+      savedResultId: id,
+      eventType: "tryon_generated",
+      lastTryon: {
+        personImageUrl: tryOnPersonImage || null,
+        garmentImageUrl: pendingTryOnProduct.photoUrl || null,
+        generatedImageUrl: tryOnImageUrl,
+        lookName: pendingTryOnProduct.name || result.looks[0]?.name || null,
+        lookId: pendingTryOnProduct.id,
+        category: pendingTryOnProduct.category || inferTryOnCategory(pendingTryOnProduct),
+        requestId: null,
+        updatedAt: new Date().toISOString(),
+      },
+    });
+
+    setPendingTryOnProduct(null);
+  }, [tryOnStatus, tryOnImageUrl, resolvedOrgId, id, pendingTryOnProduct, tryOnPersonImage, result.looks]);
+
+  const openWhatsApp = async (url: string) => {
+    if (resolvedOrgId && id) {
+      void syncLeadContext({
+        orgId: resolvedOrgId,
+        savedResultId: id,
+        eventType: "whatsapp_clicked",
+        whatsappContext: {
+          source: "result_page",
+          destination: url,
+        },
+      });
+    }
+
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
 
   return (
-    <main style={{ background: "#0a0a0a", minHeight: "100vh", paddingBottom: "80px", color: "#f0ece4" }}>
-      {/* SEÇÃO 1 — ESSÊNCIA */}
-      <section style={{ padding: "24px 20px" }}>
-        <p style={{ fontSize: "9px", fontFamily: "monospace", letterSpacing: "2px", color: "#C9A84C", marginBottom: "8px" }}>
-          ESSÊNCIA CAPTADA
-        </p>
-        <h1 style={{ fontSize: "26px", fontWeight: 700, color: "#f0ece4", fontFamily: "Georgia,serif", lineHeight: 1.2, marginBottom: "10px" }}>
-          {result?.essence?.label || "Elegância Precisa"}
-        </h1>
-        <p style={{ fontSize: "13px", color: "#888", lineHeight: 1.6, marginBottom: "16px" }}>
-          {result?.essence?.summary}
-        </p>
-
-        {/* Card leitura personalizada */}
-        <div style={{ background: "#111", border: "0.5px solid #222", borderRadius: "12px", padding: "14px", marginBottom: "14px" }}>
-          <p style={{ fontSize: "8px", fontFamily: "monospace", letterSpacing: "1px", color: "#C9A84C", marginBottom: "6px" }}>LEITURA PERSONALIZADA</p>
-          <p style={{ fontSize: "13px", fontWeight: 600, color: "#f0ece4", marginBottom: "4px" }}>
-            {result?.essence?.label} • {onboardingData?.intent?.styleDirection || "Feminina"}
-          </p>
-          <p style={{ fontSize: "11px", color: "#666", marginBottom: "10px" }}>
-            A Venus interpreta seu perfil e devolve curadoria real.
-          </p>
-          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "8px" }}>
-            {[onboardingData?.intent?.styleDirection, result?.essence?.label, "Curadoria real"].filter(Boolean).map((a, i) => (
-              <span key={i} style={{ fontSize: "9px", padding: "3px 8px", borderRadius: "20px", background: "#1a1a1a", border: "0.5px solid #333", color: "#aaa" }}>{a}</span>
-            ))}
-          </div>
-          <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
-            {result?.essence?.keySignals?.map((t: string, i: number) => (
-              <span key={i} style={{ fontSize: "9px", padding: "3px 8px", borderRadius: "20px", background: "#1a1200", border: "0.5px solid #C9A84C", color: "#C9A84C" }}>{t}</span>
-            ))}
-          </div>
-        </div>
-
-        {/* Card de Consultoria (Stage 3) */}
-        {result.diagnostic && (
-          <div style={{ background: "#111", border: "1px solid #C9A84C", borderRadius: "12px", padding: "14px", marginBottom: "14px" }}>
-            <p style={{ fontSize: "8px", fontFamily: "monospace", letterSpacing: "1px", color: "#C9A84C", marginBottom: "10px" }}>
-              CONSULTORIA DE IMAGEM COMPLETA
-            </p>
-
-            <p style={{ fontSize: "10px", color: "#888", marginBottom: "6px" }}>SUA PALETA — {result.palette.family}</p>
-            <div style={{ display: "flex", gap: "6px", marginBottom: "12px" }}>
-              {result.palette.colors.slice(0, 4).map((cor: { hex: string; name: string }, i: number) => (
-                <div key={i} style={{ flex: 1, textAlign: "center" }}>
-                  <div style={{ height: "32px", borderRadius: "6px", background: cor.hex, border: "0.5px solid #333", marginBottom: "3px" }} />
-                  <span style={{ fontSize: "8px", color: "#666" }}>{cor.name}</span>
+    <main className="min-h-screen bg-[#0a0a0a] pb-24 text-[#f0ece4] selection:bg-[#C9A84C]/30">
+      {/* SEÇÃO HERO - TRY-ON CENTRIC */}
+      <section className="px-5 pt-8">
+        <div className="relative mx-auto max-w-lg">
+          {/* Container "Dark Luxury" */}
+          <div className="relative aspect-[3/4] overflow-hidden rounded-[32px] border border-white/10 bg-white/[0.02] shadow-[0_22px_70px_rgba(0,0,0,0.6)]">
+            {isGenerating ? (
+              <div className="flex h-full w-full flex-col items-center justify-center bg-black/60 p-8 text-center backdrop-blur-sm">
+                <div className="relative h-16 w-16">
+                  <div className="absolute inset-0 rounded-full border-2 border-[#C9A84C]/20" />
+                  <div className="absolute inset-0 animate-spin rounded-full border-2 border-[#C9A84C] border-t-transparent" />
+                  <Sparkles className="absolute inset-5 h-6 w-6 animate-pulse text-[#C9A84C]" />
                 </div>
-              ))}
-            </div>
+                <p className="mt-8 font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-[#C9A84C]">
+                  Gerando seu look
+                </p>
+                <p className="mt-4 text-[13px] text-white/60">
+                  {currentLoadingMessage}
+                </p>
 
-            <p style={{ fontSize: "10px", color: "#888", marginBottom: "4px" }}>CAIMENTO IDEAL</p>
-            <p style={{ fontSize: "12px", color: "#f0ece4", marginBottom: "10px" }}>{onboardingData.body.fit || "Ajuste preciso ao corpo"}</p>
-
-            <p style={{ fontSize: "10px", color: "#888", marginBottom: "4px" }}>VISAGISMO</p>
-            <p style={{ fontSize: "12px", color: "#f0ece4", marginBottom: "10px" }}>{result.palette.description?.split(".")[0] || "Linhas que valorizam sua estrutura"}</p>
-
-            <p style={{ fontSize: "10px", color: "#888", marginBottom: "4px" }}>TECIDOS QUE FAVORECEM</p>
-            <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
-              {["Linho", "Algodão Pima", "Seda", "Lã Fria"].map((t: string, i: number) => (
-                <span key={i} style={{ fontSize: "9px", padding: "3px 8px", borderRadius: "20px", background: "#1a1200", border: "0.5px solid #C9A84C", color: "#C9A84C" }}>{t}</span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <button
-          onClick={() => document.getElementById("looks")?.scrollIntoView({ behavior: "smooth" })}
-          style={{ width: "100%", background: "#C9A84C", color: "#0a0a0a", border: "none", borderRadius: "10px", padding: "13px", fontSize: "12px", fontWeight: 700, cursor: "pointer", letterSpacing: "1px", marginBottom: "8px" }}>
-          VER MEUS LOOKS ?
-        </button>
-        <button
-          onClick={() => setShowSaveModal(true)}
-          style={{ width: "100%", background: "transparent", color: "#f0ece4", border: "0.5px solid #333", borderRadius: "10px", padding: "11px", fontSize: "12px", cursor: "pointer" }}>
-          Salvar minha leitura
-        </button>
-      </section>
-
-      <div style={{ height: "1px", background: "#1a1a1a", margin: "0 20px" }} />
-
-      {/* SEÇÃO 2 — LOOKS */}
-      <section id="looks" style={{ padding: "24px 20px" }}>
-        <p style={{ fontSize: "9px", fontFamily: "monospace", letterSpacing: "2px", color: "#C9A84C", marginBottom: "14px" }}>
-          CURADORIA PARA VOCÊ
-        </p>
-
-        <div id="tryon-result" style={{ marginBottom: "16px" }}>
-          <div style={{ width: "100%", height: "320px", overflow: "hidden", borderRadius: "12px" }}>
-            {result?.looks?.[0] ? (
-              <AutoTryOnPreview
-                personImageUrl={tryOnPersonImage}
-                garmentImageUrl={result.looks[0].items[0]?.photoUrl}
-                orgId={resolvedOrgId}
-                category={inferTryOnCategory(result.looks[0], result.looks[0].items[0])}
-                lookName={result.looks[0].name}
+                {/* Progress Bar */}
+                <div className="mt-10 h-1 w-48 overflow-hidden rounded-full bg-white/5">
+                  <div
+                    className="h-full bg-gradient-to-r from-[#C9A84C]/50 to-[#C9A84C] transition-all duration-500 ease-out"
+                    style={{ width: `${tryOnProgress}%` }}
+                  />
+                </div>
+              </div>
+            ) : displayImageUrl ? (
+              <img
+                src={displayImageUrl}
+                alt="Seu look Venus"
+                className="h-full w-full object-cover"
               />
             ) : (
-              <div style={{ width: "100%", height: "100%", background: "#111", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "8px" }}>
-                <div style={{ width: "24px", height: "24px", border: "2px solid #C9A84C", borderTop: "2px solid transparent", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
-                <p style={{ fontSize: "9px", fontFamily: "monospace", letterSpacing: "1px", color: "#C9A84C" }}>A VENUS ESTÁ CRIANDO SEU LOOK...</p>
+              <div className="flex h-full w-full flex-col items-center justify-center p-12 text-center">
+                <div className="mb-6 rounded-full bg-[#C9A84C]/10 p-5">
+                  <Sparkles className="h-8 w-8 text-[#C9A84C]" />
+                </div>
+                <p className="text-balance text-[15px] font-medium leading-relaxed text-white/80">
+                  A Venus está pronta para projetar seu primeiro look.
+                </p>
+                <VenusButton
+                  onClick={() => result.looks[0]?.items[0] && handleGenerateTryOn(result.looks[0].items[0].id)}
+                  className="mt-8"
+                >
+                  Gerar minha imagem
+                </VenusButton>
+              </div>
+            )}
+
+            {/* Overlay Gradient (Luxury Feel) */}
+            <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+
+            {/* Validation Tag */}
+            {displayImageUrl && !isGenerating && (
+              <div className="absolute top-6 left-6 flex items-center gap-2 rounded-full border border-white/10 bg-black/40 px-4 py-2 backdrop-blur-md">
+                <div className="h-1.5 w-1.5 rounded-full bg-[#C9A84C] animate-pulse" />
+                <span className="text-[10px] font-bold uppercase tracking-widest text-[#C9A84C]">Venus Verified Look</span>
               </div>
             )}
           </div>
-        </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          {result?.looks?.slice(0, 3).map((look: any, i: number) => (
-            <div key={i} style={{ background: "#111", border: "0.5px solid #222", borderRadius: "12px", overflow: "hidden" }}>
-              <div style={{ padding: "10px 14px", borderBottom: "0.5px solid #1a1a1a", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: "12px", fontWeight: 600, color: "#f0ece4" }}>{look.name}</span>
-                <span style={{ fontSize: "8px", padding: "2px 8px", borderRadius: "20px", background: "#1a1200", border: "0.5px solid #C9A84C", color: "#C9A84C", fontFamily: "monospace" }}>
-                  {i === 0 ? "BASE" : i === 1 ? "APOIO" : "DESTAQUE"}
-                </span>
-              </div>
-              <div style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: "8px" }}>
-                {look.items?.slice(0, 2).map((item: any, j: number) => (
-                  <div key={j} style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
-                    {item.photoUrl ? (
-                      <img src={item.photoUrl} alt={item.name} style={{ width: "72px", height: "96px", objectFit: "cover", borderRadius: "8px", flexShrink: 0 }} />
-                    ) : (
-                      <div style={{ width: "72px", height: "96px", background: "#1a1a1a", borderRadius: "8px", border: "0.5px solid #222", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px" }}>??</div>
-                    )}
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontSize: "12px", fontWeight: 500, color: "#f0ece4", marginBottom: "3px" }}>{item.name}</p>
-                      <p style={{ fontSize: "10px", color: "#555", marginBottom: "8px" }}>{item.why || item.contextOfUse || "Combina com seu perfil visual."}</p>
-                      <a href={`https://wa.me/${org.whatsapp_phone}?text=Oi! Vi o look ${look.name} e tenho interesse na peça ${item.name}`}
-                        style={{ display: "block", background: "#C9A84C", color: "#0a0a0a", borderRadius: "6px", padding: "7px", fontSize: "10px", fontWeight: 700, textDecoration: "none", textAlign: "center" }}>
-                        Falar com a Venus ?
-                      </a>
-                    </div>
-                  </div>
-                ))}
-              </div>
+          {/* Consultative Content */}
+          <div className="mt-10 space-y-6 text-center">
+            <div className="space-y-3">
+              <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#C9A84C]">Sua Presença</p>
+              <h1 className="font-serif text-3xl font-bold tracking-tight text-white">
+                {result.essence.label}
+              </h1>
+              <p className="mx-auto max-w-sm text-[16px] leading-relaxed text-white/60">
+                {persistedTryOn?.style_reason || "Uma leitura baseada na sua colorimetria e curadoria pessoal."}
+              </p>
             </div>
-          ))}
+
+            {/* Primary CTAs */}
+            <div className="flex flex-col gap-3 pt-4">
+              <Link
+                href={`https://wa.me/${org.whatsapp_phone}?text=${encodeURIComponent(`Oi! Acabei de gerar meu look de ${result.essence.label} na Venus e quero conversar sobre essas peças.`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(event) => {
+                  event.preventDefault();
+                  void openWhatsApp(`https://wa.me/${org.whatsapp_phone}?text=${encodeURIComponent(`Oi! Acabei de gerar meu look de ${result.essence.label} na Venus e quero conversar sobre essas peças.`)}`);
+                }}
+                className="flex h-14 items-center justify-center rounded-2xl bg-[#C9A84C] px-6 text-[13px] font-black uppercase tracking-widest text-black transition-transform active:scale-95 group"
+              >
+                Ver no WhatsApp
+                <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </Link>
+
+              <button
+                onClick={() => setShowSaveModal(true)}
+                className="flex h-14 items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-6 text-[11px] font-bold uppercase tracking-widest text-white/90 transition-colors hover:bg-white/10"
+              >
+                Gerar outro look
+              </button>
+            </div>
+          </div>
         </div>
       </section>
 
-      <div style={{ height: "1px", background: "#1a1a1a", margin: "0 20px" }} />
+      {/* DASHBOARD DETAILS - (More Discrete) */}
+      <section className="mt-16 bg-white/[0.02] border-y border-white/5 py-12 px-5">
+        <div className="mx-auto max-w-lg space-y-10">
+          {/* Palette */}
+          <div>
+            <p className="mb-6 font-mono text-[9px] uppercase tracking-[0.3em] text-[#C9A84C]">Análise de Paleta • {result.palette.family}</p>
+            <div className="flex gap-2">
+              {result.palette.colors.slice(0, 5).map((cor: any, i: number) => (
+                <div key={i} className="flex-1">
+                  <div className="h-14 rounded-xl border border-white/5 shadow-lg" style={{ background: cor.hex }} />
+                  <p className="mt-2 text-[8px] text-center text-white/40 uppercase">{cor.name}</p>
+                </div>
+              ))}
+            </div>
+          </div>
 
-      {/* SEÇÃO 3 — COMPARTILHAR (compacto) */}
-      <section style={{ padding: "24px 20px" }}>
-        <p style={{ fontSize: "9px", fontFamily: "monospace", letterSpacing: "2px", color: "#C9A84C", marginBottom: "10px" }}>
-          COMPARTILHAR E DESTRAVAR
-        </p>
-        <p style={{ fontSize: "12px", color: "#888", marginBottom: "12px" }}>
-          Publique com marcação e desbloqueie benefícios exclusivos da loja.
-        </p>
-        <SocialShareActions
-          look={result.looks[0]}
-          styleIdentity={result.essence.label}
-          imageGoal={onboardingData.intent.imageGoal}
-          brandName={org.name}
-          resultUrl={typeof window !== "undefined" ? window.location.href : ""}
-        />
+          {/* Core Signals */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="rounded-2xl border border-white/5 bg-black/20 p-5">
+              <p className="text-[9px] text-white/40 uppercase tracking-widest mb-2 font-mono">Caimento</p>
+              <p className="text-white text-[13px] font-medium">{onboardingData.body.fit || "Ajuste preciso"}</p>
+            </div>
+            <div className="rounded-2xl border border-white/5 bg-black/20 p-5">
+              <p className="text-[9px] text-white/40 uppercase tracking-widest mb-2 font-mono">Contraste</p>
+              <p className="text-white text-[13px] font-medium">{onboardingData.colors.contrast || "Natural"}</p>
+            </div>
+          </div>
+        </div>
       </section>
 
-      {/* BANNER WHATSAPP FIXO */}
-      <div style={{
-        position: "fixed", bottom: 0, left: 0, right: 0,
-        height: "56px", background: "#C9A84C", zIndex: 150,
-        display: "flex", alignItems: "center",
-        justifyContent: "space-between", padding: "0 20px"
-      }}>
-        <span style={{ fontSize: "12px", fontWeight: 600, color: "#0a0a0a" }}>
-          ? A Venus está online — {org.name}
+      {/* FOOTER NAV RE-SYNC */}
+      <section className="px-5 py-12 pb-20">
+        <div className="mx-auto max-w-lg text-center space-y-6">
+          <p className="text-[12px] text-white/40">Venus Engine v1.0 • Catalog Synchronization</p>
+          <div className="flex justify-center gap-4">
+            {["Novidades", "Outlet", "Sair"].map(item => (
+              <button key={item} className="text-[10px] font-bold uppercase tracking-widest text-white/30 hover:text-[#C9A84C] transition-colors">
+                {item}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* WHATSAPP FIXED BANNER */}
+      <div className="fixed bottom-0 left-0 right-0 z-[150] flex h-14 items-center justify-between bg-[#C9A84C] px-4 shadow-[0_-10px_40px_rgba(0,0,0,0.3)]">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-black flex items-center gap-2">
+          <div className="h-2 w-2 rounded-full bg-black animate-pulse" />
+          A Venus está online — {org.name}
         </span>
-        <a href={`https://wa.me/${org.whatsapp_phone}`}
-          style={{ background: "#0a0a0a", color: "#C9A84C", borderRadius: "6px", padding: "8px 14px", fontSize: "11px", fontWeight: 700, textDecoration: "none" }}>
-          Continuar no WhatsApp ?
-        </a>
+        <Link
+          href={`https://wa.me/${org.whatsapp_phone}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(event) => {
+            event.preventDefault();
+            void openWhatsApp(`https://wa.me/${org.whatsapp_phone}`);
+          }}
+          className="rounded-lg bg-black px-4 py-2 text-[10px] font-black uppercase tracking-widest text-[#C9A84C] transition-transform active:scale-95"
+        >
+          Conversar Agora
+        </Link>
       </div>
 
       <SaveResultsModal isOpen={showSaveModal} onClose={() => setShowSaveModal(false)} surface={surface} />
@@ -451,4 +345,3 @@ export default function ResultDashboardPage() {
     </Suspense>
   );
 }
-

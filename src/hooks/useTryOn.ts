@@ -9,15 +9,13 @@ interface UseTryOnResult {
   imageUrl: string | null;
   progress: number;
   error: string | null;
-  startTryOn: (params: { model_image: string; product_id: string; org_id: string }) => Promise<void>;
+  startTryOn: (params: { model_image: string; product_id: string; org_id: string; saved_result_id: string }) => Promise<void>;
   reset: () => void;
 }
 
 export const TRYON_LOADING_MESSAGES = [
   "Analisando seu perfil...",
-  "Identificando seu estilo...",
-  "Aplicando a peça...",
-  "Ajustando os detalhes...",
+  "Ajustando caimento e proporção...",
   "Finalizando seu look...",
 ];
 
@@ -47,10 +45,12 @@ export function useTryOn(): UseTryOnResult {
       model_image,
       product_id,
       org_id,
+      saved_result_id,
     }: {
       model_image: string;
       product_id: string;
       org_id: string;
+      saved_result_id: string;
     }) => {
       clearTimers();
       setStatus("queued");
@@ -64,7 +64,7 @@ export function useTryOn(): UseTryOnResult {
         const res = await fetch("/api/tryon/start", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ model_image, product_id, org_id }),
+          body: JSON.stringify({ model_image, product_id, org_id, saved_result_id }),
         });
 
         if (!res.ok) {

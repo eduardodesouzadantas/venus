@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { findOrCreateLead } from "@/lib/leads";
+import { loadLeadContextByIdentity, updateIntentScore, upsertLeadContextByLeadId } from "@/lib/lead-context";
 import { bumpTenantUsageDaily } from "@/lib/tenant/core";
 import { loadMetaIntegrationByPhoneNumberId } from "@/lib/whatsapp/meta";
 
@@ -37,6 +38,18 @@ type WhatsAppWebhookPayload = {
 
 function normalize(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeForMatch(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function hasAnyKeyword(text: string, patterns: RegExp[]) {
+  return patterns.some((pattern) => pattern.test(text));
 }
 
 function getWebhookVerifyToken() {
@@ -155,6 +168,96 @@ export async function POST(request: Request) {
           console.error("[WEBHOOK] msg insert error:", msgError);
         }
 
+        const seedLead = await findOrCreateLead(admin, {
+          orgId: org.id,
+          name: userName,
+          phone: userPhone,
+          source: "whatsapp",
+          status: "engaged",
+          whatsappKey: userPhone,
+          intentScore: 50,
+          lastInteractionAt: timestamp,
+        });
+
+        const leadSnapshot = await loadLeadContextByIdentity(admin, {
+          orgId: org.id,
+          leadId: seedLead.lead.id,
+          phone: userPhone,
+        }).catch(() => ({ lead: null, context: null }));
+
+        const currentIntentScore =
+          typeof leadSnapshot.context?.intent_score === "number"
+            ? leadSnapshot.context.intent_score
+            : typeof seedLead.lead.intent_score === "number"
+              ? seedLead.lead.intent_score
+              : 0;
+
+        const previousActivityAt =
+          normalize(leadSnapshot.context?.updated_at) ||
+          normalize(existingConversation?.last_updated) ||
+          normalize(seedLead.lead.last_interaction_at) ||
+          null;
+
+        const normalizedText = normalizeForMatch(text);
+        const variationRequested = hasAnyKeyword(normalizedText, [
+          /varia[cç][aã]o/,
+          /outra op[cç][aã]o/,
+          /mais op[cç][aã]es/,
+          /troca/,
+          /alternativa/,
+          /rever/,
+          /ajuste/,
+        ]);
+        const recommendationIgnored =
+          hasAnyKeyword(normalizedText, [
+            /n[aã]o gostei/,
+            /n[aã]o curti/,
+            /n[aã]o faz sentido/,
+            /n[aã]o quero/,
+            /prefiro outro/,
+            /passo/,
+          ]);
+        const inactive24h =
+          previousActivityAt ? Date.parse(timestamp) - Date.parse(previousActivityAt) > 24 * 60 * 60 * 1000 : false;
+        const intentEventType = inactive24h
+          ? "inactive_24h"
+          : variationRequested
+            ? "variation_requested"
+            : recommendationIgnored
+              ? "recommendation_ignored"
+              : null;
+        const nextIntentScore = intentEventType
+          ? updateIntentScore(intentEventType, currentIntentScore, {
+              now: timestamp,
+              lastActivityAt: previousActivityAt,
+            })
+          : seedLead.lead.intent_score ?? currentIntentScore;
+
+        await upsertLeadContextByLeadId(admin, {
+          orgId: org.id,
+          leadId: seedLead.lead.id,
+          profileData: {
+            name: userName,
+            phone: userPhone,
+            orgSlug: org.slug,
+            source: "whatsapp_webhook",
+          },
+          emotionalState: {
+            source: "whatsapp_webhook",
+            lastMessage: text,
+            updatedAt: timestamp,
+            intentEventType: intentEventType || undefined,
+          },
+          intentScore: nextIntentScore,
+          whatsappContext: {
+            name: userName,
+            phone: userPhone,
+            orgSlug: org.slug,
+            lastMessage: text,
+            conversationStatus: "ai_active",
+          },
+        });
+
         try {
           const { data: conv } = await admin
             .from("whatsapp_conversations")
@@ -169,6 +272,44 @@ export async function POST(request: Request) {
 
             const context = await loadContext(userPhone, org.id);
             const intent = detectIntent(text, context.history);
+            const detectedIntentScore =
+              intent === "compra"
+                ? 90
+                : intent === "preco"
+                  ? 70
+                  : intent === "objecao"
+                    ? 55
+                    : intent === "interesse"
+                      ? 60
+                      : intent === "humano"
+                        ? 45
+                        : intent === "sumiu"
+                          ? 20
+                          : intent === "primeira_mensagem"
+                            ? 35
+                            : 40;
+
+            await upsertLeadContextByLeadId(admin, {
+              orgId: org.id,
+              leadId: seedLead.lead.id,
+              intentScore: intentEventType
+                ? updateIntentScore(intentEventType, detectedIntentScore, {
+                    now: timestamp,
+                    lastActivityAt: previousActivityAt,
+                  })
+                : detectedIntentScore,
+              emotionalState: {
+                intent,
+                lastMessage: text,
+                updatedAt: timestamp,
+                intentEventType: intentEventType || undefined,
+              },
+              whatsappContext: {
+                intent,
+                lastMessage: text,
+                conversationId: finalConversationId,
+              },
+            });
 
             if (intent === "humano") {
               await admin.from("whatsapp_conversations").update({ status: "human_takeover" }).eq("id", finalConversationId);
@@ -243,32 +384,21 @@ export async function POST(request: Request) {
           .eq("org_slug", org.slug);
 
         try {
-          const { lead, created } = await findOrCreateLead(admin, {
-            orgId: org.id,
-            name: userName,
-            phone: userPhone,
-            source: "whatsapp",
-            status: "engaged",
-            whatsappKey: userPhone,
-            intentScore: 60,
-            lastInteractionAt: timestamp,
-          });
-
           await admin.from("tenant_events").insert({
             org_id: org.id,
             actor_user_id: null,
-            event_type: created ? "lead.created_from_whatsapp_webhook" : "lead.engaged_from_whatsapp_webhook",
+            event_type: seedLead.created ? "lead.created_from_whatsapp_webhook" : "lead.engaged_from_whatsapp_webhook",
             event_source: "whatsapp",
-            dedupe_key: `whatsapp_webhook:${org.id}:${lead.id}:${message.id || timestamp}`,
+            dedupe_key: `whatsapp_webhook:${org.id}:${seedLead.lead.id}:${message.id || timestamp}`,
             payload: {
-              lead_id: lead.id,
+              lead_id: seedLead.lead.id,
               conversation_id: finalConversationId,
               message_id: message.id || null,
               org_slug: org.slug,
             },
           });
 
-          await bumpTenantUsageDaily(admin, org.id, { leads: created ? 1 : 0, events_count: 1 });
+          await bumpTenantUsageDaily(admin, org.id, { leads: seedLead.created ? 1 : 0, events_count: 1 });
         } catch (e) {
           console.error("[WEBHOOK] lead sync error:", e);
         }
