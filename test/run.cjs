@@ -39,6 +39,9 @@ const {
   isValidTryOnProductId,
 } = require("../src/lib/tryon/product-id.ts");
 const {
+  classifyTryOnQuality,
+} = require("../src/lib/tryon/result-quality.ts");
+const {
   buildCatalogEnrichmentSignals,
   deriveVisualSignalsFromMetrics,
 } = require("../src/lib/ai/catalog-enricher.ts");
@@ -552,6 +555,50 @@ run("try-on UUID helper rejects UI ids and accepts real UUIDs", () => {
   assert.equal(isValidTryOnProductId("surface-look-1-1"), false);
   assert.equal(ensureTryOnProductId(uuid), uuid);
   assert.equal(ensureTryOnProductId("surface-look-1-1"), null);
+});
+
+run("try-on quality classifies hero preview and retry states", () => {
+  const hero = classifyTryOnQuality({
+    hasGeneratedImage: true,
+    hasPersonImage: true,
+    hasRealProduct: true,
+    isLegacyLook: false,
+    isPreviousLook: false,
+    hasTryOnError: false,
+    primaryLookItemCount: 2,
+  });
+
+  const preview = classifyTryOnQuality({
+    hasGeneratedImage: true,
+    hasPersonImage: true,
+    hasRealProduct: true,
+    isLegacyLook: false,
+    isPreviousLook: true,
+    hasTryOnError: false,
+    primaryLookItemCount: 1,
+  });
+
+  const retry = classifyTryOnQuality({
+    hasGeneratedImage: false,
+    hasPersonImage: true,
+    hasRealProduct: false,
+    isLegacyLook: true,
+    isPreviousLook: false,
+    hasTryOnError: false,
+    primaryLookItemCount: 1,
+  });
+
+  assert.equal(hero.state, "hero");
+  assert.equal(hero.showWhatsappCta, true);
+  assert.equal(hero.showRetryPhotoCta, false);
+
+  assert.equal(preview.state, "preview");
+  assert.equal(preview.showWhatsappCta, true);
+  assert.equal(preview.showRetryPhotoCta, true);
+
+  assert.equal(retry.state, "retry_required");
+  assert.equal(retry.showWhatsappCta, false);
+  assert.equal(retry.showRetryPhotoCta, true);
 });
 
 run("catalog enrichment stays grounded and role aware", () => {
