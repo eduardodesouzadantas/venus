@@ -28,7 +28,14 @@ export const WhatsAppProvider = ({ children }: { children: React.ReactNode }) =>
   const [conversations, setConversations] = useState<WhatsAppConversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const supabase = React.useMemo(() => createWhatsAppClient(), []);
+  const supabase = React.useMemo(() => {
+    try {
+      return createWhatsAppClient();
+    } catch (error) {
+      console.error("[WHATSAPP] Failed to initialize browser client", error);
+      return null;
+    }
+  }, []);
   const pathname = usePathname();
   const currentOrgSlug = React.useMemo(() => {
     const parts = pathname.split('/').filter(Boolean);
@@ -38,6 +45,13 @@ export const WhatsAppProvider = ({ children }: { children: React.ReactNode }) =>
 
   // 1. Initial Data Fetch
   const fetchConversations = useCallback(async () => {
+    if (!supabase) {
+      setConversations([]);
+      setActiveId(null);
+      setLoading(false);
+      return;
+    }
+
     if (!currentOrgSlug) {
       setConversations([]);
       setActiveId(null);
@@ -98,16 +112,19 @@ export const WhatsAppProvider = ({ children }: { children: React.ReactNode }) =>
   }, [supabase, currentOrgSlug]);
 
   useEffect(() => {
+    if (!supabase) return;
     fetchConversations();
   }, [fetchConversations]);
 
   useEffect(() => {
+    if (!supabase) return;
     void supabase.realtime.setAuth().catch((error: unknown) => {
       console.warn("[WHATSAPP] Failed to sync tenant auth for realtime", error);
     });
   }, [supabase, currentOrgSlug]);
 
   useEffect(() => {
+    if (!supabase) return;
     if (typeof window === "undefined") return;
 
     const handleStorage = (event: StorageEvent) => {
@@ -124,6 +141,7 @@ export const WhatsAppProvider = ({ children }: { children: React.ReactNode }) =>
   }, [supabase]);
 
   useEffect(() => {
+    if (!supabase) return;
     if (typeof window === "undefined" || !currentOrgSlug) return;
 
     const refreshTenantAuth = () => {
@@ -151,6 +169,7 @@ export const WhatsAppProvider = ({ children }: { children: React.ReactNode }) =>
 
   // 2. Real-time Subscriptions
   useEffect(() => {
+    if (!supabase) return;
     if (!currentOrgSlug) return;
 
     const channel = supabase
@@ -205,6 +224,7 @@ export const WhatsAppProvider = ({ children }: { children: React.ReactNode }) =>
   };
 
   const sendMessage = async (text: string, userId: string = 'merchant', type: WhatsAppMessage['type'] = 'text', metadata?: any): Promise<string | undefined> => {
+    if (!supabase) return;
     const targetId = activeId;
     if (!targetId || !currentOrgSlug) return;
 
@@ -332,6 +352,7 @@ export const WhatsAppProvider = ({ children }: { children: React.ReactNode }) =>
   };
 
   const takeoverConversation = async (id: string) => {
+    if (!supabase) return;
     if (!currentOrgSlug) return;
     await supabase
       .from('whatsapp_conversations')
@@ -341,6 +362,7 @@ export const WhatsAppProvider = ({ children }: { children: React.ReactNode }) =>
   };
 
   const resolveConversation = async (id: string) => {
+    if (!supabase) return;
     if (!currentOrgSlug) return;
     await supabase
       .from('whatsapp_conversations')
@@ -350,6 +372,7 @@ export const WhatsAppProvider = ({ children }: { children: React.ReactNode }) =>
   };
 
   const setFollowUp = async (id: string) => {
+    if (!supabase) return;
     if (!currentOrgSlug) return;
     await supabase
       .from('whatsapp_conversations')
@@ -359,10 +382,12 @@ export const WhatsAppProvider = ({ children }: { children: React.ReactNode }) =>
   };
 
   const sendProductLink = async (productId: string, name: string) => {
+    if (!supabase) return;
     await sendMessage(`Separei este item porque ele conversa com o seu perfil: ${name}. Se quiser, eu já te mostro a melhor forma de levar isso agora.`, 'merchant', 'product_link');
   };
 
   const sendBundlePush = async (lookId: string, lookName: string) => {
+    if (!supabase) return;
     await sendMessage(`Preparei uma condição especial para você levar o estilo "${lookName}" completo. Posso deixar o próximo passo pronto agora?`, 'merchant', 'bundle_push');
   };
 
