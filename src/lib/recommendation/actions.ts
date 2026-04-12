@@ -38,6 +38,7 @@ export async function generateEngineResult(
     orgSlug?: string | null;
     eventSource?: string | null;
     visualAnalysis?: VisualAnalysisPayload | null;
+    consultiveBrief?: string | null;
     org?: {
       id: string;
       slug: string;
@@ -48,9 +49,13 @@ export async function generateEngineResult(
   }
 ): Promise<ResultPayload> {
   const products = await getB2BProducts(hardCapContext?.orgId || null);
+  const consultiveBrief = buildConsultiveBrief(userData, hardCapContext?.visualAnalysis || null);
 
   try {
-    const aiPayload = await generateOpenAIRecommendation(userData, products, hardCapContext);
+    const aiPayload = await generateOpenAIRecommendation(userData, products, {
+      ...hardCapContext,
+      consultiveBrief,
+    });
     return aiPayload;
   } catch (err) {
     if (err instanceof Error && (err.message.startsWith("HARD_CAP_BLOCKED:") || err.message.startsWith("TENANT_BLOCKED:"))) {
@@ -59,6 +64,40 @@ export async function generateEngineResult(
     console.error("OpenAI falhou. Usando Graceful Degradation Engine. Erro: ", err);
     return generateHeuristicFallback(userData, products);
   }
+}
+
+function buildConsultiveBrief(userData: OnboardingData, visualAnalysis: VisualAnalysisPayload | null) {
+  const colorimetry = userData.colorimetry;
+  const lines: string[] = [
+    "A resposta precisa soar como consultoria de imagem, não como catálogo.",
+  ];
+
+  if (visualAnalysis?.essenceLabel) {
+    lines.push(`Essência visual: ${visualAnalysis.essenceLabel}.`);
+  }
+  if (visualAnalysis?.paletteFamily) {
+    lines.push(`Paleta visual: ${visualAnalysis.paletteFamily}.`);
+  }
+  if (colorimetry?.colorSeason) {
+    lines.push(`Colorimetria: ${colorimetry.colorSeason}.`);
+  }
+  if (colorimetry?.skinTone || colorimetry?.undertone || colorimetry?.contrast) {
+    lines.push(
+      `Pele/subtom/contraste: ${[colorimetry.skinTone, colorimetry.undertone, colorimetry.contrast].filter(Boolean).join(" / ")}.`,
+    );
+  }
+  if (colorimetry?.faceShape || colorimetry?.idealNeckline || colorimetry?.idealFit) {
+    lines.push(
+      `Visagismo: rosto ${colorimetry.faceShape || "não informado"}, decote ${colorimetry.idealNeckline || "não informado"}, caimento ${colorimetry.idealFit || "não informado"}.`,
+    );
+  }
+  if (colorimetry?.idealFabrics?.length || colorimetry?.avoidFabrics?.length) {
+    lines.push(
+      `Tecidos: favorecem ${colorimetry.idealFabrics?.join(", ") || "não informado"}; evitar ${colorimetry.avoidFabrics?.join(", ") || "não informado"}.`,
+    );
+  }
+
+  return lines.join("\n");
 }
 
 // --------------------------------------------------------------------------------------

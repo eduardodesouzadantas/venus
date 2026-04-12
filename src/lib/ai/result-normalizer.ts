@@ -20,6 +20,14 @@ type ProfileSignals = {
   mainPain: string;
   favoriteColors: string[];
   avoidColors: string[];
+  skinTone: string;
+  undertone: string;
+  colorSeason: string;
+  faceShape: string;
+  idealNeckline: string;
+  idealFit: string;
+  idealFabrics: string[];
+  avoidFabrics: string[];
   fit: string;
   faceLines: string;
   hairLength: string;
@@ -197,7 +205,10 @@ function buildPaletteColor(name: string, fallbackHex: string): { hex: string; na
 }
 
 function buildOnboardingPalette(
-  profile: Pick<ProfileSignals, "goal" | "goalKey" | "styleDirection" | "favoriteColors" | "avoidColors" | "metal" | "contrast">,
+  profile: Pick<
+    ProfileSignals,
+    "goal" | "goalKey" | "styleDirection" | "favoriteColors" | "avoidColors" | "metal" | "contrast" | "colorSeason" | "undertone" | "skinTone"
+  >,
 ): ResultPayload["palette"] {
   const primaryName = profile.favoriteColors[0] || profile.goal;
   const supportName = profile.favoriteColors[1] || (profile.styleDirection === "Feminina" ? "off white" : "grafite");
@@ -205,10 +216,11 @@ function buildOnboardingPalette(
   const avoided = profile.avoidColors.length > 0 ? profile.avoidColors.join(", ") : "cores de ruído";
   const directionLabel = profile.styleDirection.toLowerCase();
   const metalLabel = profile.metal === "Dourado" ? "metais quentes" : "metais frios";
+  const colorimetryLabel = [profile.colorSeason, profile.undertone, profile.skinTone].filter(Boolean).join(" • ");
 
   return {
     family: `${profile.goal} • linha ${directionLabel}`,
-    description: `Favorece ${profile.favoriteColors.join(", ") || primaryName} e evita ${avoided}, sustentando ${profile.goal.toLowerCase()} com ${directionLabel} e ${metalLabel}.`,
+    description: `Favorece ${profile.favoriteColors.join(", ") || primaryName} e evita ${avoided}, sustentando ${profile.goal.toLowerCase()} com ${directionLabel} e ${metalLabel}${colorimetryLabel ? `, em sintonia com ${colorimetryLabel.toLowerCase()}` : ""}.`,
     metal: profile.metal,
     contrast: profile.contrast,
     colors: [
@@ -230,6 +242,19 @@ function getProfileSignals(userData: OnboardingData) {
   const metal = normalizeMetal(userData.colors.metal || undefined);
   const favoriteColors = userData.colors.favoriteColors.map((value) => compactText(value, "", 40)).filter(Boolean);
   const avoidColors = userData.colors.avoidColors.map((value) => compactText(value, "", 40)).filter(Boolean);
+  const colorimetry = userData.colorimetry || ({} as NonNullable<OnboardingData["colorimetry"]>);
+  const skinTone = compactText(colorimetry.skinTone || userData.colors.skinTone, "", 24);
+  const undertone = compactText(colorimetry.undertone || userData.colors.undertone, "", 24);
+  const colorSeason = compactText(colorimetry.colorSeason || userData.colors.colorSeason, "", 48);
+  const faceShape = compactText(colorimetry.faceShape || userData.colors.faceShape, "", 24);
+  const idealNeckline = compactText(colorimetry.idealNeckline || userData.colors.idealNeckline, "", 64);
+  const idealFit = compactText(colorimetry.idealFit || userData.colors.idealFit, "", 64);
+  const idealFabrics = (colorimetry.idealFabrics?.length ? colorimetry.idealFabrics : userData.colors.idealFabrics)
+    .map((value) => compactText(value, "", 40))
+    .filter(Boolean);
+  const avoidFabrics = (colorimetry.avoidFabrics?.length ? colorimetry.avoidFabrics : userData.colors.avoidFabrics)
+    .map((value) => compactText(value, "", 40))
+    .filter(Boolean);
   const satisfaction = Number.isFinite(userData.intent.satisfaction) ? userData.intent.satisfaction : 5;
   const contrast = GOAL_FALLBACKS[goalKey].contrast;
   const goalKeywords = GOAL_KEYWORDS[goalKey] || GOAL_KEYWORDS.Elegância;
@@ -246,6 +271,14 @@ function getProfileSignals(userData: OnboardingData) {
     hairLength,
     mainPain,
     metal,
+    skinTone,
+    undertone,
+    colorSeason,
+    faceShape,
+    idealNeckline,
+    idealFit,
+    idealFabrics,
+    avoidFabrics,
     satisfaction,
     contrast,
     keywords: [
@@ -270,30 +303,38 @@ function buildHeroStyle(goalKey: keyof typeof GOAL_FALLBACKS): string {
 }
 
 function buildPaletteDescription(
-  goalKey: keyof typeof GOAL_FALLBACKS,
-  metal: ProfileSignals["metal"],
-  contrast: string,
+  profile: Pick<ProfileSignals, "goalKey" | "metal" | "contrast" | "colorSeason" | "undertone" | "skinTone">,
 ): string {
-  const metalLabel = metal === "Dourado" ? "metais quentes" : "metais frios";
+  const metalLabel = profile.metal === "Dourado" ? "metais quentes" : "metais frios";
+  const colorSeason = profile.colorSeason ? `A estação ${profile.colorSeason.toLowerCase()} ` : "";
+  const undertone = profile.undertone ? `subtom ${profile.undertone.toLowerCase()} ` : "";
+  const skinTone = profile.skinTone ? `pele ${profile.skinTone.toLowerCase()} ` : "";
 
-  switch (goalKey) {
+  switch (profile.goalKey) {
     case "Autoridade":
-      return `Contraste ${contrast.toLowerCase()} e tons profundos sustentam presença; ${metalLabel} fecham a leitura sem ruído.`;
+      return `${colorSeason}${undertone}${skinTone}e contraste ${profile.contrast.toLowerCase()} sustentam presença; ${metalLabel} fecham a leitura sem ruído.`;
     case "Atração":
-      return `Combinações com mais impacto e contraste ${contrast.toLowerCase()} reforçam presença sem parecer forçadas.`;
+      return `${colorSeason}${undertone}${skinTone}pedem combinações com mais impacto e contraste ${profile.contrast.toLowerCase()} para reforçar presença sem parecer forçado.`;
     case "Criatividade":
-      return `Cores mais expressivas seguem legíveis porque o contraste continua alto e o ${metalLabel} mantém a composição controlada.`;
+      return `${colorSeason}${undertone}${skinTone}aceitam cores mais expressivas porque o contraste continua alto e o ${metalLabel} mantém a composição controlada.`;
     case "Discrição sofisticada":
-      return `Baixo ruído, neutros silenciosos e ${metalLabel} discretos deixam a imagem limpa e sofisticada.`;
+      return `${colorSeason}${undertone}${skinTone}pedem baixo ruído, neutros silenciosos e ${metalLabel} discretos para deixar a imagem limpa e sofisticada.`;
     default:
-      return `Neutros refinados e contraste ${contrast.toLowerCase()} mantêm a leitura pessoal, limpa e fácil de usar.`;
+      return `${colorSeason}${undertone}${skinTone}se beneficiam de neutros refinados e contraste ${profile.contrast.toLowerCase()} para manter leitura pessoal, limpa e fácil de usar.`;
   }
 }
 
 function buildPalette(profile: Pick<ProfileSignals, "goalKey" | "metal" | "contrast">) {
   return {
     family: GOAL_FALLBACKS[profile.goalKey].paletteFamily,
-    description: buildPaletteDescription(profile.goalKey, profile.metal, profile.contrast),
+    description: buildPaletteDescription({
+      goalKey: profile.goalKey,
+      metal: profile.metal,
+      contrast: profile.contrast,
+      colorSeason: "",
+      undertone: "",
+      skinTone: "",
+    }),
     metal: profile.metal,
     contrast: profile.contrast,
     colors: profile.goalKey === "Criatividade"
@@ -316,31 +357,40 @@ function buildPalette(profile: Pick<ProfileSignals, "goalKey" | "metal" | "contr
   };
 }
 
-function buildPersonalizedPalette(profile: Pick<ProfileSignals, "goal" | "goalKey" | "styleDirection" | "favoriteColors" | "avoidColors" | "metal" | "contrast">): ResultPayload["palette"] {
+function buildPersonalizedPalette(
+  profile: Pick<
+    ProfileSignals,
+    "goal" | "goalKey" | "styleDirection" | "favoriteColors" | "avoidColors" | "metal" | "contrast" | "colorSeason" | "undertone" | "skinTone"
+  >,
+): ResultPayload["palette"] {
   return buildOnboardingPalette(profile);
 }
 
-function buildBodyVisagism(profile: Pick<ProfileSignals, "fit" | "faceLines">): ResultPayload["bodyVisagism"] {
+function buildBodyVisagism(profile: Pick<ProfileSignals, "fit" | "faceLines" | "faceShape" | "idealNeckline" | "idealFit" | "idealFabrics" | "avoidFabrics">): ResultPayload["bodyVisagism"] {
   return {
     shoulders: profile.fit === "Oversized"
       ? "Se a peça vier ampla, vale equilibrar com base mais limpa para não perder linha."
       : "Estruture os ombros com peças que sustentem a presença sem pesar.",
-    face: profile.faceLines === "Marcantes"
-      ? "Decotes em V e linhas angulares ajudam a equilibrar traços mais marcados."
-      : "Linhas arredondadas e aberturas suaves deixam a leitura facial mais leve.",
-    generalFit: `O caimento ${profile.fit} mantém conforto e leitura segura no uso real.`,
+    face: profile.idealNeckline
+      ? `${profile.idealNeckline}. ${profile.faceShape ? `O rosto ${profile.faceShape.toLowerCase()} também pede leitura coerente.` : ""}`.trim()
+      : profile.faceLines === "Marcantes"
+        ? "Decotes em V e linhas angulares ajudam a equilibrar traços mais marcados."
+        : "Linhas arredondadas e aberturas suaves deixam a leitura facial mais leve.",
+    generalFit: profile.idealFit
+      ? `${profile.idealFit}. ${profile.idealFabrics.length > 0 ? `Tecidos-chave: ${profile.idealFabrics.slice(0, 3).join(", ")}.` : ""}${profile.avoidFabrics.length > 0 ? ` Evite ${profile.avoidFabrics.slice(0, 2).join(", ")}.` : ""}`.trim()
+      : `O caimento ${profile.fit} mantém conforto e leitura segura no uso real.`,
   };
 }
 
 function buildDiagnostic(
-  profile: Pick<ProfileSignals, "goal" | "mainPain" | "fit" | "faceLines">,
+  profile: Pick<ProfileSignals, "goal" | "mainPain" | "fit" | "faceLines" | "faceShape" | "colorSeason" | "undertone" | "contrast">,
   selectedNames: string[],
 ): ResultPayload["diagnostic"] {
   const firstItem = selectedNames[0] || "o catálogo";
   return {
-    currentPerception: `Seu perfil pede menos ruído e mais estrutura. Hoje o ponto sensível é ${profile.mainPain.toLowerCase()} e o caimento ${profile.fit.toLowerCase()}.`,
-    desiredGoal: `Projetar ${profile.goal.toLowerCase()} de um jeito mais limpo, pessoal e consistente.`,
-    gapSolution: `Usar ${firstItem} como base e completar com peças do catálogo que respeitem seu rosto ${profile.faceLines.toLowerCase()} e o caimento ${profile.fit.toLowerCase()}.`,
+    currentPerception: `Seu perfil pede menos ruído e mais estrutura. Hoje o ponto sensível é ${profile.mainPain.toLowerCase()} e o caimento ${profile.fit.toLowerCase()}, com leitura de ${profile.faceLines.toLowerCase()} e contraste ${profile.contrast.toLowerCase()}.`,
+    desiredGoal: `Projetar ${profile.goal.toLowerCase()} de um jeito mais limpo, pessoal e consistente, respeitando ${profile.colorSeason || "a sua estação"} e o subtom ${profile.undertone || "não informado"}.`,
+    gapSolution: `Usar ${firstItem} como base e completar com peças do catálogo que respeitem seu rosto ${profile.faceLines.toLowerCase()}${profile.faceShape ? `, formato de rosto ${profile.faceShape.toLowerCase()}` : ""} e o caimento ${profile.fit.toLowerCase()}.`,
   };
 }
 
@@ -607,7 +657,7 @@ function buildAccessoryHints(selectedProducts: Product[], blueprint: LookBluepri
 
 function buildLookExplanation(
   blueprint: LookBlueprint,
-  profile: Pick<ProfileSignals, "goal" | "fit" | "metal">,
+  profile: Pick<ProfileSignals, "goal" | "fit" | "metal" | "faceShape" | "idealNeckline" | "idealFit" | "colorSeason" | "undertone">,
   selectedProducts: Product[],
   sourceExplanation?: unknown,
 ): string {
@@ -623,14 +673,14 @@ function buildLookExplanation(
   const secondClause = second ? ` e ${secondName}` : "";
 
   if (blueprint.type === "Híbrido Seguro") {
-    return `${firstName}${secondClause} formam a base do look e sustentam ${profile.goal.toLowerCase()} com menos ruído e mais segurança.`;
+    return `${firstName}${secondClause} formam a base do look e sustentam ${profile.goal.toLowerCase()} com menos ruído e mais segurança${profile.idealNeckline ? `, respeitando ${profile.idealNeckline.toLowerCase()}` : ""}.`;
   }
 
   if (blueprint.type === "Híbrido Premium") {
-    return `${firstName}${secondClause} elevam a presença sem perder coerência com ${profile.goal.toLowerCase()}.`;
+    return `${firstName}${secondClause} elevam a presença sem perder coerência com ${profile.goal.toLowerCase()} e a leitura ${profile.colorSeason ? profile.colorSeason.toLowerCase() : "da sua paleta"}.`;
   }
 
-  return `${firstName}${secondClause} abrem contraste com controle para ampliar repertório sem exagero.`;
+  return `${firstName}${secondClause} abrem contraste com controle para ampliar repertório sem exagero, mantendo a linha ${profile.undertone ? profile.undertone.toLowerCase() : "neutra"} e a coerência do formato de rosto ${profile.faceShape ? profile.faceShape.toLowerCase() : "natural"}.`;
 }
 
 function buildLookIntention(
@@ -769,7 +819,9 @@ export function summarizeOnboardingProfile(userData: OnboardingData): string {
     `purchase_dna: ${userData.lifestyle.purchaseDna || "n/a"}`,
     `purchase_behavior: ${userData.lifestyle.purchaseBehavior || "n/a"}`,
     `colors: favorite=${userData.colors.favoriteColors.join(", ") || "n/a"} | avoid=${userData.colors.avoidColors.join(", ") || "n/a"} | metal=${profile.metal}`,
-    `body: fit=${profile.fit} | face=${profile.faceLines} | hair=${profile.hairLength}`,
+    `colorimetry: season=${profile.colorSeason || "n/a"} | skin=${profile.skinTone || "n/a"} | undertone=${profile.undertone || "n/a"} | contrast=${profile.contrast} | face_shape=${profile.faceShape || "n/a"}`,
+    `body: fit=${profile.fit} | face=${profile.faceLines} | hair=${profile.hairLength} | neckline=${profile.idealNeckline || "n/a"} | ideal_fit=${profile.idealFit || "n/a"}`,
+    `fabrics: ideal=${profile.idealFabrics.join(", ") || "n/a"} | avoid=${profile.avoidFabrics.join(", ") || "n/a"}`,
     `scanner: face=${userData.scanner.facePhoto ? "yes" : "no"} | body=${userData.scanner.bodyPhoto ? "yes" : "no"} | skipped=${userData.scanner.skipped ? "yes" : "no"}`,
   ];
   return lines.join("\n");

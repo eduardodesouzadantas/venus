@@ -157,14 +157,17 @@ function buildPaletteFromOnboarding(data: OnboardingData, essence: EssenceProfil
   const directionLabel = normalizeText(data.intent.styleDirection) || essence.styleDirection;
   const goalLabel = normalizeText(data.intent.imageGoal) || essence.label;
   const metalLabel = normalizeText(data.colors.metal) || "Prateado";
+  const colorSeason = normalizeText(data.colorimetry.colorSeason || data.colorSeason);
+  const contrastLabel = normalizeText(data.colorimetry.contrast || data.colors.contrast || "");
   const primary = favoriteColors[0] || (essence.key === "authority" ? "Marinho intenso" : "Azul noturno");
   const support = favoriteColors[1] || (metalLabel === "Dourado" ? "Off white" : "Grafite");
   const accent = favoriteColors[2] || "Contraste controlado";
   const contrast = essence.key === "authority" || essence.key === "presence" || essence.key === "creative" ? "Alto" : "Médio Alto";
+  const colorimetryNotes = [colorSeason, contrastLabel].filter(Boolean).join(" • ");
 
   return {
     family: `${goalLabel} • ${directionLabel}`,
-    description: `Favorece ${favoriteColors.join(", ") || "as cores escolhidas"} e evita ${avoidColors.join(", ") || "cores de ruído"}, sustentando ${goalLabel.toLowerCase()} com leitura alinhada à linha ${directionLabel.toLowerCase()}.`,
+    description: `Favorece ${favoriteColors.join(", ") || "as cores escolhidas"} e evita ${avoidColors.join(", ") || "cores de ruído"}, sustentando ${goalLabel.toLowerCase()} com leitura alinhada à linha ${directionLabel.toLowerCase()}${colorimetryNotes ? ` e à colorimetria ${colorimetryNotes.toLowerCase()}` : ""}.`,
     colors: [
       { hex: buildPaletteHex(primary, "#1E3A8A"), name: primary },
       { hex: buildPaletteHex(support, "#F8FAFC"), name: support },
@@ -220,7 +223,7 @@ function buildDiagnostic(goal: string, mainPain: string, fit: string, faceLines:
 
   return {
     currentPerception: `Seu perfil pede menos ruído e mais estrutura. Hoje o ponto sensível é ${painLabel.toLowerCase()} e o caimento ${fitLabel.toLowerCase()}, mas a leitura já aponta para ${essence.label.toLowerCase()} na linha ${directionLabel.toLowerCase()}.`,
-    desiredGoal: `Projetar ${goalLabel.toLowerCase()} de um jeito mais limpo, pessoal e consistente.`,
+    desiredGoal: `Projetar ${goalLabel.toLowerCase()} de um jeito mais limpo, pessoal e consistente com colorimetria e visagismo alinhados.`,
     gapSolution: `Usar o catálogo real como eixo e sustentar ${goalLabel.toLowerCase()} com peças coerentes para seu rosto ${faceLabel.toLowerCase()}, sem perder a essência ${essence.label.toLowerCase()} nem a linha ${directionLabel.toLowerCase()}.`,
   };
 }

@@ -8,6 +8,72 @@ function normalize(value: string) {
   return value.trim();
 }
 
+function normalizeLoose(value: string) {
+  return normalize(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+type SizeBand = "PP" | "P" | "M" | "G" | "GG";
+
+function inferBodySizeBand(value: string): SizeBand | null {
+  const normalized = normalizeLoose(value);
+  if (!normalized) return null;
+  if (normalized.includes("oversized")) return "GG";
+  if (normalized.includes("relaxed")) return "G";
+  if (normalized.includes("slim")) return "M";
+  if (normalized.includes("justissimo") || normalized.includes("justo")) return "P";
+  return null;
+}
+
+function sizeBandRank(value: SizeBand): number {
+  return {
+    PP: 0,
+    P: 1,
+    M: 2,
+    G: 3,
+    GG: 4,
+  }[value];
+}
+
+function extractRequestedSize(message: string): SizeBand | null {
+  const normalized = ` ${normalizeLoose(message).toUpperCase()} `;
+  const match = normalized.match(/\b(PP|GG|G|M|P)\b/);
+  if (!match) return null;
+  return match[1] as SizeBand;
+}
+
+function isSizeDiscussion(message: string): boolean {
+  const normalized = normalizeLoose(message);
+  return /\b(tamanho|caimento|veste|veste bem|numera|numeração|numeracao|p|m|g|gg|pp)\b/.test(normalized);
+}
+
+function buildPreventiveSizeAlert(ctx: VenusContext, message: string): string | null {
+  if (!isSizeDiscussion(message)) return null;
+
+  const requestedSize = extractRequestedSize(message);
+  const bodyBand = inferBodySizeBand(ctx.fit);
+  if (!requestedSize || !bodyBand) return null;
+
+  const requestedRank = sizeBandRank(requestedSize);
+  const bodyRank = sizeBandRank(bodyBand);
+
+  if (requestedRank >= bodyRank) return null;
+
+  const productSize = normalizeLoose(ctx.productSize);
+  const productHint = productSize ? `A peça em leitura está em ${ctx.productSize}. ` : "";
+
+  return [
+    `Eu prefiro te proteger de uma troca errada: pelo caimento que já li em você, ${ctx.fit.toLowerCase()} tende a pedir algo mais próximo de ${bodyBand}.`,
+    `${productHint}${requestedSize} pode apertar, quebrar a linha ou reduzir conforto.`,
+    "Se quiser, eu sigo com a faixa mais segura e te explico o porquê de forma objetiva.",
+  ].join(" ");
+}
+
 function buildStateInstruction(state: VenusIntent): string {
   const instructions: Record<VenusIntent, string> = {
     primeira_mensagem: `primeira_mensagem: abra reconhecendo o perfil.`,
@@ -39,7 +105,7 @@ function buildHistorySummary(ctx: VenusContext) {
 
 function buildSystemPrompt(ctx: VenusContext): string {
   return `Você é Venus, personal stylist da ${ctx.orgName}.
-Tem 15 anos de experiência em consultoria de imagem.
+Tem 15 anos de experiência em consultoria de imagem, visagismo e colorimetria.
 
 CONTEXTO DO CLIENTE:
 - Nome: ${ctx.clientName}
@@ -54,11 +120,14 @@ CONTEXTO DO CLIENTE:
 - Guarda-roupa: ${ctx.wardrobeSummary || "sem itens registrados"}
 
 COMO FALAR:
+- Fale como consultora de imagem, não como formulário
+- Quando houver leitura visual, trate-a como sinal principal e proponha perguntas a partir dela
 - Linguagem elegante, direta, emocional — nunca robótica
 - Máximo 3 linhas por mensagem no WhatsApp
 - Nunca diga: certamente, claro!, com prazer, posso te ajudar?
 - Máximo 1 emoji por mensagem
 - Baseie cada resposta no arquétipo e contexto do cliente
+- Se houver sinal de tamanho incompatível, faça um alerta preventivo e educacional antes de prosseguir
 
 ESTADO DETECTADO: ${buildStateInstruction(ctx.state)}
 
@@ -94,6 +163,11 @@ function buildHistoryMessages(ctx: VenusContext, message: string) {
 export async function generateReply(context: VenusContext, message: string): Promise<string> {
   if (!openai) {
     return "";
+  }
+
+  const preventiveAlert = buildPreventiveSizeAlert(context, message);
+  if (preventiveAlert) {
+    return preventiveAlert;
   }
 
   const response = await openai.chat.completions.create({

@@ -6,6 +6,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { VenusAvatar } from "@/components/venus/VenusAvatar";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
+import type { OnboardingData } from "@/types/onboarding";
 
 type ChatRole = "venus" | "client";
 
@@ -84,8 +85,7 @@ const CHAT_STEPS: ChatStep[] = [
   },
 ];
 
-const INTRO_MESSAGE = "Oi. Eu sou a Venus Stylist. Vou ler sua presença em três perguntas e cruzar sua foto com a colorimetria.";
-const CLOSING_MESSAGE = "Perfeito. Agora vou ler sua presença.";
+const INTRO_MESSAGE = "Oi. Eu sou a Venus Stylist. Vou ler sua presença como consultora e cruzar sua foto com a colorimetria.";
 
 function normalize(text: string) {
   return text
@@ -105,6 +105,39 @@ function findSingleOption(step: Extract<ChatStep, { kind: "single" }>, raw: stri
     const optionVariants = [option.label, option.value, option.conversationValue];
     return optionVariants.some((variant) => normalize(variant) === normalized);
   }) || null;
+}
+
+function buildVisionCue(data: OnboardingData) {
+  const cues: string[] = [];
+  if (data.colorimetry.colorSeason) cues.push(data.colorimetry.colorSeason.toLowerCase());
+  if (data.colorimetry.contrast) cues.push(`contraste ${data.colorimetry.contrast.toLowerCase()}`);
+  if (data.colorimetry.faceShape) cues.push(`rosto ${data.colorimetry.faceShape}`);
+  if (data.body.faceLines) cues.push(`traços ${data.body.faceLines.toLowerCase()}`);
+  if (data.body.fit) cues.push(`caimento ${data.body.fit.toLowerCase()}`);
+  return cues.length > 0 ? cues.slice(0, 3).join(" • ") : "a sua presença";
+}
+
+function buildStepPrompt(stepKey: ChatStep["key"], data: OnboardingData) {
+  const visionCue = buildVisionCue(data);
+
+  switch (stepKey) {
+    case "line":
+      return data.colorimetry.justification
+        ? `Pelo que eu já leio em você, ${visionCue}. Você quer que essa imagem imponha autoridade, entregue elegância ou fique mais neutra?`
+        : "Antes de tudo - qual linha sustenta sua imagem?";
+    case "imageGoal":
+      return data.colorimetry.justification
+        ? "Agora eu quero afinar a intenção: o que a roupa precisa fazer pela sua presença quando alguém te vê?"
+        : "Que leitura você quer que a roupa entregue?";
+    case "styleDirection":
+      return data.colorimetry.justification
+        ? "Me conta um exemplo real: quando você olha no espelho e pensa 'hoje está certo', o que você está vestindo?"
+        : "Me conta uma coisa - quando voce se olha no espelho e pensa 'hoje ta certo', o que voce esta vestindo?";
+    case "avoidColorNote":
+      return "Existe alguma cor que você evita por motivo pessoal ou por memória afetiva?";
+  }
+
+  return "";
 }
 
 function TypingBubble() {
@@ -182,7 +215,7 @@ function ChatContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const orgSlug = searchParams.get("org") || "";
-  const { updateData, updateConversation } = useOnboarding();
+  const { data, updateData, updateConversation } = useOnboarding();
 
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -202,8 +235,14 @@ function ChatContent() {
   const introTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestDataRef = useRef(data);
+
+  useEffect(() => {
+    latestDataRef.current = data;
+  }, [data]);
 
   const currentStep = activeStepIndex !== null ? CHAT_STEPS[activeStepIndex] : null;
+  const currentPrompt = currentStep ? buildStepPrompt(currentStep.key, data) : "";
   const nextHref = useMemo(() => {
     return orgSlug ? `/scanner/opt-in?org=${encodeURIComponent(orgSlug)}` : "/scanner/opt-in";
   }, [orgSlug]);
@@ -215,7 +254,7 @@ function ChatContent() {
         {
           id: "step-0",
           role: "venus",
-          text: CHAT_STEPS[0].prompt,
+          text: buildStepPrompt(CHAT_STEPS[0].key, latestDataRef.current),
         },
       ]);
       setActiveStepIndex(0);
@@ -251,7 +290,7 @@ function ChatContent() {
           {
             id: `step-${nextIndex}`,
             role: "venus",
-            text: CHAT_STEPS[nextIndex].prompt,
+            text: buildStepPrompt(CHAT_STEPS[nextIndex].key, latestDataRef.current),
           },
         ]);
         setActiveStepIndex(nextIndex);
@@ -263,7 +302,7 @@ function ChatContent() {
         {
           id: "closing",
           role: "venus",
-          text: CLOSING_MESSAGE,
+          text: "Perfeito. Agora vou ler sua presença.",
         },
       ]);
       setActiveStepIndex(null);
@@ -410,7 +449,7 @@ function ChatContent() {
             <div className="mb-3 space-y-3">
               <div className="rounded-[28px] border border-white/10 bg-white/[0.045] px-4 py-4 shadow-[0_18px_50px_rgba(0,0,0,0.2)]">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.34em] text-[#C9A84C]">Venus</p>
-                <p className="mt-2 text-[15px] leading-7 text-white/90 sm:text-[16px]">{currentStep.prompt}</p>
+                <p className="mt-2 text-[15px] leading-7 text-white/90 sm:text-[16px]">{currentPrompt}</p>
               </div>
 
               {currentStep.kind !== "text" ? (
@@ -432,8 +471,8 @@ function ChatContent() {
               ) : (
                 <div className="rounded-[24px] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/48">
                   {"optional" in currentStep && currentStep.optional
-                    ? "Opcional. Se quiser, deixe um comentario rapido; se nao, pode seguir."
-                    : "Responda em texto livre. A Venus le o contexto, nao so palavras-chave."}
+                    ? "Opcional. Se houver uma cor que você evita por motivo pessoal, me conta; se não, eu sigo."
+                    : "Responda em texto livre. A Venus lê o contexto, não só palavras-chave."}
                 </div>
               )}
             </div>

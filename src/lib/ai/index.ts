@@ -20,6 +20,7 @@ export interface OpenAIRecommendationHardCapContext {
   eventSource?: string | null;
   org?: TenantOperationalOrgSnapshot | null;
   visualAnalysis?: VisualAnalysisPayload | null;
+  consultiveBrief?: string | null;
 }
 
 export async function generateOpenAIRecommendation(
@@ -76,9 +77,9 @@ Regras:
 - Não invente produtos, marcas, atributos ou promessas.
 - Prefira looks reais e coerentes em vez de respostas criativas demais.
 - Respeite a linha de styling escolhida no onboarding e não misture peças fora dessa direção.
-- Explique de forma curta e clara por que cada escolha combina com o perfil.
+- Explique de forma curta e clara por que cada escolha combina com o perfil, com linguagem de consultoria, visagismo e colorimetria.
 - Mostre a hierarquia do look com base, apoio e destaque sem escrever demais.
-- Justifique a paleta com o objetivo de imagem, o corpo e o metal informado.
+- Justifique a paleta com o objetivo de imagem, o corpo, a colorimetria e o metal informado.
 - Se a confiança for baixa, seja conservador e mantenha a coerência.
 - Retorne apenas JSON válido, exatamente no schema solicitado.
 - Monte 3 looks.
@@ -96,6 +97,9 @@ ${hardCapContext?.visualAnalysis ? `LEITURA VISUAL POR IA:
 ${JSON.stringify(hardCapContext.visualAnalysis, null, 2)}
 
 Use esta leitura visual como sinal principal. O intake e apoio, nao o centro.` : ""}
+${hardCapContext?.consultiveBrief ? `BRIEF CONSULTIVO:
+${hardCapContext.consultiveBrief}
+` : ""}
 CATÁLOGO REAL RELEVANTE:
 ${catalogSummary}
 
