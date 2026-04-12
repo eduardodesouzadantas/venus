@@ -11,6 +11,14 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: "Missing product_id or org_id" }, { status: 400 });
     }
 
+    // Hard guard: reject non-UUID product IDs to prevent DB syntax errors
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!UUID_RE.test(productId)) {
+        console.warn("[tryon/resolve-product] Rejected non-UUID product_id:", productId);
+        return NextResponse.json({ error: "Invalid product_id format" }, { status: 400 });
+    }
+
+
     try {
         const supabase = createAdminClient();
 

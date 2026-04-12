@@ -152,13 +152,14 @@ function buildPaletteHex(name: string, fallbackHex: string): string {
 }
 
 function buildPaletteFromOnboarding(data: OnboardingData, essence: EssenceProfile): ResultPayload["palette"] {
-  const favoriteColors = data.colors.favoriteColors.map((value) => normalizeText(value)).filter(Boolean);
-  const avoidColors = data.colors.avoidColors.map((value) => normalizeText(value)).filter(Boolean);
-  const directionLabel = normalizeText(data.intent.styleDirection) || essence.styleDirection;
-  const goalLabel = normalizeText(data.intent.imageGoal) || essence.label;
-  const metalLabel = normalizeText(data.colors.metal) || "Prateado";
-  const colorSeason = normalizeText(data.colorimetry.colorSeason || data.colorSeason);
-  const contrastLabel = normalizeText(data.colorimetry.contrast || data.colors.contrast || "");
+  const favoriteColors = (data?.colors?.favoriteColors || []).map((value) => normalizeText(value)).filter(Boolean);
+  const avoidColors = (data?.colors?.avoidColors || []).map((value) => normalizeText(value)).filter(Boolean);
+  const directionLabel = normalizeText(data?.intent?.styleDirection) || essence.styleDirection;
+  const goalLabel = normalizeText(data?.intent?.imageGoal) || essence.label;
+  const metalLabel = normalizeText(data?.colors?.metal) || "Prateado";
+  const colorSeason = normalizeText(data?.colorimetry?.colorSeason || (data as any)?.colorSeason);
+  const contrastLabel = normalizeText(data?.colorimetry?.contrast || data?.colors?.contrast || "");
+
   const primary = favoriteColors[0] || (essence.key === "authority" ? "Marinho intenso" : "Azul noturno");
   const support = favoriteColors[1] || (metalLabel === "Dourado" ? "Off white" : "Grafite");
   const accent = favoriteColors[2] || "Contraste controlado";
@@ -268,6 +269,7 @@ function buildLookItems(
     return [
       {
         id: `${prefix}-1`,
+        product_id: "",
         brand: "Acervo real",
         name: "Blazer estruturado",
         photoUrl: images[0],
@@ -279,6 +281,7 @@ function buildLookItems(
       },
       {
         id: `${prefix}-2`,
+        product_id: "",
         brand: "Acervo real",
         name: "Camisa limpa",
         photoUrl: images[1],
@@ -295,6 +298,7 @@ function buildLookItems(
     return [
       {
         id: `${prefix}-1`,
+        product_id: "",
         brand: "Acervo real",
         name: "Camada refinada",
         photoUrl: images[0],
@@ -306,6 +310,7 @@ function buildLookItems(
       },
       {
         id: `${prefix}-2`,
+        product_id: "",
         brand: "Acervo real",
         name: "Calça de base",
         photoUrl: images[1],
@@ -321,6 +326,7 @@ function buildLookItems(
   return [
     {
       id: `${prefix}-1`,
+      product_id: "",
       brand: "Acervo real",
       name: "Peça de destaque",
       photoUrl: images[0],
@@ -332,6 +338,7 @@ function buildLookItems(
     },
     {
       id: `${prefix}-2`,
+      product_id: "",
       brand: "Acervo real",
       name: "Acessório de foco",
       photoUrl: images[1],
@@ -386,14 +393,54 @@ function buildLooks(goal: string, fit: string, lookNames: [string, string, strin
   ];
 }
 
-export function buildResultSurface(data: OnboardingData, visualAnalysis?: VisualAnalysisPayload | null): ResultSurface {
+/**
+ * Normalize API looks to ensure they have valid product UUIDs.
+ * API looks come from finalResult.looks and contain real items with real product IDs.
+ */
+function normalizeApiLooks(apiLooks: any[] | null | undefined): LookData[] {
+  if (!Array.isArray(apiLooks) || apiLooks.length === 0) return [];
+
+  return apiLooks
+    .filter((look: any) => look && typeof look === "object")
+    .map((look: any) => {
+      const items = Array.isArray(look.items)
+        ? look.items.map((item: any) => ({
+          ...item,
+          // The real product UUID is in item.id from the catalog
+          id: item.id || "",
+          product_id: normalizeText(item.product_id) || normalizeText(item.productId) || item.id || "",
+          photoUrl: item.photoUrl || item.image_url || "",
+        }))
+        : [];
+
+      return {
+        id: look.id || "",
+        name: look.name || "Look",
+        intention: look.intention || "",
+        type: look.type || "Híbrido Seguro",
+        items,
+        accessories: Array.isArray(look.accessories) ? look.accessories : [],
+        explanation: look.explanation || "",
+        whenToWear: look.whenToWear || "",
+        popularityRank: look.popularityRank,
+        isDailyPick: look.isDailyPick,
+      } as LookData;
+    })
+    .filter((look) => look.items.length > 0);
+}
+
+export function buildResultSurface(
+  data: OnboardingData,
+  visualAnalysis?: VisualAnalysisPayload | null,
+  apiResult?: { looks?: any[] } | null,
+): ResultSurface {
   const essence = deriveEssenceProfile(data);
-  const goal = normalizeText(data.intent.imageGoal) || "Elegância";
+  const goal = normalizeText(data?.intent?.imageGoal) || "Elegância";
   const goalKey = normalizeGoalKey(goal);
-  const fit = normalizeText(data.body.fit) || "Slim";
-  const faceLines = normalizeText(data.body.faceLines) || "Marcantes";
-  const metal = normalizeText(data.colors.metal) || "Prateado";
-  const mainPain = normalizeText(data.intent.mainPain) || "ruído visual";
+  const fit = normalizeText(data?.body?.fit) || "Slim";
+  const faceLines = normalizeText(data?.body?.faceLines) || "Marcantes";
+  const metal = normalizeText(data?.colors?.metal) || "Prateado";
+  const mainPain = normalizeText(data?.intent?.mainPain) || "ruído visual";
   const onboardingPalette = buildPaletteFromOnboarding(data, essence);
 
   const resolvedEssence = visualAnalysis
@@ -470,7 +517,12 @@ export function buildResultSurface(data: OnboardingData, visualAnalysis?: Visual
     : buildBodyVisagism(fit, faceLines);
 
   const accessories = buildAccessories(goalKey, metal, essence);
-  const looks = buildLooks(goal, fit, resolvedEssence.lookNames as [string, string, string], essence);
+
+  // Prefer real API looks (with real product UUIDs) over synthetic looks
+  const realLooks = normalizeApiLooks(apiResult?.looks);
+  const looks = realLooks.length > 0
+    ? realLooks
+    : buildLooks(goal, fit, resolvedEssence.lookNames as [string, string, string], essence);
 
   return {
     essence: {

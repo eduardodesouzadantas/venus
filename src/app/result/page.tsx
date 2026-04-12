@@ -51,7 +51,7 @@ function ResultDashboardContent() {
     orgId?: string | null;
     branchName?: string | null;
   } | null>(null);
-  const [pendingTryOnProduct, setPendingTryOnProduct] = React.useState<{ id: string; name?: string | null; photoUrl?: string | null; category?: string | null } | null>(null);
+  const [pendingTryOnProduct, setPendingTryOnProduct] = React.useState<{ id: string; product_id?: string | null; name?: string | null; photoUrl?: string | null; category?: string | null } | null>(null);
   const [decision, setDecision] = React.useState<DecisionResult | null>(null);
 
   // ── Derived values (safe even when surface is null) ──
@@ -177,7 +177,7 @@ function ResultDashboardContent() {
         if (payload.tenant) setTenantContext(payload.tenant);
         if (payload.lastTryOn) setPersistedTryOn(payload.lastTryOn);
 
-        const builtSurface = buildResultSurface(onboardingData, payload.analysis);
+        const builtSurface = buildResultSurface(onboardingData, payload.analysis, payload.finalResult);
         setSurface(builtSurface);
       } catch (err) {
         if (!shouldAbort) {
@@ -247,11 +247,20 @@ function ResultDashboardContent() {
   const handleGenerateTryOn = React.useCallback(
     (productId: string) => {
       if (!tryOnPersonImage || !resolvedOrgId || !id) return;
-      const selectedProduct = looks[0]?.items?.find((item) => item.id === productId) || firstTryOnProduct;
+      const selectedProduct = looks[0]?.items?.find((item) => item.product_id === productId || item.id === productId) || firstTryOnProduct;
+      const resolvedProductId = selectedProduct?.product_id || "";
+      if (!resolvedProductId) {
+        console.error("[TRYON] Missing real product_id for try-on", {
+          requestedProductId: productId,
+          selectedProduct,
+        });
+        return;
+      }
       setPendingTryOnProduct(
         selectedProduct
           ? {
             id: selectedProduct.id,
+            product_id: selectedProduct.product_id || null,
             name: selectedProduct.name,
             photoUrl: selectedProduct.photoUrl || null,
             category: selectedProduct.category || null,
@@ -260,7 +269,7 @@ function ResultDashboardContent() {
       );
       startTryOn({
         model_image: tryOnPersonImage,
-        product_id: productId,
+        product_id: resolvedProductId,
         org_id: resolvedOrgId,
         saved_result_id: id,
       });
@@ -390,7 +399,7 @@ function ResultDashboardContent() {
                   A Venus está pronta para projetar seu primeiro look.
                 </p>
                 <VenusButton
-                  onClick={() => looks[0]?.items[0] && handleGenerateTryOn(looks[0].items[0].id)}
+                  onClick={() => looks[0]?.items[0]?.product_id && handleGenerateTryOn(looks[0].items[0].product_id)}
                   className="mt-8"
                 >
                   Gerar minha imagem

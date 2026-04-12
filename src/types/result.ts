@@ -1,5 +1,6 @@
 export interface LookItem {
   id: string;
+  product_id?: string;
   photoUrl: string;
   images?: string[]; // Multiple images support
   brand: string;

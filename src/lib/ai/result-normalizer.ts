@@ -559,6 +559,7 @@ function buildProductLookItem(
 
   return {
     id: product.id,
+    product_id: product.id,
     photoUrl: product.image_url || "",
     brand,
     name,
@@ -721,6 +722,7 @@ function buildFallbackLook(
     items: [
       {
         id: `fallback-${index}-1`,
+        product_id: "",
         photoUrl: "",
         brand: "Catálogo indisponível",
         name: placeholderName,
