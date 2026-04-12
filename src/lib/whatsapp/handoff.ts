@@ -18,6 +18,12 @@ export interface WhatsAppHandoffInput {
   intentScore?: number;
   fit?: string;
   metal?: string;
+  lastTryOn?: any;
+  decision?: {
+    action: string;
+    reason: string;
+    payload?: any;
+  };
 }
 
 const normalizePhone = (value?: string | null) => (value || "").replace(/\D/g, "");
@@ -60,15 +66,23 @@ export function buildWhatsAppHandoffMessage(input: WhatsAppHandoffInput) {
   const secondLook = input.lookSummary?.[1];
   const intelligence = describeLookIntelligence(topLook);
 
+  const lastTryOn = input.lastTryOn;
+  const isAggressive = input.decision?.action === "SEND_WHATSAPP_MESSAGE";
+
   const lines = [
     leadName,
-    `Acabei de ver meus looks recomendados e quero continuar por aqui.`,
+    isAggressive
+      ? `Acabei de provar meu look digital e o resultado foi impressionante!`
+      : `Acabei de ver meus looks recomendados e quero continuar por aqui.`,
     `Meu perfil ficou mais alinhado com ${style}, com foco em ${goal}.`,
     `O efeito que eu busco é ${outcome}.`,
-    topLook
-      ? `O look que mais fez sentido foi ${topLook.name}${topLook.explanation ? `, porque ${trimSentence(topLook.explanation)}` : ""}${intelligence ? ` • ${trimSentence(intelligence)}` : ""}.`
-      : `Quero entender a próxima opção mais coerente com o meu perfil.`,
-    secondLook ? `Se fizer sentido, me mostra outra opção no mesmo clima.` : null,
+    lastTryOn?.image_url
+      ? `Acabei de fazer o try-on do look ${lastTryOn.product_name || "personalizado"} e quero entender como ter essas peças.`
+      : topLook
+        ? `O look que mais fez sentido foi ${topLook.name}${topLook.explanation ? `, porque ${trimSentence(topLook.explanation)}` : ""}${intelligence ? ` • ${trimSentence(intelligence)}` : ""}.`
+        : `Quero entender a próxima opção mais coerente com o meu perfil.`,
+    isAggressive ? `Esse visual me transmite muita confiança, vamos fechar?` : null,
+    secondLook && !isAggressive ? `Se fizer sentido, me mostra outra opção no mesmo clima.` : null,
     `Pode me orientar com a próxima etapa?`,
   ].filter(Boolean) as string[];
 

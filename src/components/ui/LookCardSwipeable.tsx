@@ -170,10 +170,15 @@ export function LookCardSwipeable({
       orgId: tenantContext?.orgId || "",
       savedResultId: id || "",
       eventType: "whatsapp_clicked",
+      action: "SEND_WHATSAPP_MESSAGE",
+      outcome: "WHATSAPP_CLICKED",
       whatsappContext: {
         source: "look_card",
         lookId: look.id,
         lookName: look.name,
+        whatsappClickedAt: new Date().toISOString(),
+        lastAction: "SEND_WHATSAPP_MESSAGE",
+        lastActionOutcome: "WHATSAPP_CLICKED",
       },
     });
 

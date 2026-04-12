@@ -5,6 +5,8 @@ type LeadContextSyncInput = {
   phone?: string | null;
   email?: string | null;
   eventType?: string | null;
+  action?: string | null;
+  outcome?: string | null;
   profileData?: Record<string, unknown> | null;
   styleProfile?: Record<string, unknown> | null;
   colorimetry?: Record<string, unknown> | null;
@@ -15,6 +17,9 @@ type LeadContextSyncInput = {
   lastProductsViewed?: unknown[] | null;
   lastRecommendations?: unknown[] | null;
   whatsappContext?: Record<string, unknown> | null;
+  lastAction?: string | null;
+  lastActionOutcome?: string | null;
+  actionHistory?: unknown[] | null;
   eventMeta?: Record<string, unknown> | null;
 };
 

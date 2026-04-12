@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { findOrCreateLead } from "@/lib/leads";
 import { loadLeadContextByIdentity, updateIntentScore, upsertLeadContextByLeadId } from "@/lib/lead-context";
+import { decideNextAction } from "@/lib/decision-engine";
+import { recordDecisionOutcome } from "@/lib/decision-engine/learning";
 import { bumpTenantUsageDaily } from "@/lib/tenant/core";
 import { loadMetaIntegrationByPhoneNumberId } from "@/lib/whatsapp/meta";
 
@@ -233,6 +235,35 @@ export async function POST(request: Request) {
             })
           : seedLead.lead.intent_score ?? currentIntentScore;
 
+        if (intentEventType === "variation_requested") {
+          await recordDecisionOutcome({
+            lead_id: seedLead.lead.id,
+            action: "SUGGEST_NEW_LOOK",
+            outcome: "REQUESTED_VARIATION",
+            timestamp,
+          }).catch((error) => {
+            console.warn("[WEBHOOK] failed to record variation outcome", error);
+          });
+        } else if (intentEventType === "recommendation_ignored") {
+          await recordDecisionOutcome({
+            lead_id: seedLead.lead.id,
+            action: "SUGGEST_NEW_LOOK",
+            outcome: "DROPPED_SESSION",
+            timestamp,
+          }).catch((error) => {
+            console.warn("[WEBHOOK] failed to record ignored recommendation outcome", error);
+          });
+        } else if (intentEventType === "inactive_24h") {
+          await recordDecisionOutcome({
+            lead_id: seedLead.lead.id,
+            action: "SEND_WHATSAPP_MESSAGE",
+            outcome: "NO_RESPONSE",
+            timestamp,
+          }).catch((error) => {
+            console.warn("[WEBHOOK] failed to record inactivity outcome", error);
+          });
+        }
+
         await upsertLeadContextByLeadId(admin, {
           orgId: org.id,
           leadId: seedLead.lead.id,
@@ -289,7 +320,7 @@ export async function POST(request: Request) {
                             ? 35
                             : 40;
 
-            await upsertLeadContextByLeadId(admin, {
+            const enrichedContext = await upsertLeadContextByLeadId(admin, {
               orgId: org.id,
               leadId: seedLead.lead.id,
               intentScore: intentEventType
@@ -311,7 +342,19 @@ export async function POST(request: Request) {
               },
             });
 
-            if (intent === "humano") {
+            const decision = decideNextAction(enrichedContext);
+
+            await upsertLeadContextByLeadId(admin, {
+              orgId: org.id,
+              leadId: seedLead.lead.id,
+              whatsappContext: {
+                nextAction: decision.chosenAction,
+                nextActionReason: decision.reason,
+                nextActionConfidence: decision.adaptiveConfidence,
+              },
+            });
+
+            if (intent === "humano" || decision.chosenAction === "TRIGGER_HUMAN_AGENT") {
               await admin.from("whatsapp_conversations").update({ status: "human_takeover" }).eq("id", finalConversationId);
               nextConversationStatus = "human_takeover";
             } else {

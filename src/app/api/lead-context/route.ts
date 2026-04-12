@@ -8,6 +8,7 @@ import {
   updateIntentScore,
   upsertLeadContext,
 } from "@/lib/lead-context";
+import { recordDecisionOutcome } from "@/lib/decision-engine/learning";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,8 @@ export async function POST(request: NextRequest) {
   const phone = normalizeText(body.phone ?? body.clientPhone ?? body.contactPhone);
   const email = normalizeText(body.email);
   const eventType = normalizeText(body.eventType ?? body.event_type);
+  const action = normalizeText(body.action ?? body.lastAction ?? body.last_action);
+  const outcome = normalizeText(body.outcome ?? body.lastActionOutcome ?? body.last_action_outcome);
 
   if (!orgId) {
     return NextResponse.json({ error: "Missing orgId" }, { status: 400 });
@@ -73,6 +76,32 @@ export async function POST(request: NextRequest) {
 
     const lastTryon = asRecord(body.lastTryon);
 
+    const mappedAction =
+      action ||
+      (eventType === "whatsapp_clicked"
+        ? "SEND_WHATSAPP_MESSAGE"
+        : eventType === "tryon_generated" || eventType === "product_revisited"
+          ? "SUGGEST_NEW_LOOK"
+          : "");
+    const mappedOutcome =
+      outcome ||
+      (eventType === "whatsapp_clicked"
+        ? "WHATSAPP_CLICKED"
+        : eventType === "tryon_generated" || eventType === "product_revisited"
+          ? "REQUESTED_VARIATION"
+          : "");
+
+    if (leadId && mappedAction && mappedOutcome) {
+      await recordDecisionOutcome({
+        lead_id: leadId,
+        action: mappedAction,
+        outcome: mappedOutcome,
+        timestamp: normalizeText(body.timestamp ?? body.eventTimestamp ?? body.event_timestamp) || new Date().toISOString(),
+      }).catch((error) => {
+        console.warn("[LEAD_CONTEXT] failed to record decision outcome", error);
+      });
+    }
+
     if (lastTryon || body.generatedImageUrl) {
       const context = await updateLeadContextTryOn(supabase, {
         orgId,
@@ -86,6 +115,9 @@ export async function POST(request: NextRequest) {
         category: normalizeText(lastTryon?.category ?? body.category),
         requestId: normalizeText(lastTryon?.requestId ?? lastTryon?.request_id ?? body.requestId ?? body.request_id),
         intentScore: resolvedIntentScore,
+        lastAction: mappedAction || null,
+        lastActionOutcome: mappedOutcome || null,
+        actionHistory: (body.actionHistory as unknown[] | undefined) || null,
       });
 
       return NextResponse.json({ ok: true, context });
@@ -101,6 +133,9 @@ export async function POST(request: NextRequest) {
         lookId: normalizeText(body.lookId),
         lookName: normalizeText(body.lookName),
         intentScore: resolvedIntentScore,
+        lastAction: mappedAction || null,
+        lastActionOutcome: mappedOutcome || null,
+        actionHistory: (body.actionHistory as unknown[] | undefined) || null,
       });
 
       return NextResponse.json({ ok: true, context });
@@ -114,6 +149,9 @@ export async function POST(request: NextRequest) {
         intentScore: resolvedIntentScore ?? body.intentScore,
         emotionalState: (body.emotionalState as Record<string, unknown> | undefined) || null,
         whatsappContext: (body.whatsappContext as Record<string, unknown> | undefined) || null,
+        actionHistory: (body.actionHistory as unknown[] | undefined) || null,
+        lastAction: mappedAction || null,
+        lastActionOutcome: mappedOutcome || null,
       });
 
       return NextResponse.json({ ok: true, context });
@@ -134,6 +172,9 @@ export async function POST(request: NextRequest) {
       lastProductsViewed: (body.lastProductsViewed as unknown[] | undefined) || null,
       lastRecommendations: (body.lastRecommendations as unknown[] | undefined) || null,
       whatsappContext: (body.whatsappContext as Record<string, unknown> | undefined) || null,
+      actionHistory: (body.actionHistory as unknown[] | undefined) || null,
+      lastAction: mappedAction || null,
+      lastActionOutcome: mappedOutcome || null,
       intentScore: resolvedIntentScore,
     });
 

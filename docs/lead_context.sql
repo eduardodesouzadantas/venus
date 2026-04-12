@@ -12,6 +12,9 @@ CREATE TABLE IF NOT EXISTS lead_context (
   last_products_viewed JSONB NOT NULL DEFAULT '[]'::jsonb,
   last_recommendations JSONB NOT NULL DEFAULT '[]'::jsonb,
   whatsapp_context JSONB NOT NULL DEFAULT '{}'::jsonb,
+  last_action TEXT,
+  last_action_outcome TEXT,
+  action_history JSONB NOT NULL DEFAULT '[]'::jsonb,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (org_id, user_id)
 );

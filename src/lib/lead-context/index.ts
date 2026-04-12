@@ -30,6 +30,9 @@ export type LeadContextRecord = {
   last_products_viewed: unknown[] | null;
   last_recommendations: unknown[] | null;
   whatsapp_context: Record<string, unknown> | null;
+  last_action: string | null;
+  last_action_outcome: string | null;
+  action_history: unknown[] | null;
   updated_at: string | null;
 };
 
@@ -52,6 +55,9 @@ export type LeadContextPatch = {
   lastProductsViewed?: unknown[] | null;
   lastRecommendations?: unknown[] | null;
   whatsappContext?: unknown;
+  lastAction?: string | null;
+  lastActionOutcome?: string | null;
+  actionHistory?: unknown[] | null;
 };
 
 export type LeadIntentEventType =
@@ -134,6 +140,17 @@ function uniqueArray(values: unknown[]) {
 }
 
 function mergeArray(existing: unknown[] | null | undefined, patch: unknown[] | null | undefined, limit = 10) {
+  const current = asArray(existing);
+  const incoming = asArray(patch);
+
+  if (!incoming.length) {
+    return current.slice(0, limit);
+  }
+
+  return uniqueArray([...incoming, ...current]).slice(0, limit);
+}
+
+function mergeHistory(existing: unknown[] | null | undefined, patch: unknown[] | null | undefined, limit = 50) {
   const current = asArray(existing);
   const incoming = asArray(patch);
 
@@ -242,6 +259,9 @@ export async function upsertLeadContext(supabase: SupabaseClient, input: LeadCon
     lastProductsViewed: input.lastProductsViewed,
     lastRecommendations: input.lastRecommendations,
     whatsappContext: input.whatsappContext,
+    lastAction: input.lastAction,
+    lastActionOutcome: input.lastActionOutcome,
+    actionHistory: input.actionHistory,
   });
 }
 
@@ -266,6 +286,26 @@ export async function upsertLeadContextByLeadId(
   if (existingError) throw existingError;
 
   const current = (existing as LeadContextRecord | null) ?? null;
+  const currentTryOnCount =
+    Number((asRecord(current?.last_tryon)?.tryOnCount as number | undefined) || (asRecord(current?.whatsapp_context)?.tryOnCount as number | undefined) || 0) || 0;
+  const incomingTryOnCount = Number((asRecord(input.lastTryon)?.tryOnCount as number | undefined) || 0) || 0;
+  const nextTryOnCount = input.lastTryon ? Math.max(currentTryOnCount + 1, incomingTryOnCount) : currentTryOnCount;
+  const nextLastTryon = input.lastTryon
+    ? {
+        ...mergeRecords(asRecord(current?.last_tryon), input.lastTryon),
+        tryOnCount: nextTryOnCount,
+      }
+    : mergeRecords(asRecord(current?.last_tryon), input.lastTryon);
+  const nextWhatsAppContext = mergeRecords(asRecord(current?.whatsapp_context), input.whatsappContext);
+
+  if (input.lastTryon && nextTryOnCount > 0) {
+    nextWhatsAppContext.tryOnCount = Math.max(
+      Number((nextWhatsAppContext.tryOnCount as number | undefined) || 0) || 0,
+      nextTryOnCount
+    );
+  }
+  const nextActionHistory = mergeHistory(current?.action_history, input.actionHistory, 50);
+
   const payload = {
     org_id: orgId,
     user_id: leadId,
@@ -278,10 +318,13 @@ export async function upsertLeadContextByLeadId(
         ? input.intentScore
         : current?.intent_score ?? 0,
     emotional_state: mergeRecords(asRecord(current?.emotional_state), input.emotionalState),
-    last_tryon: mergeRecords(asRecord(current?.last_tryon), input.lastTryon),
+    last_tryon: nextLastTryon,
     last_products_viewed: mergeArray(current?.last_products_viewed, input.lastProductsViewed, 12),
     last_recommendations: mergeArray(current?.last_recommendations, input.lastRecommendations, 6),
-    whatsapp_context: mergeRecords(asRecord(current?.whatsapp_context), input.whatsappContext),
+    whatsapp_context: nextWhatsAppContext,
+    last_action: input.lastAction ?? current?.last_action ?? null,
+    last_action_outcome: input.lastActionOutcome ?? current?.last_action_outcome ?? null,
+    action_history: nextActionHistory,
     updated_at: new Date().toISOString(),
   };
 
@@ -309,6 +352,9 @@ export async function updateLeadContextTryOn(
     category?: string | null;
     requestId?: string | null;
     intentScore?: number | null;
+    lastAction?: string | null;
+    lastActionOutcome?: string | null;
+    actionHistory?: unknown[] | null;
   }
 ) {
   return upsertLeadContext(supabase, {
@@ -326,6 +372,9 @@ export async function updateLeadContextTryOn(
       updatedAt: new Date().toISOString(),
     },
     intentScore: input.intentScore ?? null,
+    lastAction: input.lastAction ?? null,
+    lastActionOutcome: input.lastActionOutcome ?? null,
+    actionHistory: input.actionHistory ?? null,
   });
 }
 
@@ -340,6 +389,9 @@ export async function updateLeadContextProducts(
     lookId?: string | null;
     lookName?: string | null;
     intentScore?: number | null;
+    lastAction?: string | null;
+    lastActionOutcome?: string | null;
+    actionHistory?: unknown[] | null;
   }
 ) {
   return upsertLeadContext(supabase, {
@@ -353,13 +405,16 @@ export async function updateLeadContextProducts(
           updatedAt: new Date().toISOString(),
         }
       : null,
-      whatsappContext: input.lookId || input.lookName
+    whatsappContext: input.lookId || input.lookName
       ? {
           lastLookId: input.lookId || null,
           lastLookName: input.lookName || null,
         }
       : null,
     intentScore: input.intentScore ?? null,
+    lastAction: input.lastAction ?? null,
+    lastActionOutcome: input.lastActionOutcome ?? null,
+    actionHistory: input.actionHistory ?? null,
   });
 }
 
@@ -372,6 +427,9 @@ export async function updateLeadContextIntent(
     intentScore: number;
     emotionalState?: Record<string, unknown> | null;
     whatsappContext?: Record<string, unknown> | null;
+    lastAction?: string | null;
+    lastActionOutcome?: string | null;
+    actionHistory?: unknown[] | null;
   }
 ) {
   return upsertLeadContext(supabase, {
@@ -381,6 +439,9 @@ export async function updateLeadContextIntent(
     intentScore: input.intentScore,
     emotionalState: input.emotionalState || null,
     whatsappContext: input.whatsappContext || null,
+    lastAction: input.lastAction || null,
+    lastActionOutcome: input.lastActionOutcome || null,
+    actionHistory: input.actionHistory || null,
   });
 }
 

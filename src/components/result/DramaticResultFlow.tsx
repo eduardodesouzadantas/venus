@@ -237,9 +237,14 @@ Quer descobrir o seu?`;
         orgId: tenantContext.orgId,
         savedResultId: id,
         eventType: "whatsapp_clicked",
+        action: "SEND_WHATSAPP_MESSAGE",
+        outcome: "WHATSAPP_CLICKED",
         whatsappContext: {
           source: "dramatic_result_flow",
           destination: url,
+          whatsappClickedAt: new Date().toISOString(),
+          lastAction: "SEND_WHATSAPP_MESSAGE",
+          lastActionOutcome: "WHATSAPP_CLICKED",
         },
       });
     }

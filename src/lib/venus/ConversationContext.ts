@@ -291,6 +291,11 @@ export async function loadContext(phone_number: string, org_id: string): Promise
     wardrobeSummary: wardrobeLines.join("\n"),
     history: messages,
     state: "curiosidade",
+    decision: leadWhatsapp?.nextAction ? {
+      action: String(leadWhatsapp.nextAction),
+      reason: String(leadWhatsapp.nextActionReason || ""),
+      payload: leadWhatsapp.payload || {}
+    } : undefined
   };
 }
 

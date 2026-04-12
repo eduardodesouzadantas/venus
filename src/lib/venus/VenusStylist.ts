@@ -128,6 +128,7 @@ COMO FALAR:
 - Máximo 1 emoji por mensagem
 - Baseie cada resposta no arquétipo e contexto do cliente
 - Se houver sinal de tamanho incompatível, faça um alerta preventivo e educacional antes de prosseguir
+${ctx.decision ? `- PRÓXIMA AÇÃO INDICADA PELA VENUS: ${ctx.decision.action} (Motivo: ${ctx.decision.reason}). Se for OFFER_DISCOUNT, ofereça o cupom VENUSPRO.` : ""}
 
 ESTADO DETECTADO: ${buildStateInstruction(ctx.state)}
 

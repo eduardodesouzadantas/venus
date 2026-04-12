@@ -9,6 +9,7 @@ import { buildCatalogAwareFallbackResult } from "@/lib/ai/result-normalizer";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { extractLeadSignalsFromSavedResultPayload, persistSavedResultAndLead } from "@/lib/leads";
 import { buildLeadContextProfileFromOnboarding, upsertLeadContextByLeadId } from "@/lib/lead-context";
+import { decideNextAction } from "@/lib/decision-engine";
 import { fetchTenantBySlug, isTenantActive, normalizeTenantSlug, resolveAppTenantOrg } from "@/lib/tenant/core";
 import { generateVisualProfileAnalysis } from "@/lib/analysis/visual-profile";
 import {
@@ -476,7 +477,7 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
         eventSource: "app",
       });
 
-      await upsertLeadContextByLeadId(supabase, {
+      const leadContext = await upsertLeadContextByLeadId(supabase, {
         orgId: resolvedTenant.org.id,
         leadId: persisted.leadId,
         ...buildLeadContextProfileFromOnboarding({
@@ -490,6 +491,19 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
           savedResultId: persisted.savedResultId,
           intentScore: leadSignals.intentScore ?? Math.round(Number(safeUserData.intent.satisfaction || 0) * 10),
         }),
+      });
+
+      const decision = decideNextAction(leadContext);
+
+      await upsertLeadContextByLeadId(supabase, {
+        orgId: resolvedTenant.org.id,
+        leadId: persisted.leadId,
+        whatsappContext: {
+          nextAction: decision.chosenAction,
+          nextActionReason: decision.reason,
+          nextActionConfidence: decision.adaptiveConfidence,
+          decisionWeights: decision.weightAdjustments,
+        },
       });
 
       await recordOperationalTenantEvent(supabase, {

@@ -2,8 +2,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { enforceOrgHardCap } from "@/lib/billing/enforcement";
 import { extractLeadSignalsFromSavedResultPayload, findOrCreateLead } from "@/lib/leads";
 import { loadLeadContextByIdentity, updateIntentScore, upsertLeadContextByLeadId } from "@/lib/lead-context";
+import { decideNextAction } from "@/lib/decision-engine";
+import { recordDecisionOutcome } from "@/lib/decision-engine/learning";
 import { bumpTenantUsageDaily, resolveAppTenantOrg } from "@/lib/tenant/core";
 import { enforceTenantOperationalState } from "@/lib/tenant/enforcement";
+import { buildWhatsAppHandoffMessage } from "@/lib/whatsapp/handoff";
 
 type WhatsAppHandoffBody = {
   resultId?: string;
@@ -133,6 +136,9 @@ export async function POST(request: Request) {
     },
   });
 
+  let decision: ReturnType<typeof decideNextAction> | null = null;
+  let contextForMessage: any = null;
+
   try {
     const { lead, created } = await findOrCreateLead(supabase, {
       orgId: org.id,
@@ -160,7 +166,7 @@ export async function POST(request: Request) {
           ? lead.intent_score
           : 0;
 
-    await upsertLeadContextByLeadId(supabase, {
+    const updatedContext = await upsertLeadContextByLeadId(supabase, {
       orgId: org.id,
       leadId: lead.id,
       profileData: {
@@ -186,12 +192,37 @@ export async function POST(request: Request) {
         ...body.payload,
         orgSlug: org.slug,
         orgId: org.id,
+        whatsappClickedAt: new Date().toISOString(),
+        lastAction: "SEND_WHATSAPP_MESSAGE",
+        lastActionOutcome: "WHATSAPP_CLICKED",
       },
       intentScore: updateIntentScore("whatsapp_clicked", currentIntentScore, {
         now: new Date().toISOString(),
         lastActivityAt: leadSnapshot.context?.updated_at || lead.last_interaction_at || null,
       }),
       lastRecommendations: Array.isArray(body.payload.lookSummary) ? body.payload.lookSummary : [],
+    });
+
+    contextForMessage = updatedContext;
+    decision = decideNextAction(updatedContext);
+
+    await upsertLeadContextByLeadId(supabase, {
+      orgId: org.id,
+      leadId: lead.id,
+      whatsappContext: {
+        nextAction: decision.chosenAction,
+        nextActionReason: decision.reason,
+        nextActionConfidence: decision.adaptiveConfidence,
+      },
+    });
+
+    await recordDecisionOutcome({
+      lead_id: lead.id,
+      action: "SEND_WHATSAPP_MESSAGE",
+      outcome: "WHATSAPP_CLICKED",
+      timestamp: new Date().toISOString(),
+    }).catch((error) => {
+      console.warn("[LEADS] failed to record whatsapp handoff outcome", error);
     });
 
     await supabase.from("tenant_events").insert({
@@ -213,5 +244,11 @@ export async function POST(request: Request) {
     console.warn("[LEADS] failed to sync lead from whatsapp handoff", leadError);
   }
 
-  return Response.json({ ok: true });
+  const message = buildWhatsAppHandoffMessage({
+    ...body.payload,
+    decision: decision ? { action: decision.chosenAction, reason: decision.reason } : undefined,
+    lastTryOn: contextForMessage?.last_tryon,
+  });
+
+  return Response.json({ ok: true, decision, message });
 }

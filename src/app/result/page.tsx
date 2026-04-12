@@ -13,6 +13,9 @@ import { useUserImage } from "@/lib/onboarding/UserImageContext";
 import { syncLeadContext } from "@/lib/lead-context/client";
 import { useTryOn, TRYON_LOADING_MESSAGES } from "@/hooks/useTryOn";
 import { buildResultSurface, type ResultSurface } from "@/lib/result/surface";
+import { decideNextAction } from "@/lib/decision-engine/engine";
+import { DecisionResult } from "@/lib/decision-engine/types";
+import { buildWhatsAppHandoffMessage, buildWhatsAppHandoffUrl } from "@/lib/whatsapp/handoff";
 
 // Categorization logic for the try-on engine
 function inferTryOnCategory(product: any): "tops" | "bottoms" | "one-pieces" {
@@ -41,6 +44,8 @@ function ResultDashboardContent() {
     branchName?: string | null;
   } | null>(null);
   const [pendingTryOnProduct, setPendingTryOnProduct] = React.useState<{ id: string; name?: string | null; photoUrl?: string | null; category?: string | null } | null>(null);
+  const [decision, setDecision] = React.useState<DecisionResult | null>(null);
+
 
   React.useEffect(() => {
     if (!id) {
@@ -93,9 +98,23 @@ function ResultDashboardContent() {
     whatsapp_phone: tenantContext?.whatsappNumber || "5511967011133"
   };
 
+  const whatsappUrl = useMemo(() => {
+    if (!result || !surface) return "";
+    const message = buildWhatsAppHandoffMessage({
+      contactName: onboardingData.contact?.name,
+      styleIdentity: result.essence.label,
+      imageGoal: onboardingData.intent?.imageGoal,
+      lookSummary: result.looks as any,
+      lastTryOn: tryOnImageUrl ? { image_url: tryOnImageUrl, status: "completed" } : persistedTryOn,
+      decision: decision ? { action: decision.chosenAction, reason: decision.reason } : undefined,
+    });
+    return buildWhatsAppHandoffUrl(message, tenantContext?.whatsappNumber || "5511967011133") || "";
+  }, [result, surface, onboardingData, tryOnImageUrl, persistedTryOn, decision, tenantContext]);
+
   const tryOnPersonImage = userPhoto || onboardingData.scanner.bodyPhoto || onboardingData.scanner.facePhoto || "";
   const resolvedOrgId = tenantContext?.orgId || onboardingData.tenant?.orgId || "";
   const displayImageUrl = tryOnImageUrl || persistedTryOn?.image_url;
+  const isPreviousLook = !tryOnImageUrl && !!persistedTryOn?.image_url;
   const isGenerating = tryOnStatus === "queued" || tryOnStatus === "processing";
   const firstTryOnProduct = result.looks[0]?.items?.[0] || null;
 
@@ -111,11 +130,11 @@ function ResultDashboardContent() {
     setPendingTryOnProduct(
       selectedProduct
         ? {
-            id: selectedProduct.id,
-            name: selectedProduct.name,
-            photoUrl: selectedProduct.photoUrl || null,
-            category: selectedProduct.category || null,
-          }
+          id: selectedProduct.id,
+          name: selectedProduct.name,
+          photoUrl: selectedProduct.photoUrl || null,
+          category: selectedProduct.category || null,
+        }
         : null
     );
     startTryOn({
@@ -135,6 +154,8 @@ function ResultDashboardContent() {
       orgId: resolvedOrgId,
       savedResultId: id,
       eventType: "tryon_generated",
+      action: "SUGGEST_NEW_LOOK",
+      outcome: "REQUESTED_VARIATION",
       lastTryon: {
         personImageUrl: tryOnPersonImage || null,
         garmentImageUrl: pendingTryOnProduct.photoUrl || null,
@@ -145,10 +166,33 @@ function ResultDashboardContent() {
         requestId: null,
         updatedAt: new Date().toISOString(),
       },
+      lastAction: "SUGGEST_NEW_LOOK",
+      lastActionOutcome: "REQUESTED_VARIATION",
     });
 
     setPendingTryOnProduct(null);
   }, [tryOnStatus, tryOnImageUrl, resolvedOrgId, id, pendingTryOnProduct, tryOnPersonImage, result.looks]);
+
+  // Decision Engine Trigger
+  React.useEffect(() => {
+    if (loading || !result) return;
+
+    const intentScore = (onboardingData.intent?.satisfaction || 5) as number;
+    const nextAction = decideNextAction({
+      intent_score: intentScore,
+      last_tryon: tryOnImageUrl ? { image_url: tryOnImageUrl, status: "completed" } : persistedTryOn,
+      last_products_viewed: [], // To be populated if needed
+      last_recommendations: result.looks || [],
+      whatsapp_context: {}, // To be populated from session
+      emotional_state: {},
+      timestamps: {
+        last_interaction_at: new Date().toISOString(),
+      }
+    });
+
+    setDecision(nextAction);
+    console.log("[Decision Engine] Next Action:", nextAction);
+  }, [tryOnImageUrl, persistedTryOn, result, loading, onboardingData.intent?.satisfaction]);
 
   const openWhatsApp = async (url: string) => {
     if (resolvedOrgId && id) {
@@ -156,9 +200,14 @@ function ResultDashboardContent() {
         orgId: resolvedOrgId,
         savedResultId: id,
         eventType: "whatsapp_clicked",
+        action: "SEND_WHATSAPP_MESSAGE",
+        outcome: "WHATSAPP_CLICKED",
         whatsappContext: {
           source: "result_page",
           destination: url,
+          whatsappClickedAt: new Date().toISOString(),
+          lastAction: "SEND_WHATSAPP_MESSAGE",
+          lastActionOutcome: "WHATSAPP_CLICKED",
         },
       });
     }
@@ -221,11 +270,19 @@ function ResultDashboardContent() {
             {/* Overlay Gradient (Luxury Feel) */}
             <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-black/80 via-transparent to-transparent" />
 
-            {/* Validation Tag */}
+            {/* Validation Tag / Memory Tag */}
             {displayImageUrl && !isGenerating && (
-              <div className="absolute top-6 left-6 flex items-center gap-2 rounded-full border border-white/10 bg-black/40 px-4 py-2 backdrop-blur-md">
-                <div className="h-1.5 w-1.5 rounded-full bg-[#C9A84C] animate-pulse" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-[#C9A84C]">Venus Verified Look</span>
+              <div className="absolute top-6 left-6 flex flex-col gap-2">
+                {isPreviousLook && (
+                  <div className="flex items-center gap-2 rounded-full border border-[#C9A84C]/20 bg-black/60 px-4 py-2 backdrop-blur-md">
+                    <div className="h-1.5 w-1.5 rounded-full bg-[#C9A84C]" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-[#C9A84C]">Memória Venus</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/40 px-4 py-2 backdrop-blur-md">
+                  <div className="h-1.5 w-1.5 rounded-full bg-[#C9A84C] animate-pulse" />
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#C9A84C]">Venus Verified Look</span>
+                </div>
               </div>
             )}
           </div>
@@ -238,25 +295,42 @@ function ResultDashboardContent() {
                 {result.essence.label}
               </h1>
               <p className="mx-auto max-w-sm text-[16px] leading-relaxed text-white/60">
-                {persistedTryOn?.style_reason || "Uma leitura baseada na sua colorimetria e curadoria pessoal."}
+                {isPreviousLook
+                  ? "Você testou esse look antes. Ele continua sendo uma escolha poderosa para sua essência."
+                  : decision?.chosenAction === "SEND_WHATSAPP_MESSAGE"
+                    ? "Sua imagem projetada com precisão. Este visual transmite a confiança que você busca."
+                    : persistedTryOn?.style_reason || "Uma leitura baseada na sua colorimetria e curadoria pessoal."
+                }
               </p>
             </div>
 
             {/* Primary CTAs */}
             <div className="flex flex-col gap-3 pt-4">
               <Link
-                href={`https://wa.me/${org.whatsapp_phone}?text=${encodeURIComponent(`Oi! Acabei de gerar meu look de ${result.essence.label} na Venus e quero conversar sobre essas peças.`)}`}
+                href={whatsappUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(event) => {
                   event.preventDefault();
-                  void openWhatsApp(`https://wa.me/${org.whatsapp_phone}?text=${encodeURIComponent(`Oi! Acabei de gerar meu look de ${result.essence.label} na Venus e quero conversar sobre essas peças.`)}`);
+                  void openWhatsApp(whatsappUrl);
                 }}
                 className="flex h-14 items-center justify-center rounded-2xl bg-[#C9A84C] px-6 text-[13px] font-black uppercase tracking-widest text-black transition-transform active:scale-95 group"
               >
-                Ver no WhatsApp
+                {decision?.chosenAction === "SEND_WHATSAPP_MESSAGE"
+                  ? "Garantir esse look agora"
+                  : decision?.chosenAction === "SUGGEST_NEW_LOOK"
+                    ? "Quer ver outra opção?"
+                    : "Ver no WhatsApp"
+                }
                 <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
               </Link>
+
+              {decision?.chosenAction === "OFFER_DISCOUNT" && (
+                <div className="rounded-2xl border border-[#C9A84C]/20 bg-[#C9A84C]/5 p-4 text-center animate-in fade-in zoom-in-95">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-[#C9A84C]">Oportunidade Única</p>
+                  <p className="mt-1 text-xs text-white/70">Use **VENUSPRO** para 10% OFF agora.</p>
+                </div>
+              )}
 
               <button
                 onClick={() => setShowSaveModal(true)}

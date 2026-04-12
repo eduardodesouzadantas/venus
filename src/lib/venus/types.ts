@@ -36,4 +36,9 @@ export type VenusContext = {
   wardrobeSummary: string;
   history: VenusConversationMessage[];
   state: VenusIntent;
+  decision?: {
+    action: string;
+    reason: string;
+    payload?: any;
+  };
 };
