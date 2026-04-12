@@ -179,6 +179,8 @@ function ResultDashboardContent() {
   const palette = safeResult.palette ?? {};
   const paletteFamily = palette.family ?? "Personalizada";
   const paletteColors = Array.isArray(palette.colors) ? palette.colors : [];
+  const bodyFit = onboardingData.body?.fit ?? "Ajuste preciso";
+  const colorContrast = onboardingData.colors?.contrast ?? "Natural";
   const org = {
     name: tenantContext?.branchName || tenantContext?.orgSlug || "sua loja",
     whatsapp_phone: tenantContext?.whatsappNumber || "5511967011133"
@@ -197,7 +199,7 @@ function ResultDashboardContent() {
     return buildWhatsAppHandoffUrl(message, tenantContext?.whatsappNumber || "5511967011133") || "";
   }, [result, surface, onboardingData, tryOnImageUrl, persistedTryOn, decision, tenantContext]);
 
-  const tryOnPersonImage = userPhoto || onboardingData.scanner.bodyPhoto || onboardingData.scanner.facePhoto || "";
+  const tryOnPersonImage = userPhoto || onboardingData.scanner?.bodyPhoto || onboardingData.scanner?.facePhoto || "";
   const resolvedOrgId = tenantContext?.orgId || onboardingData.tenant?.orgId || "";
   const displayImageUrl = tryOnImageUrl || persistedTryOn?.image_url;
   const isPreviousLook = !tryOnImageUrl && !!persistedTryOn?.image_url;
@@ -438,11 +440,11 @@ function ResultDashboardContent() {
           <div className="grid grid-cols-2 gap-4">
             <div className="rounded-2xl border border-white/5 bg-black/20 p-5">
               <p className="text-[9px] text-white/40 uppercase tracking-widest mb-2 font-mono">Caimento</p>
-              <p className="text-white text-[13px] font-medium">{onboardingData.body.fit || "Ajuste preciso"}</p>
+              <p className="text-white text-[13px] font-medium">{bodyFit}</p>
             </div>
             <div className="rounded-2xl border border-white/5 bg-black/20 p-5">
               <p className="text-[9px] text-white/40 uppercase tracking-widest mb-2 font-mono">Contraste</p>
-              <p className="text-white text-[13px] font-medium">{onboardingData.colors.contrast || "Natural"}</p>
+              <p className="text-white text-[13px] font-medium">{colorContrast}</p>
             </div>
           </div>
         </div>
