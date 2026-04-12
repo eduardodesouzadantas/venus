@@ -173,10 +173,12 @@ function ResultDashboardContent() {
   }
 
   const result = surface;
-  const looks = Array.isArray(result?.looks) ? result.looks : [];
-  const essenceLabel = result?.essence?.label ?? "Sua Presença";
-  const paletteFamily = result?.palette?.family ?? "Personalizada";
-  const paletteColors = Array.isArray(result?.palette?.colors) ? result.palette.colors : [];
+  const safeResult = result ?? {};
+  const looks = Array.isArray(safeResult.looks) ? safeResult.looks : [];
+  const essenceLabel = safeResult.essence?.label ?? "Sua Presença";
+  const palette = safeResult.palette ?? {};
+  const paletteFamily = palette.family ?? "Personalizada";
+  const paletteColors = Array.isArray(palette.colors) ? palette.colors : [];
   const org = {
     name: tenantContext?.branchName || tenantContext?.orgSlug || "sua loja",
     whatsapp_phone: tenantContext?.whatsappNumber || "5511967011133"
