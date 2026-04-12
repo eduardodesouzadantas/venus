@@ -89,6 +89,24 @@ function allowDecision(operation: HardCapOperation, planId: string | null): Hard
   };
 }
 
+function isBillingEnforcementBypassed() {
+  if (process.env.BILLING_ENFORCEMENT_DISABLED === "true") {
+    return true;
+  }
+
+  const vercelEnv = (process.env.VERCEL_ENV || "").toLowerCase();
+  if (vercelEnv && vercelEnv !== "production") {
+    return true;
+  }
+
+  const nodeEnv = (process.env.NODE_ENV || "").toLowerCase();
+  if (nodeEnv === "development" || nodeEnv === "test") {
+    return true;
+  }
+
+  return false;
+}
+
 function evaluateHardCap(summary: Awaited<ReturnType<typeof getOrgBillingSummary>>, operation: HardCapOperation): HardCapDecision {
   if (!summary) {
     return {
@@ -238,6 +256,20 @@ export async function enforceOrgHardCap(input: HardCapEnforcementInput): Promise
       plan_id: null,
       message: null,
     };
+  }
+
+  if (isBillingEnforcementBypassed()) {
+    const summary = await getOrgBillingSummary(orgId);
+    const decision = allowDecision(input.operation, summary?.plan_id || null);
+    console.warn("[BILLING] hard cap bypassed for non-production environment", {
+      orgId,
+      operation: input.operation,
+      planId: decision.plan_id,
+      billingEnforcementDisabled: process.env.BILLING_ENFORCEMENT_DISABLED === "true",
+      vercelEnv: process.env.VERCEL_ENV || null,
+      nodeEnv: process.env.NODE_ENV || null,
+    });
+    return decision;
   }
 
   const summary = await getOrgBillingSummary(orgId);

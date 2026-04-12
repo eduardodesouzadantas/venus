@@ -16,7 +16,7 @@ export default async function IndexRouter({
   // Se houver uma organização (cliente final chegando pelo link da loja)
   if (requestedOrg) {
     // Redireciona para o Splash com o parâmetro da organização
-    redirect(`/splash?org=${requestedOrg}`);
+    redirect(`/onboarding/chat?org=${requestedOrg}`);
   }
 
   // Se não houver organização (visitante comum ou lojista via link de vendas)

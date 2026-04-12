@@ -1,11 +1,7 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 import { ArrowRight, Crown, MessagesSquare, ScanSearch, Sparkles, Target, Zap } from "lucide-react";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
-import { fetchTenantBySlug, isAgencyRole, isTenantActive, resolveTenantContext, normalizeTenantSlug } from "@/lib/tenant/core";
 import { VenusAvatar } from "@/components/venus/VenusAvatar";
 
 const pillars = [
@@ -46,47 +42,7 @@ const steps = [
   },
 ];
 
-export default async function SplashPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
-}) {
-  const resolved = await searchParams;
-  const requestedOrg = normalizeTenantSlug(
-    typeof resolved.org === "string" ? resolved.org : Array.isArray(resolved.org) ? resolved.org[0] || "" : ""
-  );
-
-  if (requestedOrg) {
-    const supabase = await createClient();
-    const admin = createAdminClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (user) {
-      const context = resolveTenantContext(user);
-      if (context.role && isAgencyRole(context.role)) {
-        redirect("/agency");
-      }
-
-      const tenant = await fetchTenantBySlug(admin, requestedOrg);
-      if (
-        tenant.org &&
-        isTenantActive(tenant.org) &&
-        (context.orgSlug === tenant.org.slug || context.orgId === tenant.org.id)
-      ) {
-        redirect(`/org/${tenant.org.slug}/dashboard`);
-      }
-
-      redirect("/merchant");
-    }
-
-    const tenant = await fetchTenantBySlug(admin, requestedOrg);
-    if (tenant.org && isTenantActive(tenant.org)) {
-      redirect(`/onboarding/chat?org=${tenant.org.slug}`);
-    }
-  }
-
+export default function SplashPage() {
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#0a0a0a] text-[#f0ece4]">
       {/* Background Decor sutil */}
@@ -138,7 +94,7 @@ export default async function SplashPage({
 
             <div className="flex flex-col gap-3 sm:flex-row">
               <Link
-                href="/onboarding/chat"
+                href="/login"
                 className="inline-flex min-h-12 items-center justify-center rounded-full bg-[linear-gradient(180deg,#F1D77A_0%,#C9A84C_100%)] px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#0A0A0A] shadow-[0_18px_40px_rgba(212,175,55,0.18)] transition-transform active:scale-[0.98] sm:px-8"
               >
                 COMEÇAR LEITURA →
