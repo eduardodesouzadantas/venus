@@ -8,6 +8,7 @@ import { Text } from "@/components/ui/Text";
 import { VenusButton } from "@/components/ui/VenusButton";
 import { SaveResultsModal } from "@/components/onboarding/SaveResultsModal";
 import { SocialShareActions } from "@/components/ui/SocialShareActions";
+import { ResultErrorBoundary } from "@/components/result/ResultErrorBoundary";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
 import { useUserImage } from "@/lib/onboarding/UserImageContext";
 import { syncLeadContext } from "@/lib/lead-context/client";
@@ -48,6 +49,30 @@ function ResultDashboardContent() {
   } | null>(null);
   const [pendingTryOnProduct, setPendingTryOnProduct] = React.useState<{ id: string; name?: string | null; photoUrl?: string | null; category?: string | null } | null>(null);
   const [decision, setDecision] = React.useState<DecisionResult | null>(null);
+
+  React.useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      console.error("[CLIENT_FATAL]", {
+        message: event.message,
+        filename: event.filename,
+        lineno: event.lineno,
+        colno: event.colno,
+        error: event.error,
+      });
+    };
+
+    const handleRejection = (event: PromiseRejectionEvent) => {
+      console.error("[CLIENT_REJECTION]", event.reason);
+    };
+
+    window.addEventListener("error", handleError);
+    window.addEventListener("unhandledrejection", handleRejection);
+
+    return () => {
+      window.removeEventListener("error", handleError);
+      window.removeEventListener("unhandledrejection", handleRejection);
+    };
+  }, []);
 
   React.useEffect(() => {
     if (redirecting) {
@@ -499,7 +524,9 @@ function ResultDashboardContent() {
 export default function ResultDashboardPage() {
   return (
     <Suspense fallback={<div className="min-h-screen bg-[#0a0a0a]" />}>
-      <ResultDashboardContent />
+      <ResultErrorBoundary>
+        <ResultDashboardContent />
+      </ResultErrorBoundary>
     </Suspense>
   );
 }
