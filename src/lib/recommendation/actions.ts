@@ -118,8 +118,13 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
       : await resolveAppTenantOrg(supabase);
 
     if (!resolvedTenantResult?.org) {
-      console.warn("[SAVED_RESULTS] unable to resolve canonical tenant for persisted result");
-      return "MOCK_DB_FAIL";
+      const error = new Error("TENANT_RESOLUTION_FAILED");
+      console.error("[SAVED_RESULTS] unable to resolve canonical tenant for persisted result", {
+        explicitOrgSlug,
+        userPhone: userData.contact?.phone || null,
+        userEmail: userData.contact?.email || null,
+      });
+      throw error;
     }
 
     const resolvedTenant = resolvedTenantResult as Exclude<typeof resolvedTenantResult, null> & {
@@ -366,7 +371,7 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
             ...captureOperationalTiming(startedAtMs),
           },
         });
-        return "MOCK_DB_FAIL";
+        throw new Error("PROCESSING_RESERVATION_BUSY");
       }
     }
 
@@ -426,7 +431,7 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
         }).catch((reservationError) => {
           console.warn("[SAVED_RESULTS] failed to mark processing reservation as failed", reservationError);
         });
-        return err.message;
+        throw err;
       }
       await failProcessingReservation(supabase, {
         orgId: resolvedTenant.org.id,
@@ -596,10 +601,10 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
           ...captureOperationalTiming(startedAtMs),
         },
       });
-      return "MOCK_DB_FAIL";
+      throw leadError instanceof Error ? leadError : new Error("PERSISTENCE_FAILED");
     }
   } catch (err) {
-    console.error("Critical Exception in DB or Client creation (ENVS might be missing):", err);
-    return "MOCK_DB_FAIL";
+    console.error("[SAVED_RESULTS] critical failure while generating/persisting lead", err);
+    throw err instanceof Error ? err : new Error("CRITICAL_PERSISTENCE_FAILURE");
   }
 }

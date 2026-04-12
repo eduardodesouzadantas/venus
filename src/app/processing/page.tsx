@@ -16,10 +16,19 @@ const PHASES = [
   "Gerando seu resultado...",
 ];
 
+const RESULT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isValidResultId(value?: string | null) {
+  const normalized = (value || "").trim();
+  return Boolean(normalized) && normalized !== "MOCK_DB_FAIL" && RESULT_ID_PATTERN.test(normalized);
+}
+
 export default function ProcessingPage() {
   const router = useRouter();
   const { data } = useOnboarding();
   const [phaseIndex, setPhaseIndex] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [retryTick, setRetryTick] = useState(0);
   const isGenerating = useRef(false);
 
   useEffect(() => {
@@ -34,6 +43,7 @@ export default function ProcessingPage() {
     if (!data || isGenerating.current) return;
 
     isGenerating.current = true;
+    setError(null);
 
     const strippedData = { ...data };
     strippedData.scanner = {
@@ -42,15 +52,81 @@ export default function ProcessingPage() {
       bodyPhoto: data.scanner.bodyPhoto ? "Foto enviada (frontend)" : "",
     };
 
-    processAndPersistLead(strippedData)
-      .then((dbReferenceId) => {
-        router.push(`/result?id=${dbReferenceId}`);
-      })
-      .catch((e) => {
-        console.error("Critical Failure:", e);
-        router.push("/result?id=MOCK_DB_FAIL");
-      });
-  }, [data, router]);
+    let cancelled = false;
+
+    async function persistAndNavigate() {
+      try {
+        const dbReferenceId = await processAndPersistLead(strippedData);
+
+        if (!isValidResultId(dbReferenceId)) {
+          throw new Error("RESULT_PERSISTENCE_INVALID_ID");
+        }
+
+        const validationResponse = await fetch(`/api/result/${encodeURIComponent(dbReferenceId)}`, {
+          cache: "no-store",
+        });
+
+        if (!validationResponse.ok) {
+          throw new Error("RESULT_PERSISTENCE_LOOKUP_FAILED");
+        }
+
+        const validationPayload = await validationResponse.json().catch(() => null);
+        if (!validationPayload?.tenant?.orgId) {
+          throw new Error("RESULT_PERSISTENCE_MISSING_ORG");
+        }
+
+        if (!cancelled) {
+          router.push(`/result?id=${dbReferenceId}`);
+        }
+      } catch (e) {
+        console.error("[PROCESSING] critical persistence failure", e);
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Não foi possível salvar seu resultado.");
+        }
+      } finally {
+        if (!cancelled) {
+          isGenerating.current = false;
+        }
+      }
+    }
+
+    void persistAndNavigate();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [data, router, retryTick]);
+
+  const handleRetry = () => {
+    setError(null);
+    setRetryTick((value) => value + 1);
+  };
+
+  if (error) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-black px-6 text-center">
+        <div className="flex max-w-sm flex-col items-center gap-5">
+          <div className="h-10 w-10 rounded-full border-2 border-[#C9A84C] border-t-transparent animate-spin" />
+          <div className="space-y-2">
+            <Heading as="h4" className="font-serif text-lg tracking-[0.2em] text-[#C9A84C]">
+              PERSISTÊNCIA FALHOU
+            </Heading>
+            <Text className="text-sm leading-relaxed text-white/70">
+              Não foi possível validar e salvar seu resultado com segurança.
+              A operação foi interrompida antes de navegar para a tela final.
+            </Text>
+          </div>
+          <button
+            type="button"
+            onClick={handleRetry}
+            className="rounded-full border border-[#C9A84C]/30 bg-[#C9A84C]/10 px-5 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-[#C9A84C] transition-colors hover:bg-[#C9A84C]/20"
+          >
+            Tentar Novamente
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative z-0 flex min-h-screen flex-col items-center justify-center overflow-hidden bg-black px-5 py-6 sm:p-6">

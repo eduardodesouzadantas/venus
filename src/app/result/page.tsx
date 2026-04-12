@@ -25,6 +25,13 @@ function inferTryOnCategory(product: any): "tops" | "bottoms" | "one-pieces" {
   return "tops";
 }
 
+const RESULT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isValidResultId(value?: string | null) {
+  const normalized = (value || "").trim();
+  return Boolean(normalized) && normalized !== "MOCK_DB_FAIL" && RESULT_ID_PATTERN.test(normalized);
+}
+
 function ResultDashboardContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -37,6 +44,7 @@ function ResultDashboardContent() {
   const [persistedTryOn, setPersistedTryOn] = React.useState<any>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [redirecting, setRedirecting] = React.useState(false);
   const [showSaveModal, setShowSaveModal] = React.useState(false);
   const [tenantContext, setTenantContext] = React.useState<{
     whatsappNumber?: string | null;
@@ -48,10 +56,21 @@ function ResultDashboardContent() {
   const [decision, setDecision] = React.useState<DecisionResult | null>(null);
 
   React.useEffect(() => {
-    if (!id) {
-      setLoading(false);
+    if (redirecting) {
       return;
     }
+
+    if (!id || !isValidResultId(id)) {
+      const restartTarget = onboardingData?.tenant?.orgSlug
+        ? `/onboarding/chat?org=${encodeURIComponent(onboardingData.tenant.orgSlug)}`
+        : "/onboarding/chat";
+
+      setRedirecting(true);
+      router.replace(restartTarget);
+      return;
+    }
+
+    let shouldAbort = false;
 
     async function load() {
       try {
@@ -60,9 +79,7 @@ function ResultDashboardContent() {
 
         if (!response.ok) {
           console.warn(`[DEBUG][RESULT_PAGE] Result ${id} 404. Attempting recovery via Lead Context...`);
-          // Try to recover via Lead Context (assuming we have orgId in onboardingData)
-          const orgId = onboardingData.tenant?.orgId;
-          const recoveryRes = await fetch(`/api/lead-context/recovery?result_id=${encodeURIComponent(id || "")}&org_id=${encodeURIComponent(orgId || "")}`);
+          const recoveryRes = await fetch(`/api/lead-context/recovery?result_id=${encodeURIComponent(id || "")}`);
 
           if (recoveryRes.ok) {
             const recoveryPayload = await recoveryRes.json();
@@ -80,7 +97,14 @@ function ResultDashboardContent() {
             return;
           }
 
-          throw new Error("Finalizando sintonização...");
+          shouldAbort = true;
+          setRedirecting(true);
+          router.replace(
+            onboardingData?.tenant?.orgSlug
+              ? `/onboarding/chat?org=${encodeURIComponent(onboardingData.tenant.orgSlug)}`
+              : "/onboarding/chat"
+          );
+          return;
         }
 
         const payload = await response.json();
@@ -91,14 +115,29 @@ function ResultDashboardContent() {
         const builtSurface = buildResultSurface(onboardingData, payload.analysis);
         setSurface(builtSurface);
       } catch (err) {
-        console.error(`[DEBUG][RESULT_PAGE] Load error:`, err);
-        setError(err instanceof Error ? err.message : "Sintonizando...");
+        if (!shouldAbort) {
+          console.error(`[DEBUG][RESULT_PAGE] Load error:`, err);
+          setError(err instanceof Error ? err.message : "Sintonizando...");
+        }
       } finally {
-        setLoading(false);
+        if (!shouldAbort) {
+          setLoading(false);
+        }
       }
     }
     load();
-  }, [id, onboardingData, tryOnImageUrl]);
+  }, [id, onboardingData, redirecting, router, tryOnImageUrl]);
+
+  if (redirecting) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a]">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#C9A84C] border-t-transparent" />
+          <p className="font-mono text-[9px] tracking-[0.2em] text-[#C9A84C]">REINICIANDO FLUXO...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
