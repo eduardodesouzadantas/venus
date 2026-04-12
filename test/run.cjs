@@ -34,6 +34,10 @@ const {
   buildResultSurface,
 } = require("../src/lib/result/surface.ts");
 const {
+  ensureTryOnProductId,
+  isValidTryOnProductId,
+} = require("../src/lib/tryon/product-id.ts");
+const {
   buildCatalogEnrichmentSignals,
   deriveVisualSignalsFromMetrics,
 } = require("../src/lib/ai/catalog-enricher.ts");
@@ -470,6 +474,55 @@ run("result surface stays personal, hierarchical and action oriented", () => {
   assert.ok(surface.footerLabel.length > 0);
 });
 
+run("result surface preserves UUID product ids and keeps UI ids separate", () => {
+  const uuid = "11111111-1111-4111-8111-111111111111";
+  const surface = buildResultSurface(sampleOnboarding, null, {
+    looks: [
+      {
+        id: "surface-look-1-1",
+        product_id: uuid,
+        name: "Look 1",
+        intention: "Entrada limpa",
+        type: "Híbrido Seguro",
+        items: [
+          {
+            id: "surface-look-1-1",
+            product_id: uuid,
+            photoUrl: "https://example.com/item.jpg",
+            brand: "Acervo real",
+            name: "Blazer estruturado",
+          },
+        ],
+        accessories: [],
+        explanation: "Entrada limpa",
+        whenToWear: "Rotina",
+      },
+    ],
+  });
+
+  assert.equal(surface.looks[0].id, "surface-look-1-1");
+  assert.equal(surface.looks[0].product_id, uuid);
+  assert.equal(surface.looks[0].items[0].product_id, uuid);
+  assert.notEqual(surface.looks[0].product_id, surface.looks[0].id);
+});
+
+run("synthetic result surface does not invent product ids", () => {
+  const surface = buildResultSurface(sampleOnboarding);
+
+  assert.equal(surface.looks[0].id, "surface-look-1");
+  assert.equal(surface.looks[0].product_id, "");
+  assert.equal(surface.looks[0].items[0].product_id, "");
+});
+
+run("try-on UUID helper rejects UI ids and accepts real UUIDs", () => {
+  const uuid = "11111111-1111-4111-8111-111111111111";
+
+  assert.equal(isValidTryOnProductId(uuid), true);
+  assert.equal(isValidTryOnProductId("surface-look-1-1"), false);
+  assert.equal(ensureTryOnProductId(uuid), uuid);
+  assert.equal(ensureTryOnProductId("surface-look-1-1"), null);
+});
+
 run("catalog enrichment stays grounded and role aware", () => {
   const signals = buildCatalogEnrichmentSignals("Blazer Lã Merino Arquitetural", "Vestuário Premium");
   const fallback = buildCatalogEnrichmentSignals("", "Categoria informada");
@@ -682,6 +735,8 @@ run("openai payload normalization replaces fake items with catalog-backed looks"
 
   assert.equal(normalized.looks.length, 3);
   assert.ok(normalized.looks[0].items.some((item) => item.id === "prod-1" || item.id === "prod-2"));
+  assert.ok(normalized.looks[0].product_id === "prod-1" || normalized.looks[0].product_id === "prod-2");
+  assert.ok(normalized.looks[0].items[0].product_id === "prod-1" || normalized.looks[0].items[0].product_id === "prod-2");
   assert.ok(normalized.hero.subtitle.length > 0);
   assert.ok(normalized.looks.every((look) => look.explanation.length > 0));
   assert.ok(normalized.toAvoid.length > 0);

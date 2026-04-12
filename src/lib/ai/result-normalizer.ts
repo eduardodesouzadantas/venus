@@ -769,6 +769,7 @@ function buildLookFromBlueprint(
 
   return {
     id: String(index + 1),
+    product_id: selectedProducts[0]?.id || items[0]?.product_id || "",
     name: compactText(sourceLook?.name, blueprint.name, 60),
     intention: buildLookIntention(blueprint, profile, selectedProducts, sourceLook?.intention),
     type: normalizeLookType(sourceLook?.type, blueprint.type),

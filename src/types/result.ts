@@ -59,6 +59,7 @@ export interface LookItem {
 
 export interface LookData {
   id: string;
+  product_id?: string;
   name: string;
   intention: string;
   type: "Híbrido Seguro" | "Híbrido Premium" | "Expansão Direcionada";

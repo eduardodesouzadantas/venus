@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
+import { ensureTryOnProductId } from "@/lib/tryon/product-id";
 
 export type TryOnStatus = "idle" | "queued" | "processing" | "completed" | "failed";
 
@@ -105,6 +106,18 @@ export function useTryOn(): UseTryOnResult {
       let progressVal = 5;
 
       try {
+        const resolvedProductId = ensureTryOnProductId(product_id);
+        if (!resolvedProductId) {
+          console.error("[useTryOn] Invalid product_id before try-on", {
+            product_id,
+            saved_result_id,
+            org_id,
+          });
+          setError("Produto inválido para try-on.");
+          setStatus("failed");
+          return;
+        }
+
         // Step 1: Resolve the person image to a public URL
         console.log("[useTryOn] Resolving person image...", {
           isDataUri: model_image.startsWith("data:"),
@@ -116,7 +129,7 @@ export function useTryOn(): UseTryOnResult {
         const resolvedPersonUrl = await resolvePublicImageUrl(model_image, org_id);
 
         // Step 2: Resolve garment image URL from the product
-        const productRes = await fetch(`/api/tryon/resolve-product?product_id=${encodeURIComponent(product_id)}&org_id=${encodeURIComponent(org_id)}`);
+        const productRes = await fetch(`/api/tryon/resolve-product?product_id=${encodeURIComponent(resolvedProductId)}&org_id=${encodeURIComponent(org_id)}`);
 
         let garmentImageUrl = "";
         if (productRes.ok) {

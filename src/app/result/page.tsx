@@ -18,6 +18,7 @@ import { RESULT_ID_PATTERN, isValidResultId } from "@/lib/result/id";
 import { decideNextAction } from "@/lib/decision-engine/engine";
 import { DecisionResult } from "@/lib/decision-engine/types";
 import { buildWhatsAppHandoffMessage, buildWhatsAppHandoffUrl } from "@/lib/whatsapp/handoff";
+import { ensureTryOnProductId } from "@/lib/tryon/product-id";
 
 // Categorization logic for the try-on engine
 function inferTryOnCategory(product: any): "tops" | "bottoms" | "one-pieces" {
@@ -248,11 +249,12 @@ function ResultDashboardContent() {
     (productId: string) => {
       if (!tryOnPersonImage || !resolvedOrgId || !id) return;
       const selectedProduct = looks[0]?.items?.find((item) => item.product_id === productId || item.id === productId) || firstTryOnProduct;
-      const resolvedProductId = selectedProduct?.product_id || "";
+      const resolvedProductId = ensureTryOnProductId(selectedProduct?.product_id || "");
       if (!resolvedProductId) {
         console.error("[TRYON] Missing real product_id for try-on", {
           requestedProductId: productId,
           selectedProduct,
+          org_id: resolvedOrgId,
         });
         return;
       }
@@ -399,7 +401,7 @@ function ResultDashboardContent() {
                   A Venus está pronta para projetar seu primeiro look.
                 </p>
                 <VenusButton
-                  onClick={() => looks[0]?.items[0]?.product_id && handleGenerateTryOn(looks[0].items[0].product_id)}
+                  onClick={() => looks[0]?.product_id && handleGenerateTryOn(looks[0].product_id)}
                   className="mt-8"
                 >
                   Gerar minha imagem

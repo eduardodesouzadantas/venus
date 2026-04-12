@@ -354,14 +354,18 @@ function buildLookItems(
 function buildLooks(goal: string, fit: string, lookNames: [string, string, string], essence: EssenceProfile): LookData[] {
   const goalLabel = normalizeText(goal).toLowerCase() || "elegância";
   const fitLabel = normalizeText(fit).toLowerCase() || "slim";
+  const look1Items = buildLookItems("surface-look-1", `${goalLabel} com fit ${fitLabel}`, essence.label, "Híbrido Seguro", LOOK_IMAGES[0]);
+  const look2Items = buildLookItems("surface-look-2", `${goalLabel} com fit ${fitLabel}`, essence.label, "Híbrido Premium", LOOK_IMAGES[1]);
+  const look3Items = buildLookItems("surface-look-3", `${goalLabel} com fit ${fitLabel}`, essence.label, "Expansão Direcionada", LOOK_IMAGES[2]);
 
   return [
     {
       id: "surface-look-1",
+      product_id: look1Items[0]?.product_id || "",
       name: lookNames[0] || essence.lookNames[0],
       intention: `Entrada limpa com ${goalLabel} e leitura de ${essence.label.toLowerCase()}.`,
       type: "Híbrido Seguro",
-      items: buildLookItems("surface-look-1", `${goalLabel} com fit ${fitLabel}`, essence.label, "Híbrido Seguro", LOOK_IMAGES[0]),
+      items: look1Items,
       accessories: ["Relógio minimalista"],
       explanation: `A base segura a leitura do perfil e deixa a essência ${essence.label.toLowerCase()} fácil de reconhecer no mundo real.`,
       whenToWear: "Rotina, reunião leve e transição entre contextos.",
@@ -370,10 +374,11 @@ function buildLooks(goal: string, fit: string, lookNames: [string, string, strin
     },
     {
       id: "surface-look-2",
+      product_id: look2Items[0]?.product_id || "",
       name: lookNames[1] || essence.lookNames[1],
       intention: `Mais presença sem perder coerência com ${goalLabel} e ${essence.label.toLowerCase()}.`,
       type: "Híbrido Premium",
-      items: buildLookItems("surface-look-2", `${goalLabel} com fit ${fitLabel}`, essence.label, "Híbrido Premium", LOOK_IMAGES[1]),
+      items: look2Items,
       accessories: ["Ponto metálico discreto"],
       explanation: `A combinação sobe a presença sem sair do uso real nem parecer forçada, mantendo ${essence.label.toLowerCase()} visível.`,
       whenToWear: "Reuniões decisivas e apresentações importantes.",
@@ -381,10 +386,11 @@ function buildLooks(goal: string, fit: string, lookNames: [string, string, strin
     },
     {
       id: "surface-look-3",
+      product_id: look3Items[0]?.product_id || "",
       name: lookNames[2] || essence.lookNames[2],
       intention: `Um ponto de destaque com controle para ampliar ${essence.label.toLowerCase()} sem exagero.`,
       type: "Expansão Direcionada",
-      items: buildLookItems("surface-look-3", `${goalLabel} com fit ${fitLabel}`, essence.label, "Expansão Direcionada", LOOK_IMAGES[2]),
+      items: look3Items,
       accessories: ["Óculos estruturado"],
       explanation: `Um toque de contraste amplia a leitura sem transformar a proposta em algo artificial e preserva a essência ${essence.label.toLowerCase()}.`,
       whenToWear: "Eventos sociais e momentos de maior intenção.",
@@ -406,15 +412,17 @@ function normalizeApiLooks(apiLooks: any[] | null | undefined): LookData[] {
       const items = Array.isArray(look.items)
         ? look.items.map((item: any) => ({
           ...item,
-          // The real product UUID is in item.id from the catalog
+          // The real product UUID is preserved in product_id; id stays UI-safe.
           id: item.id || "",
-          product_id: normalizeText(item.product_id) || normalizeText(item.productId) || item.id || "",
+          product_id: normalizeText(item.product_id) || normalizeText(item.productId) || "",
           photoUrl: item.photoUrl || item.image_url || "",
         }))
         : [];
+      const productId = normalizeText(look.product_id) || normalizeText(look.productId) || normalizeText(items[0]?.product_id);
 
       return {
         id: look.id || "",
+        product_id: productId || "",
         name: look.name || "Look",
         intention: look.intention || "",
         type: look.type || "Híbrido Seguro",
