@@ -79,6 +79,8 @@ function ResultDashboardContent() {
   const isPreviousLook = !tryOnImageUrl && !!persistedTryOn?.image_url;
   const isGenerating = tryOnStatus === "queued" || tryOnStatus === "processing";
   const firstTryOnProduct = looks[0]?.items?.[0] || null;
+  const hasTryOnArtifact = !!displayImageUrl || !!persistedTryOn?.image_url;
+  const hasVisualFraming = !!displayImageUrl && !isGenerating && !tryOnError;
   const tryOnQuality = useMemo(() => classifyTryOnQuality({
     hasGeneratedImage: !!displayImageUrl,
     hasPersonImage: !!tryOnPersonImage,
@@ -87,7 +89,23 @@ function ResultDashboardContent() {
     isPreviousLook,
     hasTryOnError: !!tryOnError,
     primaryLookItemCount: looks[0]?.items?.length || 0,
-  }), [displayImageUrl, tryOnPersonImage, looks, hasLegacyTryOnLooks, isPreviousLook, tryOnError]);
+    hasBeforeAfter: hasVisualFraming && !isPreviousLook,
+    hasHeroFrame: hasVisualFraming && !isPreviousLook,
+    hasNarrative: !!(persistedTryOn?.style_reason || surface?.hero?.subtitle),
+    hasContextualCTA: !!resolvedOrgId,
+    hasPremiumBadge: hasVisualFraming && !hasLegacyTryOnLooks,
+  }), [
+    displayImageUrl,
+    tryOnPersonImage,
+    looks,
+    hasLegacyTryOnLooks,
+    isPreviousLook,
+    tryOnError,
+    hasVisualFraming,
+    persistedTryOn,
+    surface?.hero?.subtitle,
+    resolvedOrgId,
+  ]);
 
   const currentLoadingMessage = (() => {
     if (tryOnProgress < 30) return TRYON_LOADING_MESSAGES[0];
@@ -95,6 +113,7 @@ function ResultDashboardContent() {
     return TRYON_LOADING_MESSAGES[2];
   })();
   const needsPhotoRetry = tryOnQuality.state === "retry_required" && (hasLegacyTryOnLooks || !tryOnPersonImage || !!tryOnError);
+  const shouldShowRetryCopy = tryOnQuality.state === "retry_required" && (hasTryOnArtifact || hasLegacyTryOnLooks || !!tryOnError);
   const retryPhotoHref = tenantContext?.orgSlug
     ? `/scanner/face?org=${encodeURIComponent(tenantContext.orgSlug)}`
     : "/scanner/face";
@@ -107,9 +126,9 @@ function ResultDashboardContent() {
           ? "Tirar nova foto"
           : "Gerar minha imagem";
   const secondaryCtaLabel =
-    tryOnQuality.state === "hero"
+    tryOnQuality.state === "hero" || tryOnQuality.state === "preview"
       ? "Ver no WhatsApp"
-      : "Voltar ao resultado";
+      : "Voltar ao fluxo";
 
   React.useEffect(() => {
     if (!surface) return;
@@ -123,6 +142,21 @@ function ResultDashboardContent() {
       });
     }
   }, [surface, hasLegacyTryOnLooks, id, resolvedOrgId, onboardingData?.tenant?.orgId, looks]);
+
+  React.useEffect(() => {
+    if (!surface) return;
+
+    console.info("[TRYON_QUALITY]", {
+      resultId: id,
+      orgId: resolvedOrgId || onboardingData?.tenant?.orgId || null,
+      state: tryOnQuality.state,
+      score: tryOnQuality.score,
+      structuralScore: tryOnQuality.structural.score,
+      visualScore: tryOnQuality.visual.score,
+      badgeLabel: tryOnQuality.badgeLabel,
+      reasons: tryOnQuality.reasons,
+    });
+  }, [surface, id, resolvedOrgId, onboardingData?.tenant?.orgId, tryOnQuality]);
 
   // ── WhatsApp URL (memo, always called) ──
   const whatsappUrl = useMemo(() => {
@@ -455,7 +489,7 @@ function ResultDashboardContent() {
                   <Sparkles className="h-8 w-8 text-[#C9A84C]" />
                 </div>
                 <p className="text-balance text-[15px] font-medium leading-relaxed text-white/80">
-                  {tryOnQuality.state === "retry_required"
+                  {shouldShowRetryCopy
                     ? "Essa leitura ainda não atingiu o padrão premium. Vamos refazer com uma foto melhor."
                     : "A Venus está pronta para projetar seu primeiro look."}
                 </p>
@@ -530,7 +564,9 @@ function ResultDashboardContent() {
                   ? "Sua imagem foi elevada ao padrão premium. A curadoria fecha com produto real, foto consistente e narrativa de transformação."
                   : tryOnQuality.state === "preview"
                     ? "A imagem existe e está perto da faixa hero, mas ainda merece validação antes de virar vitrine."
-                    : "Esse resultado não atingiu integridade suficiente para exibição premium. Reenvie uma foto melhor para liberar a versão hero."
+                    : shouldShowRetryCopy
+                      ? "Esse resultado não atingiu integridade suficiente para exibição premium. Reenvie uma foto melhor para liberar a versão hero."
+                      : "A Venus está pronta para projetar seu primeiro look."
                 }
               </p>
             </div>

@@ -40,6 +40,8 @@ const {
 } = require("../src/lib/tryon/product-id.ts");
 const {
   classifyTryOnQuality,
+  evaluateTryOnStructural,
+  evaluateTryOnVisual,
 } = require("../src/lib/tryon/result-quality.ts");
 const {
   buildCatalogEnrichmentSignals,
@@ -557,8 +559,8 @@ run("try-on UUID helper rejects UI ids and accepts real UUIDs", () => {
   assert.equal(ensureTryOnProductId("surface-look-1-1"), null);
 });
 
-run("try-on quality classifies hero preview and retry states", () => {
-  const hero = classifyTryOnQuality({
+run("try-on quality combines structural and visual signals", () => {
+  const structuralStrong = evaluateTryOnStructural({
     hasGeneratedImage: true,
     hasPersonImage: true,
     hasRealProduct: true,
@@ -568,7 +570,7 @@ run("try-on quality classifies hero preview and retry states", () => {
     primaryLookItemCount: 2,
   });
 
-  const preview = classifyTryOnQuality({
+  const structuralBorderline = evaluateTryOnStructural({
     hasGeneratedImage: true,
     hasPersonImage: true,
     hasRealProduct: true,
@@ -576,6 +578,69 @@ run("try-on quality classifies hero preview and retry states", () => {
     isPreviousLook: true,
     hasTryOnError: false,
     primaryLookItemCount: 1,
+  });
+
+  const visualWeak = evaluateTryOnVisual({
+    hasGeneratedImage: true,
+    hasBeforeAfter: false,
+    hasHeroFrame: false,
+    hasNarrative: false,
+    hasContextualCTA: false,
+    hasPremiumBadge: false,
+    isPreviousLook: false,
+    hasTryOnError: false,
+  });
+
+  const visualBorderline = evaluateTryOnVisual({
+    hasGeneratedImage: true,
+    hasBeforeAfter: true,
+    hasHeroFrame: true,
+    hasNarrative: true,
+    hasContextualCTA: false,
+    hasPremiumBadge: false,
+    isPreviousLook: false,
+    hasTryOnError: false,
+  });
+
+  const visualStrong = evaluateTryOnVisual({
+    hasGeneratedImage: true,
+    hasBeforeAfter: true,
+    hasHeroFrame: true,
+    hasNarrative: true,
+    hasContextualCTA: true,
+    hasPremiumBadge: true,
+    isPreviousLook: false,
+    hasTryOnError: false,
+  });
+
+  const hero = classifyTryOnQuality({
+    hasGeneratedImage: true,
+    hasPersonImage: true,
+    hasRealProduct: true,
+    isLegacyLook: false,
+    isPreviousLook: false,
+    hasTryOnError: false,
+    primaryLookItemCount: 2,
+    hasBeforeAfter: true,
+    hasHeroFrame: true,
+    hasNarrative: true,
+    hasContextualCTA: true,
+    hasPremiumBadge: true,
+  });
+
+  const preview = classifyTryOnQuality({
+    hasGeneratedImage: true,
+    hasPersonImage: true,
+    hasRealProduct: true,
+    isLegacyLook: false,
+    isPreviousLook: false,
+    hasTryOnError: false,
+    primaryLookItemCount: 2,
+    hasBeforeAfter: false,
+    hasHeroFrame: false,
+    hasNarrative: false,
+    hasContextualCTA: true,
+    hasPremiumBadge: false,
   });
 
   const retry = classifyTryOnQuality({
@@ -586,8 +651,18 @@ run("try-on quality classifies hero preview and retry states", () => {
     isPreviousLook: false,
     hasTryOnError: false,
     primaryLookItemCount: 1,
+    hasBeforeAfter: false,
+    hasHeroFrame: false,
+    hasNarrative: false,
+    hasContextualCTA: false,
+    hasPremiumBadge: false,
   });
 
+  assert.equal(structuralStrong.state, "hero");
+  assert.equal(structuralBorderline.state, "preview");
+  assert.equal(visualWeak.state, "preview");
+  assert.equal(visualBorderline.state, "preview");
+  assert.equal(visualStrong.state, "hero");
   assert.equal(hero.state, "hero");
   assert.equal(hero.showWhatsappCta, true);
   assert.equal(hero.showRetryPhotoCta, false);
@@ -595,10 +670,54 @@ run("try-on quality classifies hero preview and retry states", () => {
   assert.equal(preview.state, "preview");
   assert.equal(preview.showWhatsappCta, true);
   assert.equal(preview.showRetryPhotoCta, true);
+  assert.equal(preview.structural.state, "hero");
+  assert.equal(preview.visual.state, "preview");
+  assert.ok(preview.reason.length > 0);
+  assert.ok(preview.score < hero.score);
+
+  const borderlineHero = classifyTryOnQuality({
+    hasGeneratedImage: true,
+    hasPersonImage: true,
+    hasRealProduct: true,
+    isLegacyLook: false,
+    isPreviousLook: false,
+    hasTryOnError: false,
+    primaryLookItemCount: 2,
+    hasBeforeAfter: true,
+    hasHeroFrame: true,
+    hasNarrative: true,
+    hasContextualCTA: false,
+    hasPremiumBadge: false,
+  });
+
+  assert.equal(borderlineHero.state, "preview");
+  assert.equal(borderlineHero.structural.state, "hero");
+  assert.equal(borderlineHero.visual.state, "preview");
 
   assert.equal(retry.state, "retry_required");
   assert.equal(retry.showWhatsappCta, false);
   assert.equal(retry.showRetryPhotoCta, true);
+  assert.equal(retry.structural.state, "retry_required");
+  assert.equal(retry.visual.state, "retry_required");
+
+  const errorPenalty = classifyTryOnQuality({
+    hasGeneratedImage: true,
+    hasPersonImage: true,
+    hasRealProduct: true,
+    isLegacyLook: false,
+    isPreviousLook: false,
+    hasTryOnError: true,
+    primaryLookItemCount: 2,
+    hasBeforeAfter: true,
+    hasHeroFrame: true,
+    hasNarrative: true,
+    hasContextualCTA: true,
+    hasPremiumBadge: true,
+  });
+
+  assert.equal(errorPenalty.state, "retry_required");
+  assert.equal(errorPenalty.structural.state, "retry_required");
+  assert.equal(errorPenalty.visual.state, "retry_required");
 });
 
 run("catalog enrichment stays grounded and role aware", () => {
