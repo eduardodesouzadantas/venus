@@ -11,13 +11,13 @@ import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
 const STYLE_DIRECTIONS = ["Masculina", "Feminina", "Neutra"];
 const SATISFACTION_LABELS: Record<number, string> = {
   0: "Ainda me perco",
-  2: "Quero direção",
+  2: "Quero direÃ§Ã£o",
   5: "Preciso refinar",
-  8: "Já estou no caminho",
-  10: "Meu estilo está claro",
+  8: "JÃ¡ estou no caminho",
+  10: "Meu estilo estÃ¡ claro",
 };
 
-const IMAGE_GOALS = ["Autoridade", "Elegância", "Presença", "Criatividade", "Discrição sofisticada"];
+const IMAGE_GOALS = ["Autoridade", "ElegÃ¢ncia", "PresenÃ§a", "Criatividade", "DiscriÃ§Ã£o sofisticada"];
 const MAIN_PAINS = ["Falta de tempo", "Nada me representa", "Compro sem pensar"];
 
 export default function IntentPage() {
@@ -52,7 +52,7 @@ export default function IntentPage() {
 
         <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[#C9A84C]/20 bg-[#C9A84C]/5 px-3 py-1.5">
           <div className="h-1 w-1 rounded-full bg-[#C9A84C]" />
-          <span className="text-[9px] font-bold uppercase tracking-[0.3em] text-[#C9A84C]">Intenção</span>
+          <span className="text-[9px] font-bold uppercase tracking-[0.3em] text-[#C9A84C]">IntenÃ§Ã£o</span>
         </div>
 
         <Heading
@@ -60,11 +60,11 @@ export default function IntentPage() {
           style={{ fontFamily: "var(--font-playfair), serif", fontSize: "1.9rem", lineHeight: 1.12, letterSpacing: "-0.01em" }}
         >
           Antes do look,<br />
-          <span style={{ color: "#C9A84C" }}>vamos ler sua presença</span>.
+          <span style={{ color: "#C9A84C" }}>vamos ler sua presenÃ§a</span>.
         </Heading>
 
         <Text className="mt-3 max-w-[20rem] text-sm leading-relaxed text-white/48">
-          A Venus usa essa calibragem para escolher peças que pareçam feitas para você, não para uma média genérica.
+          A Venus usa essa calibragem para escolher peÃ§as que pareÃ§am feitas para vocÃª, nÃ£o para uma mÃ©dia genÃ©rica.
         </Text>
       </div>
 
@@ -77,7 +77,7 @@ export default function IntentPage() {
                 <Heading as="h4" className="text-base leading-snug text-white/90">
                   Qual linha sustenta melhor a sua imagem?
                 </Heading>
-                <Text className="text-sm text-white/55">Essa escolha guia a leitura para a direção certa antes de cruzar cor, corpo e rotina.</Text>
+                <Text className="text-sm text-white/55">Essa escolha guia a leitura para a direÃ§Ã£o certa antes de cruzar cor, corpo e rotina.</Text>
               </div>
             </div>
             <PillSelector
@@ -94,9 +94,9 @@ export default function IntentPage() {
               <span className="mt-0.5 text-xs font-bold tracking-widest text-[#C9A84C]">01</span>
               <div className="space-y-1">
                 <Heading as="h4" className="text-base leading-snug text-white/90">
-                  Que leitura você quer que a roupa entregue?
+                  Que leitura vocÃª quer que a roupa entregue?
                 </Heading>
-                <Text className="text-sm text-white/55">A IA usa isso para ajustar a curadoria ao tipo de presença que você quer sustentar.</Text>
+                <Text className="text-sm text-white/55">A IA usa isso para ajustar a curadoria ao tipo de presenÃ§a que vocÃª quer sustentar.</Text>
               </div>
             </div>
             <PillSelector
@@ -113,9 +113,9 @@ export default function IntentPage() {
               <span className="mt-0.5 text-xs font-bold tracking-widest text-[#C9A84C]">02</span>
               <div className="space-y-1">
                 <Heading as="h4" className="text-base leading-snug text-white/90">
-                  Onde você se reconhece hoje?
+                  Onde vocÃª se reconhece hoje?
                 </Heading>
-                <Text className="text-sm text-white/55">Isso ajuda a Venus a medir o salto entre o agora e a versão que você quer mostrar.</Text>
+                <Text className="text-sm text-white/55">Isso ajuda a Venus a medir o salto entre o agora e a versÃ£o que vocÃª quer mostrar.</Text>
               </div>
             </div>
             <EmotionalSlider value={satisfaction} onChange={(val) => updateData("intent", { satisfaction: val })} labelMap={SATISFACTION_LABELS} />
@@ -128,9 +128,9 @@ export default function IntentPage() {
               <span className="mt-0.5 text-xs font-bold tracking-widest text-[#C9A84C]">03</span>
               <div className="space-y-1">
                 <Heading as="h4" className="text-base leading-snug text-white/90">
-                  O que mais gera ruído na sua imagem hoje?
+                  O que mais gera ruÃ­do na sua imagem hoje?
                 </Heading>
-                <Text className="text-sm text-white/55">Marque o principal atrito para a curadoria ficar mais precisa e menos genérica.</Text>
+                <Text className="text-sm text-white/55">Marque o principal atrito para a curadoria ficar mais precisa e menos genÃ©rica.</Text>
               </div>
             </div>
             <PillSelector

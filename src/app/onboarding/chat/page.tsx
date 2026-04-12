@@ -84,8 +84,8 @@ const CHAT_STEPS: ChatStep[] = [
   },
 ];
 
-const INTRO_MESSAGE = "Oi. Eu sou a Venus Stylist. Vou ler sua presença em três perguntas e cruzar sua foto com a colorimetria.";
-const CLOSING_MESSAGE = "Perfeito. Agora vou ler sua presença.";
+const INTRO_MESSAGE = "Oi. Eu sou a Venus Stylist. Vou ler sua presenÃ§a em trÃªs perguntas e cruzar sua foto com a colorimetria.";
+const CLOSING_MESSAGE = "Perfeito. Agora vou ler sua presenÃ§a.";
 
 function normalize(text: string) {
   return text

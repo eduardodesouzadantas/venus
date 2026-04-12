@@ -9,9 +9,9 @@ import { processAndPersistLead } from "@/lib/recommendation/actions";
 
 const PHASES = [
   "Lendo sua foto...",
-  "Decifrando proporÁıes e linhas...",
-  "Cruzando paleta e presenÁa...",
-  "Montando combinaÁıes do cat·logo...",
+  "Decifrando propor√ß√µes e linhas...",
+  "Cruzando paleta e presen√ßa...",
+  "Montando combina√ß√µes do cat√°logo...",
   "Refinando a leitura de stylist...",
   "Gerando seu resultado...",
 ];
@@ -70,7 +70,7 @@ export default function ProcessingPage() {
           VENUS ENGINE CORE
         </Heading>
         <Text className="text-sm leading-relaxed text-white/70">
-          A Venus est· cruzando foto, corpo, paleta e cat·logo para devolver uma curadoria que pareÁa feita por stylist.
+          A Venus est√° cruzando foto, corpo, paleta e cat√°logo para devolver uma curadoria que pare√ßa feita por stylist.
         </Text>
         <div className="relative mt-4 h-10 w-full">
           {PHASES.map((phase, i) => (

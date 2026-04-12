@@ -27,7 +27,7 @@ import {
 function inferTryOnCategory(look: LookData, item?: LookData["items"][number]): "tops" | "bottoms" | "one-pieces" {
   const source = `${look.type} ${look.name} ${item?.name || ""} ${item?.contextOfUse || ""}`.toLowerCase();
   if (source.includes("dress") || source.includes("vestido")) return "one-pieces";
-  if (source.includes("calca") || source.includes("calÁa") || source.includes("saia") || source.includes("pants") || source.includes("skirt")) {
+  if (source.includes("calca") || source.includes("cal√ßa") || source.includes("saia") || source.includes("pants") || source.includes("skirt")) {
     return "bottoms";
   }
   return "tops";
@@ -187,7 +187,7 @@ function AutoTryOnPreview({
   if (status === "error") {
     return (
       <div className="overflow-hidden rounded-[22px] border border-white/8 bg-white/[0.02] p-4 text-center">
-        <Text className="text-[10px] font-bold uppercase tracking-[0.34em] text-[#C9A84C]">Try-on indisponÌvel</Text>
+        <Text className="text-[10px] font-bold uppercase tracking-[0.34em] text-[#C9A84C]">Try-on indispon√≠vel</Text>
         <Text className="mt-2 text-xs text-white/55">{errorMessage || "Tente novamente mais tarde."}</Text>
       </div>
     );
@@ -241,7 +241,7 @@ function ResultDashboardContent() {
       <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a]">
         <div className="flex flex-col items-center gap-4">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#C9A84C] border-t-transparent" />
-          <p className="font-mono text-[9px] tracking-[0.2em] text-[#C9A84C]">SINTONIZANDO ESS NCIA...</p>
+          <p className="font-mono text-[9px] tracking-[0.2em] text-[#C9A84C]">SINTONIZANDO ESS√äNCIA...</p>
         </div>
       </div>
     );
@@ -250,8 +250,8 @@ function ResultDashboardContent() {
   if (error || !surface) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-[#0a0a0a] px-6 text-center">
-        <p className="text-sm text-white/40">{error || "Resultado n„o encontrado"}</p>
-        <Link href="/" className="mt-6 text-[10px] font-bold uppercase tracking-widest text-[#C9A84C]">Voltar ao inÌcio</Link>
+        <p className="text-sm text-white/40">{error || "Resultado n√£o encontrado"}</p>
+        <Link href="/" className="mt-6 text-[10px] font-bold uppercase tracking-widest text-[#C9A84C]">Voltar ao in√≠cio</Link>
       </div>
     );
   }
@@ -267,13 +267,13 @@ function ResultDashboardContent() {
 
   return (
     <main style={{ background: "#0a0a0a", minHeight: "100vh", paddingBottom: "80px", color: "#f0ece4" }}>
-      {/* SE«√O 1 ó ESS NCIA */}
+      {/* SE√á√ÉO 1 ‚Äî ESS√äNCIA */}
       <section style={{ padding: "24px 20px" }}>
         <p style={{ fontSize: "9px", fontFamily: "monospace", letterSpacing: "2px", color: "#C9A84C", marginBottom: "8px" }}>
-          ESS NCIA CAPTADA
+          ESS√äNCIA CAPTADA
         </p>
         <h1 style={{ fontSize: "26px", fontWeight: 700, color: "#f0ece4", fontFamily: "Georgia,serif", lineHeight: 1.2, marginBottom: "10px" }}>
-          {result?.essence?.label || "Eleg‚ncia Precisa"}
+          {result?.essence?.label || "Eleg√¢ncia Precisa"}
         </h1>
         <p style={{ fontSize: "13px", color: "#888", lineHeight: 1.6, marginBottom: "16px" }}>
           {result?.essence?.summary}
@@ -283,7 +283,7 @@ function ResultDashboardContent() {
         <div style={{ background: "#111", border: "0.5px solid #222", borderRadius: "12px", padding: "14px", marginBottom: "14px" }}>
           <p style={{ fontSize: "8px", fontFamily: "monospace", letterSpacing: "1px", color: "#C9A84C", marginBottom: "6px" }}>LEITURA PERSONALIZADA</p>
           <p style={{ fontSize: "13px", fontWeight: 600, color: "#f0ece4", marginBottom: "4px" }}>
-            {result?.essence?.label} ï {onboardingData?.intent?.styleDirection || "Feminina"}
+            {result?.essence?.label} ‚Ä¢ {onboardingData?.intent?.styleDirection || "Feminina"}
           </p>
           <p style={{ fontSize: "11px", color: "#666", marginBottom: "10px" }}>
             A Venus interpreta seu perfil e devolve curadoria real.
@@ -307,7 +307,7 @@ function ResultDashboardContent() {
               CONSULTORIA DE IMAGEM COMPLETA
             </p>
 
-            <p style={{ fontSize: "10px", color: "#888", marginBottom: "6px" }}>SUA PALETA ó {result.palette.family}</p>
+            <p style={{ fontSize: "10px", color: "#888", marginBottom: "6px" }}>SUA PALETA ‚Äî {result.palette.family}</p>
             <div style={{ display: "flex", gap: "6px", marginBottom: "12px" }}>
               {result.palette.colors.slice(0, 4).map((cor: { hex: string; name: string }, i: number) => (
                 <div key={i} style={{ flex: 1, textAlign: "center" }}>
@@ -325,7 +325,7 @@ function ResultDashboardContent() {
 
             <p style={{ fontSize: "10px", color: "#888", marginBottom: "4px" }}>TECIDOS QUE FAVORECEM</p>
             <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
-              {["Linho", "Algod„o Pima", "Seda", "L„ Fria"].map((t: string, i: number) => (
+              {["Linho", "Algod√£o Pima", "Seda", "L√£ Fria"].map((t: string, i: number) => (
                 <span key={i} style={{ fontSize: "9px", padding: "3px 8px", borderRadius: "20px", background: "#1a1200", border: "0.5px solid #C9A84C", color: "#C9A84C" }}>{t}</span>
               ))}
             </div>
@@ -346,10 +346,10 @@ function ResultDashboardContent() {
 
       <div style={{ height: "1px", background: "#1a1a1a", margin: "0 20px" }} />
 
-      {/* SE«√O 2 ó LOOKS */}
+      {/* SE√á√ÉO 2 ‚Äî LOOKS */}
       <section id="looks" style={{ padding: "24px 20px" }}>
         <p style={{ fontSize: "9px", fontFamily: "monospace", letterSpacing: "2px", color: "#C9A84C", marginBottom: "14px" }}>
-          CURADORIA PARA VOC 
+          CURADORIA PARA VOC√ä
         </p>
 
         <div id="tryon-result" style={{ marginBottom: "16px" }}>
@@ -365,7 +365,7 @@ function ResultDashboardContent() {
             ) : (
               <div style={{ width: "100%", height: "100%", background: "#111", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "8px" }}>
                 <div style={{ width: "24px", height: "24px", border: "2px solid #C9A84C", borderTop: "2px solid transparent", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
-                <p style={{ fontSize: "9px", fontFamily: "monospace", letterSpacing: "1px", color: "#C9A84C" }}>A VENUS EST¡ CRIANDO SEU LOOK...</p>
+                <p style={{ fontSize: "9px", fontFamily: "monospace", letterSpacing: "1px", color: "#C9A84C" }}>A VENUS EST√Å CRIANDO SEU LOOK...</p>
               </div>
             )}
           </div>
@@ -391,7 +391,7 @@ function ResultDashboardContent() {
                     <div style={{ flex: 1 }}>
                       <p style={{ fontSize: "12px", fontWeight: 500, color: "#f0ece4", marginBottom: "3px" }}>{item.name}</p>
                       <p style={{ fontSize: "10px", color: "#555", marginBottom: "8px" }}>{item.why || item.contextOfUse || "Combina com seu perfil visual."}</p>
-                      <a href={`https://wa.me/${org.whatsapp_phone}?text=Oi! Vi o look ${look.name} e tenho interesse na peÁa ${item.name}`}
+                      <a href={`https://wa.me/${org.whatsapp_phone}?text=Oi! Vi o look ${look.name} e tenho interesse na pe√ßa ${item.name}`}
                         style={{ display: "block", background: "#C9A84C", color: "#0a0a0a", borderRadius: "6px", padding: "7px", fontSize: "10px", fontWeight: 700, textDecoration: "none", textAlign: "center" }}>
                         Falar com a Venus ?
                       </a>
@@ -406,13 +406,13 @@ function ResultDashboardContent() {
 
       <div style={{ height: "1px", background: "#1a1a1a", margin: "0 20px" }} />
 
-      {/* SE«√O 3 ó COMPARTILHAR (compacto) */}
+      {/* SE√á√ÉO 3 ‚Äî COMPARTILHAR (compacto) */}
       <section style={{ padding: "24px 20px" }}>
         <p style={{ fontSize: "9px", fontFamily: "monospace", letterSpacing: "2px", color: "#C9A84C", marginBottom: "10px" }}>
           COMPARTILHAR E DESTRAVAR
         </p>
         <p style={{ fontSize: "12px", color: "#888", marginBottom: "12px" }}>
-          Publique com marcaÁ„o e desbloqueie benefÌcios exclusivos da loja.
+          Publique com marca√ß√£o e desbloqueie benef√≠cios exclusivos da loja.
         </p>
         <SocialShareActions
           look={result.looks[0]}
@@ -431,7 +431,7 @@ function ResultDashboardContent() {
         justifyContent: "space-between", padding: "0 20px"
       }}>
         <span style={{ fontSize: "12px", fontWeight: 600, color: "#0a0a0a" }}>
-          ? A Venus est· online ó {org.name}
+          ? A Venus est√° online ‚Äî {org.name}
         </span>
         <a href={`https://wa.me/${org.whatsapp_phone}`}
           style={{ background: "#0a0a0a", color: "#C9A84C", borderRadius: "6px", padding: "8px 14px", fontSize: "11px", fontWeight: 700, textDecoration: "none" }}>

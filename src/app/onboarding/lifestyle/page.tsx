@@ -7,8 +7,8 @@ import { PillSelector } from "@/components/ui/PillSelector";
 import { BottomNav } from "@/components/ui/BottomNav";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
 
-const ENVIRONMENTS = ["Rotina corporativa", "Escritório casual", "Home office", "Noites e eventos", "Lazer e viagens", "Compromissos sociais"];
-const PURCHASE_DNA = ["Poucas peças boas", "Variedade constante"];
+const ENVIRONMENTS = ["Rotina corporativa", "EscritÃ³rio casual", "Home office", "Noites e eventos", "Lazer e viagens", "Compromissos sociais"];
+const PURCHASE_DNA = ["Poucas peÃ§as boas", "Variedade constante"];
 const PURCHASE_BEHAVIOR = ["Planejo antes de comprar", "Compro por impulso"];
 
 export default function LifestylePage() {
@@ -29,7 +29,7 @@ export default function LifestylePage() {
           <Heading as="h4" className="text-[15px] sm:text-lg">
             Onde a sua imagem precisa funcionar?
           </Heading>
-          <Text className="text-sm text-white/55">Escolha os cenários que mais pedem presença de verdade no seu dia a dia.</Text>
+          <Text className="text-sm text-white/55">Escolha os cenÃ¡rios que mais pedem presenÃ§a de verdade no seu dia a dia.</Text>
           <PillSelector
             options={ENVIRONMENTS}
             selected={environments}
@@ -42,7 +42,7 @@ export default function LifestylePage() {
           <Heading as="h4" className="text-[15px] sm:text-lg">
             Quantidade que faz sentido
           </Heading>
-          <Text className="text-sm text-white/55">Aqui entendemos se você prefere poucos acertos fortes ou mais variação no acervo.</Text>
+          <Text className="text-sm text-white/55">Aqui entendemos se vocÃª prefere poucos acertos fortes ou mais variaÃ§Ã£o no acervo.</Text>
           <PillSelector
             options={PURCHASE_DNA}
             selected={purchaseDna ? [purchaseDna] : []}
@@ -52,9 +52,9 @@ export default function LifestylePage() {
 
         <div className="space-y-3 border-t border-white/10 pt-4 sm:space-y-4">
           <Heading as="h4" className="text-[15px] sm:text-lg">
-            Como você compra normalmente?
+            Como vocÃª compra normalmente?
           </Heading>
-          <Text className="text-sm text-white/55">Esse padrão ajuda a Venus a calibrar o nível de impulso e planejamento real.</Text>
+          <Text className="text-sm text-white/55">Esse padrÃ£o ajuda a Venus a calibrar o nÃ­vel de impulso e planejamento real.</Text>
           <PillSelector
             options={PURCHASE_BEHAVIOR}
             selected={purchaseBehavior ? [purchaseBehavior] : []}
