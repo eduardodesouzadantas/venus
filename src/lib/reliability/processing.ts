@@ -18,15 +18,18 @@ export interface ProcessingReservationOutcome extends ProcessingReservationSnaps
   should_wait: boolean;
 }
 
-interface ProcessingReservationRpcRow {
+interface ProcessingReservationRow {
+  id?: string | null;
+  org_id?: string | null;
   reservation_key?: string | null;
   status?: ProcessingReservationStatus | string | null;
   saved_result_id?: string | null;
   owner_token?: string | null;
   expires_at?: string | null;
   error_message?: string | null;
-  acquired?: boolean | null;
-  should_wait?: boolean | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  last_claimed_at?: string | null;
 }
 
 function normalizeString(value: unknown) {
@@ -71,7 +74,11 @@ export function shouldWaitOnProcessingReservation(snapshot: ProcessingReservatio
   return expiresAt.getTime() > now.getTime();
 }
 
-function parseProcessingReservationRow(row: ProcessingReservationRpcRow | null | undefined): ProcessingReservationOutcome | null {
+function parseProcessingReservationRow(
+  row: ProcessingReservationRow | null | undefined,
+  acquired = false,
+  should_wait = false
+): ProcessingReservationOutcome | null {
   if (!row) {
     return null;
   }
@@ -90,24 +97,58 @@ function parseProcessingReservationRow(row: ProcessingReservationRpcRow | null |
     owner_token: normalizeString(row.owner_token) || null,
     expires_at: normalizeString(row.expires_at) || null,
     error_message: normalizeString(row.error_message) || null,
-    acquired: Boolean(row.acquired),
-    should_wait: Boolean(row.should_wait),
+    acquired,
+    should_wait,
   };
 }
 
-async function rpcProcessingReservation(
-  supabase: SupabaseClient,
-  rpcName: "reserve_saved_result_processing" | "complete_saved_result_processing" | "fail_saved_result_processing",
-  input: Record<string, unknown>
-) {
-  const { data, error } = await supabase.schema("tenant").rpc(rpcName, input);
+function normalizeTtlSeconds(value: unknown) {
+  return Number.isFinite(Number(value)) ? Math.max(300, Math.min(3600, Number(value))) : 900;
+}
 
-  if (error) {
-    throw new Error(error.message || `Failed to execute ${rpcName}`);
+function isReservationExpired(row: ProcessingReservationRow, now = new Date()) {
+  const expiresAt = row.expires_at ? new Date(row.expires_at) : null;
+  if (!expiresAt || Number.isNaN(expiresAt.getTime())) {
+    return true;
   }
 
-  const row = Array.isArray(data) ? data[0] : data;
-  return parseProcessingReservationRow((row as ProcessingReservationRpcRow | null | undefined) || null);
+  return expiresAt.getTime() <= now.getTime();
+}
+
+async function loadProcessingReservation(supabase: SupabaseClient, orgId: string, reservationKey: string) {
+  const { data, error } = await supabase
+    .from("tenant_processing_reservations")
+    .select("*")
+    .eq("org_id", orgId)
+    .eq("reservation_key", reservationKey)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return (data as ProcessingReservationRow | null) ?? null;
+}
+
+async function persistProcessingReservation(
+  supabase: SupabaseClient,
+  row: Record<string, unknown>
+) {
+  const { data, error } = await supabase
+    .from("tenant_processing_reservations")
+    .upsert(row, { onConflict: "reservation_key" })
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    console.error("[PROCESSING_RESERVATION] table write failure", {
+      row,
+      error,
+    });
+    throw new Error(error?.message || "Failed to persist processing reservation");
+  }
+
+  return data as ProcessingReservationRow;
 }
 
 export async function reserveProcessingReservation(
@@ -119,18 +160,52 @@ export async function reserveProcessingReservation(
     ttlSeconds?: number;
   }
 ) {
-  const outcome = await rpcProcessingReservation(supabase, "reserve_saved_result_processing", {
-    p_org_id: normalizeString(input.orgId),
-    p_reservation_key: normalizeString(input.reservationKey),
-    p_owner_token: normalizeString(input.ownerToken),
-    p_ttl_seconds: Number.isFinite(input.ttlSeconds ?? NaN) ? input.ttlSeconds : 900,
-  });
-
-  if (!outcome) {
-    throw new Error("Failed to reserve processing");
+  const orgId = normalizeString(input.orgId);
+  const reservationKey = normalizeString(input.reservationKey);
+  const ownerToken = normalizeString(input.ownerToken);
+  if (!orgId || !reservationKey || !ownerToken) {
+    throw new Error("Missing processing reservation identifiers");
   }
 
-  return outcome;
+  const ttlSeconds = normalizeTtlSeconds(input.ttlSeconds);
+  const now = new Date();
+  const existing = await loadProcessingReservation(supabase, orgId, reservationKey);
+
+  if (existing) {
+    if (existing.status === "completed" && existing.saved_result_id) {
+      const completed = parseProcessingReservationRow(existing, false, false);
+      if (!completed) {
+        throw new Error("Failed to load processing reservation");
+      }
+      return completed;
+    }
+
+    if (existing.status === "in_progress" && !isReservationExpired(existing, now) && existing.owner_token && existing.owner_token !== ownerToken) {
+      const busy = parseProcessingReservationRow(existing, false, true);
+      if (!busy) {
+        throw new Error("Failed to load processing reservation");
+      }
+      return busy;
+    }
+  }
+
+  const updated = await persistProcessingReservation(supabase, {
+    org_id: orgId,
+    reservation_key: reservationKey,
+    owner_token: ownerToken,
+    status: "in_progress",
+    saved_result_id: null,
+    error_message: null,
+    expires_at: new Date(now.getTime() + ttlSeconds * 1000).toISOString(),
+    updated_at: now.toISOString(),
+    last_claimed_at: now.toISOString(),
+  });
+
+  const acquired = parseProcessingReservationRow(updated, true, false);
+  if (!acquired) {
+    throw new Error("Failed to load processing reservation");
+  }
+  return acquired;
 }
 
 export async function completeProcessingReservation(
@@ -142,18 +217,50 @@ export async function completeProcessingReservation(
     savedResultId: string;
   }
 ) {
-  const outcome = await rpcProcessingReservation(supabase, "complete_saved_result_processing", {
-    p_org_id: normalizeString(input.orgId),
-    p_reservation_key: normalizeString(input.reservationKey),
-    p_owner_token: normalizeString(input.ownerToken),
-    p_saved_result_id: normalizeString(input.savedResultId),
-  });
-
-  if (!outcome) {
-    throw new Error("Failed to complete processing reservation");
+  const orgId = normalizeString(input.orgId);
+  const reservationKey = normalizeString(input.reservationKey);
+  const ownerToken = normalizeString(input.ownerToken);
+  const savedResultId = normalizeString(input.savedResultId);
+  if (!orgId || !reservationKey || !ownerToken || !savedResultId) {
+    throw new Error("Missing processing completion identifiers");
   }
 
-  return outcome;
+  const now = new Date();
+  const existing = await loadProcessingReservation(supabase, orgId, reservationKey);
+
+  if (!existing) {
+    throw new Error("Processing reservation not found");
+  }
+
+  if (existing.status === "completed" && existing.saved_result_id === savedResultId) {
+    const completed = parseProcessingReservationRow(existing, false, false);
+    if (!completed) {
+      throw new Error("Failed to load processing reservation");
+    }
+    return completed;
+  }
+
+  if (existing.owner_token && existing.owner_token !== ownerToken && !isReservationExpired(existing, now)) {
+    throw new Error("Processing reservation owner mismatch");
+  }
+
+  const updated = await persistProcessingReservation(supabase, {
+    org_id: orgId,
+    reservation_key: reservationKey,
+    owner_token: ownerToken,
+    status: "completed",
+    saved_result_id: savedResultId,
+    error_message: null,
+    expires_at: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: now.toISOString(),
+    last_claimed_at: now.toISOString(),
+  });
+
+  const completed = parseProcessingReservationRow(updated, true, false);
+  if (!completed) {
+    throw new Error("Failed to load processing reservation");
+  }
+  return completed;
 }
 
 export async function failProcessingReservation(
@@ -165,18 +272,49 @@ export async function failProcessingReservation(
     errorMessage?: string | null;
   }
 ) {
-  const outcome = await rpcProcessingReservation(supabase, "fail_saved_result_processing", {
-    p_org_id: normalizeString(input.orgId),
-    p_reservation_key: normalizeString(input.reservationKey),
-    p_owner_token: normalizeString(input.ownerToken),
-    p_error_message: normalizeString(input.errorMessage || null) || null,
-  });
-
-  if (!outcome) {
-    throw new Error("Failed to fail processing reservation");
+  const orgId = normalizeString(input.orgId);
+  const reservationKey = normalizeString(input.reservationKey);
+  const ownerToken = normalizeString(input.ownerToken);
+  if (!orgId || !reservationKey || !ownerToken) {
+    throw new Error("Missing processing failure identifiers");
   }
 
-  return outcome;
+  const now = new Date();
+  const existing = await loadProcessingReservation(supabase, orgId, reservationKey);
+
+  if (!existing) {
+    throw new Error("Processing reservation not found");
+  }
+
+  if (existing.status === "completed") {
+    const completed = parseProcessingReservationRow(existing, false, false);
+    if (!completed) {
+      throw new Error("Failed to load processing reservation");
+    }
+    return completed;
+  }
+
+  if (existing.owner_token && existing.owner_token !== ownerToken && !isReservationExpired(existing, now)) {
+    throw new Error("Processing reservation owner mismatch");
+  }
+
+  const updated = await persistProcessingReservation(supabase, {
+    org_id: orgId,
+    reservation_key: reservationKey,
+    owner_token: ownerToken,
+    status: "failed",
+    saved_result_id: existing.saved_result_id || null,
+    error_message: normalizeString(input.errorMessage || null) || null,
+    expires_at: now.toISOString(),
+    updated_at: now.toISOString(),
+    last_claimed_at: now.toISOString(),
+  });
+
+  const failed = parseProcessingReservationRow(updated, true, false);
+  if (!failed) {
+    throw new Error("Failed to load processing reservation");
+  }
+  return failed;
 }
 
 export async function waitForProcessingReservation(

@@ -9,6 +9,10 @@ const srcDir = path.join(rootDir, "src");
 const originalResolveFilename = Module._resolveFilename;
 
 Module._resolveFilename = function resolveFilename(request, parent, isMain, options) {
+  if (request === "server-only") {
+    return path.join(rootDir, "test", "server-only.cjs");
+  }
+
   if (request.startsWith("@/")) {
     const mapped = path.join(srcDir, request.slice(2));
     return originalResolveFilename.call(this, mapped, parent, isMain, options);

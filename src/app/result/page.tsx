@@ -13,6 +13,7 @@ import { useUserImage } from "@/lib/onboarding/UserImageContext";
 import { syncLeadContext } from "@/lib/lead-context/client";
 import { useTryOn, TRYON_LOADING_MESSAGES } from "@/hooks/useTryOn";
 import { buildResultSurface, type ResultSurface } from "@/lib/result/surface";
+import { RESULT_ID_PATTERN, isValidResultId } from "@/lib/result/id";
 import { decideNextAction } from "@/lib/decision-engine/engine";
 import { DecisionResult } from "@/lib/decision-engine/types";
 import { buildWhatsAppHandoffMessage, buildWhatsAppHandoffUrl } from "@/lib/whatsapp/handoff";
@@ -23,13 +24,6 @@ function inferTryOnCategory(product: any): "tops" | "bottoms" | "one-pieces" {
   if (source.includes("vestido") || source.includes("dress") || source.includes("macacão")) return "one-pieces";
   if (source.includes("calça") || source.includes("saia") || source.includes("short") || source.includes("bermuda")) return "bottoms";
   return "tops";
-}
-
-const RESULT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function isValidResultId(value?: string | null) {
-  const normalized = (value || "").trim();
-  return Boolean(normalized) && normalized !== "MOCK_DB_FAIL" && RESULT_ID_PATTERN.test(normalized);
 }
 
 function ResultDashboardContent() {

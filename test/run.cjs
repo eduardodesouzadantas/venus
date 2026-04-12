@@ -1,5 +1,8 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const Module = require("node:module");
 
 const {
   LEAD_STATUSES,
@@ -73,6 +76,17 @@ const sampleOnboarding = {
     avoidColors: ["amarelo"],
     metal: "Prateado",
   },
+  colorimetry: {
+    skinTone: "médio",
+    undertone: "neutro",
+    contrast: "médio",
+    colorSeason: "Inverno Puro",
+    faceShape: "oval",
+    idealNeckline: "Decote em V",
+    idealFit: "Caimento slim com ombro estruturado",
+    idealFabrics: ["crepe", "lã fria", "algodão encorpado"],
+    avoidFabrics: ["malha muito fina", "tecido muito brilhante"],
+  },
   body: {
     highlight: ["ombros"],
     camouflage: ["abdômen"],
@@ -100,6 +114,30 @@ function run(name, fn) {
     process.stderr.write(`not ok - ${name}\n`);
     throw error;
   }
+}
+
+async function withMockedModules(mockMap, fn) {
+  const originalLoad = Module._load;
+
+  Module._load = function mockedLoad(request, parent, isMain) {
+    if (Object.prototype.hasOwnProperty.call(mockMap, request)) {
+      return mockMap[request];
+    }
+
+    return originalLoad.call(this, request, parent, isMain);
+  };
+
+  try {
+    return await fn();
+  } finally {
+    Module._load = originalLoad;
+  }
+}
+
+function loadFresh(modulePath) {
+  const resolved = require.resolve(modulePath);
+  delete require.cache[resolved];
+  return require(modulePath);
 }
 
 run("lead statuses include closing and keep counters aligned", () => {
@@ -770,4 +808,324 @@ run("operational aging summary respects timestamp precedence and exposes the slo
   assert.equal(merged.stage_summaries[0].key, "closing");
 });
 
-process.stdout.write("all reliability checks passed\n");
+async function runAsync(name, fn) {
+  try {
+    await fn();
+    process.stdout.write(`ok - ${name}\n`);
+  } catch (error) {
+    process.stderr.write(`not ok - ${name}\n`);
+    throw error;
+  }
+}
+
+const VALID_RESULT_ID = "550e8400-e29b-41d4-a716-446655440000";
+const VALID_ORG_ID = "org-123";
+const FRONTEND_ORG_ID = "frontend-org";
+
+;(async () => {
+  await runAsync("scenario 1 - normal flow contract accepts valid ids and serves persisted results", async () => {
+    const resultIdModule = loadFresh("../src/lib/result/id.ts");
+
+    assert.equal(resultIdModule.isValidResultId(VALID_RESULT_ID), true);
+    assert.equal(resultIdModule.isValidResultId("MOCK_DB_FAIL"), false);
+
+    const supabase = {
+      from(table) {
+        if (table !== "saved_results") {
+          throw new Error(`Unexpected table ${table}`);
+        }
+
+        return {
+          select() {
+            return {
+              eq(column, value) {
+                assert.equal(column, "id");
+                assert.equal(value, VALID_RESULT_ID);
+                return {
+                  maybeSingle: async () => ({
+                    data: {
+                      id: VALID_RESULT_ID,
+                      payload: {
+                        visualAnalysis: { essence: { label: "Autora", reason: "Teste" } },
+                        finalResult: { looks: [] },
+                        tenant: { orgId: VALID_ORG_ID, orgSlug: "maison-elite" },
+                      },
+                      created_at: "2026-04-06T12:00:00.000Z",
+                      updated_at: "2026-04-06T12:00:00.000Z",
+                    },
+                    error: null,
+                  }),
+                };
+              },
+            };
+          },
+        };
+      },
+    };
+
+    const resultResponse = await withMockedModules({
+      "server-only": {},
+      "@/lib/supabase/admin": {
+        createAdminClient: () => supabase,
+      },
+    }, async () => {
+      const resultRoute = loadFresh("../src/app/api/result/[id]/route.ts");
+      return resultRoute.GET(new Request(`https://example.com/api/result/${VALID_RESULT_ID}`), {
+        params: Promise.resolve({ id: VALID_RESULT_ID }),
+      });
+    });
+
+    assert.equal(resultResponse.status, 200);
+    const payload = await resultResponse.json();
+    assert.equal(payload.id, VALID_RESULT_ID);
+    assert.equal(payload.tenant.orgId, VALID_ORG_ID);
+    assert.equal(payload.finalResult.looks.length, 0);
+
+    const processingSource = fs.readFileSync(path.join(process.cwd(), "src/app/processing/page.tsx"), "utf8");
+    assert.ok(processingSource.includes("isValidResultId(dbReferenceId)"));
+    assert.ok(!processingSource.includes('router.push("/result?id=MOCK_DB_FAIL")'));
+  });
+
+  await runAsync("scenario 2 - tenant resolution failure throws before navigation", async () => {
+    const onboarding = {
+      contact: { name: "Cliente", phone: "+5511999999999", email: "cliente@exemplo.com" },
+      tenant: {},
+      scanner: { facePhoto: "data:image/png;base64,aaa", bodyPhoto: "data:image/png;base64,bbb" },
+      intent: { imageGoal: "Autoridade", styleDirection: "Executiva", satisfaction: 9 },
+      lifestyle: {},
+      colors: {},
+      body: {},
+    };
+
+    const actions = await withMockedModules({
+      "server-only": {},
+      "@/lib/supabase/admin": {
+        createAdminClient: () => ({
+          from() {
+            return {
+              select() {
+                return {
+                  eq() {
+                    return { maybeSingle: async () => ({ data: null, error: null }) };
+                  },
+                };
+              },
+            };
+          },
+        }),
+      },
+      "@/lib/tenant/core": {
+        fetchTenantBySlug: async () => null,
+        isTenantActive: () => true,
+        normalizeTenantSlug: (value) => (value || "").trim(),
+        resolveAppTenantOrg: async () => ({ org: null, source: "none" }),
+      },
+      "@/lib/ai": {
+        generateOpenAIRecommendation: async () => {
+          throw new Error("should_not_run");
+        },
+      },
+      "@/lib/ai/result-normalizer": {
+        buildCatalogAwareFallbackResult: () => ({})
+      },
+      "@/lib/leads": {
+        extractLeadSignalsFromSavedResultPayload: () => ({ intentScore: 0 }),
+        persistSavedResultAndLead: async () => {
+          throw new Error("should_not_run");
+        },
+      },
+      "@/lib/lead-context": {
+        buildLeadContextProfileFromOnboarding: () => ({}),
+        upsertLeadContextByLeadId: async () => null,
+      },
+      "@/lib/decision-engine": {
+        decideNextAction: () => ({ chosenAction: "WAIT", reason: "test", adaptiveConfidence: 0.5, weightAdjustments: {} }),
+      },
+      "@/lib/reliability/idempotency": {
+        createProcessAndPersistLeadIdempotencyKey: () => "key",
+        stripOnboardingBinaryArtifacts: (value) => value,
+      },
+      "@/lib/reliability/observability": {
+        captureOperationalTiming: () => ({ duration_ms: 0, started_at: "", completed_at: "" }),
+        formatOperationalReason: () => "reason",
+        recordOperationalTenantEvent: async () => null,
+      },
+      "@/lib/reliability/processing": {
+        completeProcessingReservation: async () => null,
+        createProcessingOwnerToken: () => "owner",
+        failProcessingReservation: async () => null,
+        reserveProcessingReservation: async () => ({ acquired: false, should_wait: false, status: "busy", saved_result_id: null }),
+        waitForProcessingReservation: async () => ({ acquired: false, should_wait: false, status: "busy", saved_result_id: null }),
+      },
+      "@/lib/analysis/visual-profile": {
+        generateVisualProfileAnalysis: async () => ({}),
+      },
+      "@/lib/catalog": {
+        getB2BProducts: async () => [],
+      },
+    }, async () => {
+      return loadFresh("../src/lib/recommendation/actions.ts");
+    });
+
+    await assert.rejects(
+      () => actions.processAndPersistLead(onboarding),
+      (error) => error instanceof Error && error.message === "TENANT_RESOLUTION_FAILED"
+    );
+
+    const processingSource = fs.readFileSync(path.join(process.cwd(), "src/app/processing/page.tsx"), "utf8");
+    assert.ok(processingSource.includes("isValidResultId(dbReferenceId)"));
+    assert.ok(processingSource.includes("RESULT_PERSISTENCE_MISSING_ORG"));
+    assert.ok(!processingSource.includes('router.push("/result?id=MOCK_DB_FAIL")'));
+  });
+
+  await runAsync("scenario 3 - invalid result ids are rejected immediately", async () => {
+    const resultIdModule = loadFresh("../src/lib/result/id.ts");
+
+    const invalidIds = ["MOCK_DB_FAIL", "abc", "invalid-id", ""];
+    for (const value of invalidIds) {
+      assert.equal(resultIdModule.isValidResultId(value), false);
+    }
+
+    const resultSource = fs.readFileSync(path.join(process.cwd(), "src/app/result/page.tsx"), "utf8");
+    assert.ok(resultSource.includes("router.replace(restartTarget)"));
+    assert.ok(resultSource.includes("lead-context/recovery?result_id="));
+    assert.ok(!resultSource.includes("&org_id="));
+    assert.ok(!resultSource.includes("Finalizando sintonização"));
+  });
+
+  await runAsync("scenario 4 - recovery derives org_id server-side", async () => {
+    let capturedIdentity = null;
+
+    const supabase = {
+      from(table) {
+        if (table === "saved_results") {
+          return {
+            select() {
+              return {
+                eq(column, value) {
+                  assert.equal(column, "id");
+                  assert.equal(value, VALID_RESULT_ID);
+                  return {
+                    maybeSingle: async () => ({
+                      data: { id: VALID_RESULT_ID, org_id: VALID_ORG_ID },
+                      error: null,
+                    }),
+                  };
+                },
+              };
+            },
+          };
+        }
+
+        if (table === "leads") {
+          return {
+            select() {
+              return {
+                eq(column, value) {
+                  if (column === "saved_result_id") {
+                    assert.equal(value, VALID_RESULT_ID);
+                    return {
+                      maybeSingle: async () => ({
+                        data: { id: "lead-1", org_id: VALID_ORG_ID, saved_result_id: VALID_RESULT_ID },
+                        error: null,
+                      }),
+                    };
+                  }
+
+                  if (column === "org_id") {
+                    return {
+                      order() {
+                        return {
+                          limit() {
+                            return {
+                              maybeSingle: async () => ({
+                                data: { id: "lead-1", payload: {} },
+                                error: null,
+                              }),
+                            };
+                          },
+                        };
+                      },
+                    };
+                  }
+
+                  throw new Error(`Unexpected column ${column}`);
+                },
+              };
+            },
+          };
+        }
+
+        if (table === "lead_context") {
+          return {
+            select() {
+              return {
+                eq() {
+                  return {
+                    maybeSingle: async () => ({
+                      data: {
+                        last_tryon: { generatedImageUrl: "https://example.com/tryon.jpg" },
+                        style_profile: { label: "Executiva" },
+                        profile_data: { orgId: VALID_ORG_ID },
+                      },
+                      error: null,
+                    }),
+                  };
+                },
+              };
+            },
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      },
+    };
+
+    const response = await withMockedModules({
+      "@/lib/supabase/admin": {
+        createAdminClient: () => supabase,
+      },
+      "@/lib/lead-context": {
+        loadLeadContextByIdentity: async (_supabase, identity) => {
+          capturedIdentity = identity;
+          return {
+            lead: { id: "lead-1", org_id: VALID_ORG_ID },
+            context: {
+              last_tryon: { generatedImageUrl: "https://example.com/tryon.jpg" },
+              style_profile: { label: "Executiva" },
+              profile_data: { orgId: VALID_ORG_ID },
+            },
+          };
+        },
+      },
+    }, async () => {
+      const route = loadFresh("../src/app/api/lead-context/recovery/route.ts");
+      return route.GET(new Request(`https://example.com/api/lead-context/recovery?result_id=${VALID_RESULT_ID}&org_id=${FRONTEND_ORG_ID}`));
+    });
+
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.resolvedOrgId, VALID_ORG_ID);
+    assert.equal(capturedIdentity.orgId, VALID_ORG_ID);
+    assert.equal(capturedIdentity.savedResultId, VALID_RESULT_ID);
+    assert.notEqual(capturedIdentity.orgId, FRONTEND_ORG_ID);
+  });
+
+  await runAsync("scenario 5 - regression scan keeps dangerous sentinel navigation out", async () => {
+    const processingSource = fs.readFileSync(path.join(process.cwd(), "src/app/processing/page.tsx"), "utf8");
+    const resultSource = fs.readFileSync(path.join(process.cwd(), "src/app/result/page.tsx"), "utf8");
+    const recoverySource = fs.readFileSync(path.join(process.cwd(), "src/app/api/lead-context/recovery/route.ts"), "utf8");
+
+    assert.ok(!processingSource.includes('router.push("/result?id=MOCK_DB_FAIL")'));
+    assert.ok(!processingSource.includes("router.push(`/result?id=MOCK_DB_FAIL`)"));
+    assert.ok(!resultSource.includes("org_id=${encodeURIComponent(orgId || \"\")}"));
+    assert.ok(!resultSource.includes("Finalizando sintonização"));
+    assert.ok(recoverySource.includes("resolvedOrgId"));
+    assert.ok(!recoverySource.includes("org_id=${encodeURIComponent(orgId || \"\")}"));
+  });
+
+  process.stdout.write("all reliability checks passed\n");
+})().catch((error) => {
+  process.stderr.write(`${error instanceof Error ? error.stack || error.message : String(error)}\n`);
+  process.exitCode = 1;
+});

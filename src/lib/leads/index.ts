@@ -5,6 +5,7 @@ import {
   formatOperationalReason,
   recordOperationalTenantEvent,
 } from "@/lib/reliability/observability";
+import { bumpTenantUsageDaily } from "@/lib/tenant/core";
 
 export const LEAD_STATUSES = ["new", "engaged", "qualified", "offer_sent", "closing", "won", "lost"] as const;
 
@@ -253,6 +254,27 @@ export async function getLeadByEmail(supabase: SupabaseClient, orgId: string, em
   return { lead: (data as LeadRecord | null) ?? null, error: null };
 }
 
+export async function getLeadById(supabase: SupabaseClient, orgId: string, leadId: string) {
+  const normalizedOrgId = normalizeString(orgId);
+  const normalizedLeadId = normalizeString(leadId);
+  if (!normalizedOrgId || !normalizedLeadId) {
+    return { lead: null as LeadRecord | null, error: null as Error | null };
+  }
+
+  const { data, error } = await supabase
+    .from("leads")
+    .select("*")
+    .eq("org_id", normalizedOrgId)
+    .eq("id", normalizedLeadId)
+    .maybeSingle();
+
+  if (error) {
+    return { lead: null as LeadRecord | null, error };
+  }
+
+  return { lead: (data as LeadRecord | null) ?? null, error: null };
+}
+
 export async function findOrCreateLead(supabase: SupabaseClient, input: LeadUpsertInput) {
   const orgId = normalizeString(input.orgId);
   if (!orgId) {
@@ -410,27 +432,48 @@ export async function updateLeadOperationalState(supabase: SupabaseClient, input
     });
 
   try {
-    const { data, error } = await supabase.schema("tenant").rpc("apply_lead_state_change", {
-      p_org_id: orgId,
-      p_lead_id: leadId,
-      p_has_status: hasStatus,
-      p_status: input.status || null,
-      p_has_next_follow_up_at: hasFollowUp,
-      p_next_follow_up_at: hasFollowUp ? input.nextFollowUpAt || null : null,
-      p_last_interaction_at: nextTimestamp,
-      p_actor_user_id: input.actorUserId || null,
-      p_event_source: input.eventSource || "agency",
-      p_idempotency_key: idempotencyKey,
-      p_expected_updated_at: input.expectedUpdatedAt || null,
-    });
-
-    if (error || !data) {
-      throw new Error(error?.message || "Failed to update lead status");
+    const { lead: currentLead, error: lookupError } = await getLeadById(supabase, orgId, leadId);
+    if (lookupError) {
+      throw lookupError;
     }
 
-    const row = Array.isArray(data) ? data[0] : data;
-    if (!row) {
+    if (!currentLead) {
       throw new Error("Failed to update lead status");
+    }
+
+    const nextStatus = resolveLeadStatus(currentLead.status, input.status);
+    const nextFollowUpAt = hasFollowUp ? input.nextFollowUpAt || null : currentLead.next_follow_up_at;
+
+    let updateQuery = supabase
+      .from("leads")
+      .update({
+        name: currentLead.name,
+        email: currentLead.email,
+        phone: currentLead.phone,
+        source: currentLead.source,
+        status: nextStatus,
+        saved_result_id: currentLead.saved_result_id,
+        intent_score: currentLead.intent_score,
+        whatsapp_key: currentLead.whatsapp_key,
+        next_follow_up_at: nextFollowUpAt,
+        updated_at: nextTimestamp,
+        last_interaction_at: nextTimestamp,
+      })
+      .eq("org_id", orgId)
+      .eq("id", leadId);
+
+    if (input.expectedUpdatedAt) {
+      updateQuery = updateQuery.eq("updated_at", input.expectedUpdatedAt);
+    }
+
+    const { data, error } = await updateQuery.select("*").maybeSingle();
+
+    if (error) {
+      throw new Error(error.message || "Failed to update lead status");
+    }
+
+    if (!data) {
+      throw new Error(input.expectedUpdatedAt ? "Lead changed while editing" : "Failed to update lead status");
     }
 
     await recordOperationalTenantEvent(supabase, {
@@ -448,8 +491,8 @@ export async function updateLeadOperationalState(supabase: SupabaseClient, input
       payload: {
         lead_id: leadId,
         org_id: orgId,
-        status: (row as LeadRecord).status,
-        next_follow_up_at: (row as LeadRecord).next_follow_up_at,
+        status: (data as LeadRecord).status,
+        next_follow_up_at: (data as LeadRecord).next_follow_up_at,
         updated_fields: {
           status: hasStatus,
           next_follow_up_at: hasFollowUp,
@@ -461,7 +504,7 @@ export async function updateLeadOperationalState(supabase: SupabaseClient, input
       },
     });
 
-    return { lead: row as LeadRecord };
+    return { lead: data as LeadRecord };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to update lead status";
     const isConflict = isLeadUpdateConflictError(error);
@@ -526,6 +569,32 @@ interface PersistSavedResultLeadRpcRow {
   lead_created?: boolean | null;
 }
 
+type SavedResultRecord = {
+  id: string;
+  org_id: string;
+  user_email: string | null;
+  user_name: string | null;
+  payload: Record<string, unknown> | null;
+  idempotency_key: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+async function getSavedResultByIdempotencyKey(supabase: SupabaseClient, orgId: string, idempotencyKey: string) {
+  const { data, error } = await supabase
+    .from("saved_results")
+    .select("*")
+    .eq("org_id", normalizeString(orgId))
+    .eq("idempotency_key", normalizeString(idempotencyKey))
+    .maybeSingle();
+
+  if (error) {
+    return { savedResult: null as SavedResultRecord | null, error };
+  }
+
+  return { savedResult: (data as SavedResultRecord | null) ?? null, error: null };
+}
+
 export async function persistSavedResultAndLead(supabase: SupabaseClient, input: PersistSavedResultLeadInput) {
   const orgId = normalizeString(input.orgId);
   if (!orgId) {
@@ -537,42 +606,144 @@ export async function persistSavedResultAndLead(supabase: SupabaseClient, input:
     throw new Error("Missing saved result idempotency key");
   }
 
-  const { data, error } = await supabase.schema("tenant").rpc("persist_saved_result_and_lead", {
-    p_org_id: orgId,
-    p_idempotency_key: idempotencyKey,
-    p_user_email: normalizeLeadEmail(input.userEmail || null) || null,
-    p_user_name: normalizeString(input.userName) || null,
-    p_payload: input.payload,
-    p_lead_name: normalizeString(input.leadName) || null,
-    p_lead_email: normalizeLeadEmail(input.leadEmail || null) || null,
-    p_lead_phone: normalizeLeadPhone(input.leadPhone || null) || null,
-    p_lead_source: normalizeString(input.leadSource) || "app",
-    p_lead_status: input.leadStatus || "new",
-    p_intent_score: typeof input.intentScore === "number" && !Number.isNaN(input.intentScore) ? input.intentScore : null,
-    p_whatsapp_key: normalizeLeadPhone(input.whatsappKey || null) || null,
-    p_last_interaction_at: input.lastInteractionAt || null,
-    p_event_source: input.eventSource || "app",
-  });
+  const normalizedUserEmail = normalizeLeadEmail(input.userEmail || null) || null;
+  const normalizedUserName = normalizeString(input.userName) || null;
+  const normalizedLeadName = normalizeString(input.leadName) || null;
+  const normalizedLeadEmail = normalizeLeadEmail(input.leadEmail || null) || null;
+  const normalizedLeadPhone = normalizeLeadPhone(input.leadPhone || null) || null;
+  const normalizedLeadSource = normalizeString(input.leadSource) || "app";
+  const normalizedLeadStatus = input.leadStatus || "new";
+  const normalizedIntentScore = typeof input.intentScore === "number" && !Number.isNaN(input.intentScore) ? input.intentScore : null;
+  const normalizedWhatsappKey = normalizeLeadPhone(input.whatsappKey || null) || null;
+  const normalizedLastInteractionAt = input.lastInteractionAt || null;
+  const eventSource = input.eventSource || "app";
 
-  if (error || !data) {
-    throw new Error(error?.message || "Failed to persist saved result");
+  const { savedResult: existingSavedResult, error: lookupError } = await getSavedResultByIdempotencyKey(supabase, orgId, idempotencyKey);
+  if (lookupError) {
+    throw lookupError;
   }
 
-  const row = Array.isArray(data) ? data[0] : data;
-  const typedRow = (row || {}) as PersistSavedResultLeadRpcRow;
-  const savedResultId = normalizeString(typedRow.saved_result_id);
-  const leadId = normalizeString(typedRow.lead_id);
+  let savedResultId = existingSavedResult?.id || "";
+  let savedResultCreated = false;
 
-  if (!savedResultId || !leadId) {
-    throw new Error("Failed to persist saved result and lead");
+  if (!savedResultId) {
+    const { data, error } = await supabase
+      .from("saved_results")
+      .insert({
+        org_id: orgId,
+        user_email: normalizedUserEmail,
+        user_name: normalizedUserName,
+        payload: input.payload,
+        idempotency_key: idempotencyKey,
+      })
+      .select("*")
+      .single();
+
+    if (error || !data) {
+      if (error?.code === "23505") {
+        const retry = await getSavedResultByIdempotencyKey(supabase, orgId, idempotencyKey);
+        if (retry.error) {
+          throw retry.error;
+        }
+        if (retry.savedResult?.id) {
+          savedResultId = retry.savedResult.id;
+        }
+      } else {
+        console.error("[SAVED_RESULTS] direct insert failure", {
+          orgId,
+          idempotencyKey,
+          payload: input.payload,
+          error,
+        });
+        throw new Error(error?.message || "Failed to persist saved result");
+      }
+    } else {
+      const row = data as SavedResultRecord;
+      savedResultId = row.id;
+      savedResultCreated = true;
+    }
   }
 
-  return {
-    savedResultId,
-    leadId,
-    savedResultCreated: Boolean(typedRow.saved_result_created),
-    leadCreated: Boolean(typedRow.lead_created),
-  } satisfies PersistSavedResultLeadResult;
+  if (!savedResultId) {
+    throw new Error("Failed to persist saved result");
+  }
+
+  try {
+    const { lead, created: leadCreated } = await findOrCreateLead(supabase, {
+      orgId,
+      name: normalizedLeadName || normalizedUserName || null,
+      email: normalizedLeadEmail || normalizedUserEmail || null,
+      phone: normalizedLeadPhone || null,
+      source: normalizedLeadSource,
+      status: normalizedLeadStatus,
+      savedResultId,
+      intentScore: normalizedIntentScore,
+      whatsappKey: normalizedWhatsappKey || normalizedLeadPhone || null,
+      lastInteractionAt: normalizedLastInteractionAt || undefined,
+    });
+
+    if (!lead) {
+      throw new Error("Failed to persist lead");
+    }
+
+    console.info("[SAVED_RESULTS] direct persistence state", {
+      orgId,
+      idempotencyKey,
+      user_id: lead.id,
+      payload: input.payload,
+      savedResultCreated,
+      leadCreated,
+    });
+
+    await recordOperationalTenantEvent(supabase, {
+      orgId,
+      eventSource,
+      eventType: "app.saved_result_created",
+      dedupeKeyParts: [orgId, savedResultId, "saved_result_created"],
+      payload: {
+        org_id: orgId,
+        saved_result_id: savedResultId,
+        lead_id: lead.id,
+        idempotency_key: idempotencyKey,
+        created: savedResultCreated,
+        reason_code: formatOperationalReason("persist_result", "success"),
+      },
+    });
+
+    await recordOperationalTenantEvent(supabase, {
+      orgId,
+      eventSource,
+      eventType: leadCreated ? "lead.created_from_app" : "lead.updated_from_app",
+      dedupeKeyParts: [orgId, lead.id, savedResultId, leadCreated ? "created" : "updated"],
+      payload: {
+        lead_id: lead.id,
+        saved_result_id: savedResultId,
+        org_id: orgId,
+        created: leadCreated,
+      },
+    });
+
+    await bumpTenantUsageDaily(supabase, orgId, {
+      events_count: 1,
+      leads: leadCreated ? 1 : 0,
+    });
+
+    return {
+      savedResultId,
+      leadId: lead.id,
+      savedResultCreated,
+      leadCreated,
+    } satisfies PersistSavedResultLeadResult;
+  } catch (error) {
+    console.error("[SAVED_RESULTS] direct persistence failure", {
+      orgId,
+      idempotencyKey,
+      payload: input.payload,
+      user_id: null,
+      error,
+    });
+    throw error instanceof Error ? error : new Error("Failed to persist saved result");
+  }
 }
 
 export async function updateLeadStatus(supabase: SupabaseClient, input: LeadStatusUpdateInput) {
