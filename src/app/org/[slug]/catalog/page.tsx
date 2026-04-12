@@ -61,7 +61,7 @@ export default function MerchantCatalog({ params }: { params: Promise<{ slug: st
       <main className="flex-1 p-12 overflow-y-auto no-scrollbar">
         <header className="flex items-center justify-between mb-16 gap-8">
           <div className="space-y-1">
-            <Text className="text-[10px] uppercase font-bold tracking-[0.4em] text-[#D4AF37]">Venus Engine Management</Text>
+            <Text className="text-[10px] uppercase font-bold tracking-[0.4em] text-[#C9A84C]">Venus Engine Management</Text>
             <Heading as="h1" className="text-3xl tracking-tighter uppercase whitespace-nowrap">
               Gestão de Catálogo AI
             </Heading>
@@ -90,7 +90,7 @@ export default function MerchantCatalog({ params }: { params: Promise<{ slug: st
               <input
                 type="text"
                 placeholder="Buscar produto por nome ou tag..."
-                className="w-full h-14 rounded-3xl bg-white/5 border border-white/10 pl-12 pr-6 text-sm text-white focus:border-[#D4AF37]/40 outline-none transition-all"
+                className="w-full h-14 rounded-3xl bg-white/5 border border-white/10 pl-12 pr-6 text-sm text-white focus:border-[#C9A84C]/40 outline-none transition-all"
               />
             </div>
             <Link
@@ -121,7 +121,7 @@ export default function MerchantCatalog({ params }: { params: Promise<{ slug: st
                       {product.name}
                     </Heading>
                     <div className="flex items-center gap-3 flex-wrap">
-                      <span className="px-3 py-1 rounded-full bg-white/5 text-[8px] font-bold uppercase tracking-widest text-[#D4AF37] border border-[#D4AF37]/20">
+                      <span className="px-3 py-1 rounded-full bg-white/5 text-[8px] font-bold uppercase tracking-widest text-[#C9A84C] border border-[#C9A84C]/20">
                         {product.price}
                       </span>
                       <div className="flex gap-1 flex-wrap">
@@ -140,7 +140,7 @@ export default function MerchantCatalog({ params }: { params: Promise<{ slug: st
                     <span className="text-[9px] uppercase font-bold tracking-widest text-white/20 mb-1">Look readiness</span>
                     <div className="flex flex-col items-center">
                       <div className="w-32 h-1.5 bg-white/5 rounded-full overflow-hidden mb-2">
-                        <div className={`h-full ${product.score > 80 ? "bg-[#D4AF37]" : "bg-yellow-500"} transition-all duration-1000`} style={{ width: `${product.score}%` }} />
+                        <div className={`h-full ${product.score > 80 ? "bg-[#C9A84C]" : "bg-yellow-500"} transition-all duration-1000`} style={{ width: `${product.score}%` }} />
                       </div>
                       <span className="text-[10px] font-mono text-white/40">{product.score}%</span>
                     </div>
@@ -149,11 +149,10 @@ export default function MerchantCatalog({ params }: { params: Promise<{ slug: st
                   <div className="flex gap-3">
                     <Link
                       href={`${orgBase}/catalog/new`}
-                      className={`inline-flex items-center gap-2 px-6 py-4 rounded-full text-[9px] font-bold uppercase tracking-widest border transition-all active:scale-95 ${
-                        product.alert
+                      className={`inline-flex items-center gap-2 px-6 py-4 rounded-full text-[9px] font-bold uppercase tracking-widest border transition-all active:scale-95 ${product.alert
                           ? "bg-yellow-500/10 text-yellow-500 border-yellow-500/20 hover:bg-yellow-500/15"
                           : "bg-white/5 text-white/70 border-white/10 hover:text-white hover:bg-white/10"
-                      }`}
+                        }`}
                     >
                       <Sparkles size={14} />
                       {product.alert ? "Corrigir AI" : "Abrir produto"}
@@ -161,7 +160,7 @@ export default function MerchantCatalog({ params }: { params: Promise<{ slug: st
 
                     <Link
                       href={`${orgBase}/catalog/new`}
-                      className="inline-flex w-14 h-14 items-center justify-center rounded-full border border-white/5 text-white/20 hover:text-white hover:border-[#D4AF37]/40 transition-all"
+                      className="inline-flex w-14 h-14 items-center justify-center rounded-full border border-white/5 text-white/20 hover:text-white hover:border-[#C9A84C]/40 transition-all"
                       aria-label={`Editar ${product.name}`}
                     >
                       <Edit3 size={18} />
@@ -169,7 +168,7 @@ export default function MerchantCatalog({ params }: { params: Promise<{ slug: st
 
                     <Link
                       href={`${orgBase}/dashboard`}
-                      className="inline-flex w-14 h-14 items-center justify-center rounded-full border border-white/5 text-white/20 hover:text-white hover:border-[#D4AF37]/40 transition-all"
+                      className="inline-flex w-14 h-14 items-center justify-center rounded-full border border-white/5 text-white/20 hover:text-white hover:border-[#C9A84C]/40 transition-all"
                       aria-label={`Voltar ao painel para ${product.name}`}
                     >
                       <Eye size={18} />
@@ -183,10 +182,10 @@ export default function MerchantCatalog({ params }: { params: Promise<{ slug: st
       </main>
 
       <div className="fixed bottom-10 right-10 z-50">
-        <div className="p-6 rounded-[40px] bg-black/80 backdrop-blur-3xl border border-[#D4AF37]/30 shadow-2xl flex items-center gap-6">
+        <div className="p-6 rounded-[40px] bg-black/80 backdrop-blur-3xl border border-[#C9A84C]/30 shadow-2xl flex items-center gap-6">
           <div className="flex flex-col">
             <span className="text-[10px] uppercase font-bold tracking-widest text-white/40 mb-1">Queue Status</span>
-            <span className="text-xs font-bold text-[#D4AF37] flex items-center gap-2">
+            <span className="text-xs font-bold text-[#C9A84C] flex items-center gap-2">
               <Sparkles size={12} /> AI Enrichment active
             </span>
           </div>
@@ -206,9 +205,8 @@ function NavItem({ href, icon, label, active = false }: NavItemProps) {
   return (
     <Link
       href={href}
-      className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all ${
-        active ? "bg-white text-black shadow-2xl" : "text-white/40 hover:bg-white/5 hover:text-white"
-      }`}
+      className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all ${active ? "bg-white text-black shadow-2xl" : "text-white/40 hover:bg-white/5 hover:text-white"
+        }`}
     >
       {icon}
       <span className="text-[11px] font-bold uppercase tracking-widest">{label}</span>

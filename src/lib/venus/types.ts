@@ -33,6 +33,7 @@ export type VenusContext = {
   productStock: number;
   stockSummary: string;
   catalogSummary: string;
+  wardrobeSummary: string;
   history: VenusConversationMessage[];
   state: VenusIntent;
 };

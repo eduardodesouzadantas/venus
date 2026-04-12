@@ -2,8 +2,24 @@ export interface OnboardingConversationData {
   line: "masculina" | "feminina" | "neutra" | "";
   imageGoal: string;
   styleDirection: string;
+  avoidColorNote: string;
   favoriteColors: string[];
   avoidColors: string[];
+}
+
+export interface ColorimetryAnalysisData {
+  skinTone: "claro" | "médio" | "escuro" | "";
+  undertone: "frio" | "quente" | "neutro" | "";
+  contrast: "baixo" | "médio" | "alto" | "";
+  colorSeason: string;
+  favoriteColors: string[];
+  avoidColors: string[];
+  faceShape: "oval" | "redondo" | "quadrado" | "coração" | "losango" | "retangular" | "";
+  idealNeckline: string;
+  idealFit: string;
+  idealFabrics: string[];
+  avoidFabrics: string[];
+  justification: string;
 }
 
 export interface OnboardingData {
@@ -22,6 +38,15 @@ export interface OnboardingData {
     favoriteColors: string[];
     avoidColors: string[];
     metal: "Dourado" | "Prateado" | "";
+    colorSeason: string;
+    skinTone: "claro" | "médio" | "escuro" | "";
+    undertone: "frio" | "quente" | "neutro" | "";
+    contrast: "baixo" | "médio" | "alto" | "";
+    faceShape: "oval" | "redondo" | "quadrado" | "coração" | "losango" | "retangular" | "";
+    idealNeckline: string;
+    idealFit: string;
+    idealFabrics: string[];
+    avoidFabrics: string[];
   };
   body: {
     highlight: string[];
@@ -35,6 +60,15 @@ export interface OnboardingData {
     bodyPhoto: string; // Base64 or ObjectURL string stub
     skipped: boolean;
   };
+  colorimetry: ColorimetryAnalysisData;
+  favoriteColors: string[];
+  avoidColors: string[];
+  colorSeason: string;
+  faceShape: "oval" | "redondo" | "quadrado" | "coração" | "losango" | "retangular" | "";
+  idealNeckline: string;
+  idealFit: string;
+  idealFabrics: string[];
+  avoidFabrics: string[];
   contact?: {
     name: string;
     phone: string;
@@ -52,8 +86,43 @@ export interface OnboardingData {
 export const defaultOnboardingData: OnboardingData = {
   intent: { styleDirection: "", imageGoal: "", satisfaction: 5, mainPain: "" },
   lifestyle: { environments: [], purchaseDna: "", purchaseBehavior: "" },
-  colors: { favoriteColors: [], avoidColors: [], metal: "" },
+  colors: {
+    favoriteColors: [],
+    avoidColors: [],
+    metal: "",
+    colorSeason: "",
+    skinTone: "",
+    undertone: "",
+    contrast: "",
+    faceShape: "",
+    idealNeckline: "",
+    idealFit: "",
+    idealFabrics: [],
+    avoidFabrics: [],
+  },
   body: { highlight: [], camouflage: [], fit: "", faceLines: "", hairLength: "" },
   scanner: { facePhoto: "", bodyPhoto: "", skipped: false },
-  conversation: { line: "", imageGoal: "", styleDirection: "", favoriteColors: [], avoidColors: [] },
+  colorimetry: {
+    skinTone: "",
+    undertone: "",
+    contrast: "",
+    colorSeason: "",
+    favoriteColors: [],
+    avoidColors: [],
+    faceShape: "",
+    idealNeckline: "",
+    idealFit: "",
+    idealFabrics: [],
+    avoidFabrics: [],
+    justification: "",
+  },
+  favoriteColors: [],
+  avoidColors: [],
+  colorSeason: "",
+  faceShape: "",
+  idealNeckline: "",
+  idealFit: "",
+  idealFabrics: [],
+  avoidFabrics: [],
+  conversation: { line: "", imageGoal: "", styleDirection: "", avoidColorNote: "", favoriteColors: [], avoidColors: [] },
 };

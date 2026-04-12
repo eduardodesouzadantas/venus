@@ -5,7 +5,7 @@ import { deriveEssenceProfile, type EssenceProfile } from "@/lib/result/essence"
 
 type GoalKey = "Autoridade" | "Elegância" | "Atração" | "Criatividade" | "Discrição sofisticada";
 
-type ResultSurface = {
+export type ResultSurface = {
   essence: {
     key: EssenceProfile["key"];
     label: string;
@@ -129,7 +129,7 @@ function buildPalette(goalKey: GoalKey, metal: string): ResultPayload["palette"]
           { hex: "#F8FAFC", name: "Branco óptico" },
           { hex: "#374151", name: "Grafite" },
         ],
-    };
+      };
   }
 }
 
@@ -184,10 +184,10 @@ function buildPaletteFromAnalysis(
     description: normalizeText(analysis.paletteDescription) || fallbackPalette.description,
     colors:
       Array.isArray(analysis.colors) && analysis.colors.length > 0
-          ? analysis.colors.slice(0, 3).map((color) => ({
-            hex: normalizeText(color.hex) || "#111827",
-            name: normalizeText(color.name) || "Cor estratégica",
-          }))
+        ? analysis.colors.slice(0, 3).map((color) => ({
+          hex: normalizeText(color.hex) || "#111827",
+          name: normalizeText(color.name) || "Cor estratégica",
+        }))
         : fallbackPalette.colors,
     metal: normalizeText(analysis.metal) || fallbackPalette.metal,
     contrast: normalizeText(analysis.contrast) || fallbackPalette.contrast,
@@ -395,45 +395,45 @@ export function buildResultSurface(data: OnboardingData, visualAnalysis?: Visual
 
   const resolvedEssence = visualAnalysis
     ? {
-        key: essence.key,
-        label: normalizeText(visualAnalysis.essenceLabel) || essence.label,
-        summary: normalizeText(visualAnalysis.essenceSummary) || essence.summary,
-        confidenceLabel: normalizeText(visualAnalysis.confidenceLabel) || "Leitura visual por IA",
-        keySignals:
-          Array.isArray(visualAnalysis.keySignals) && visualAnalysis.keySignals.length > 0
-            ? visualAnalysis.keySignals.slice(0, 4).map((value) => normalizeText(value)).filter(Boolean)
-            : essence.keySignals,
-        styleDirection: visualAnalysis.styleDirection || essence.styleDirection,
-        lookNames:
-          Array.isArray(visualAnalysis.lookNames) && visualAnalysis.lookNames.length === 3
-            ? [
-                normalizeText(visualAnalysis.lookNames[0]) || essence.lookNames[0],
-                normalizeText(visualAnalysis.lookNames[1]) || essence.lookNames[1],
-                normalizeText(visualAnalysis.lookNames[2]) || essence.lookNames[2],
-              ]
-            : essence.lookNames,
-        toAvoid:
-          Array.isArray(visualAnalysis.toAvoid) && visualAnalysis.toAvoid.length > 0
-            ? visualAnalysis.toAvoid.slice(0, 3).map((value) => normalizeText(value)).filter(Boolean)
-            : essence.toAvoid,
-      }
+      key: essence.key,
+      label: normalizeText(visualAnalysis.essenceLabel) || essence.label,
+      summary: normalizeText(visualAnalysis.essenceSummary) || essence.summary,
+      confidenceLabel: normalizeText(visualAnalysis.confidenceLabel) || "Leitura visual por IA",
+      keySignals:
+        Array.isArray(visualAnalysis.keySignals) && visualAnalysis.keySignals.length > 0
+          ? visualAnalysis.keySignals.slice(0, 4).map((value) => normalizeText(value)).filter(Boolean)
+          : essence.keySignals,
+      styleDirection: visualAnalysis.styleDirection || essence.styleDirection,
+      lookNames:
+        Array.isArray(visualAnalysis.lookNames) && visualAnalysis.lookNames.length === 3
+          ? [
+            normalizeText(visualAnalysis.lookNames[0]) || essence.lookNames[0],
+            normalizeText(visualAnalysis.lookNames[1]) || essence.lookNames[1],
+            normalizeText(visualAnalysis.lookNames[2]) || essence.lookNames[2],
+          ]
+          : essence.lookNames,
+      toAvoid:
+        Array.isArray(visualAnalysis.toAvoid) && visualAnalysis.toAvoid.length > 0
+          ? visualAnalysis.toAvoid.slice(0, 3).map((value) => normalizeText(value)).filter(Boolean)
+          : essence.toAvoid,
+    }
     : {
-        key: essence.key,
-        label: essence.label,
-        summary: essence.summary,
-        confidenceLabel: essence.confidenceLabel,
-        keySignals: essence.keySignals,
-        styleDirection: essence.styleDirection,
-        lookNames: essence.lookNames,
-        toAvoid: essence.toAvoid,
-      };
+      key: essence.key,
+      label: essence.label,
+      summary: essence.summary,
+      confidenceLabel: essence.confidenceLabel,
+      keySignals: essence.keySignals,
+      styleDirection: essence.styleDirection,
+      lookNames: essence.lookNames,
+      toAvoid: essence.toAvoid,
+    };
 
   const hero = visualAnalysis
     ? {
-        dominantStyle: normalizeText(visualAnalysis.hero.dominantStyle) || `${resolvedEssence.label} • ${goal}`,
-        subtitle: normalizeText(visualAnalysis.hero.subtitle) || buildHero(goalKey, goal, fit, essence).subtitle,
-        coverImageUrl: "",
-      }
+      dominantStyle: normalizeText(visualAnalysis.hero.dominantStyle) || `${resolvedEssence.label} • ${goal}`,
+      subtitle: normalizeText(visualAnalysis.hero.subtitle) || buildHero(goalKey, goal, fit, essence).subtitle,
+      coverImageUrl: "",
+    }
     : buildHero(goalKey, goal, fit, essence);
 
   const palette = visualAnalysis
@@ -442,28 +442,28 @@ export function buildResultSurface(data: OnboardingData, visualAnalysis?: Visual
 
   const diagnostic = visualAnalysis
     ? {
-        currentPerception:
-          normalizeText(visualAnalysis.diagnostic.currentPerception) ||
-          buildDiagnostic(goal, mainPain, fit, faceLines, essence).currentPerception,
-        desiredGoal:
-          normalizeText(visualAnalysis.diagnostic.desiredGoal) ||
-          buildDiagnostic(goal, mainPain, fit, faceLines, essence).desiredGoal,
-        gapSolution:
-          normalizeText(visualAnalysis.diagnostic.gapSolution) ||
-          buildDiagnostic(goal, mainPain, fit, faceLines, essence).gapSolution,
-      }
+      currentPerception:
+        normalizeText(visualAnalysis.diagnostic.currentPerception) ||
+        buildDiagnostic(goal, mainPain, fit, faceLines, essence).currentPerception,
+      desiredGoal:
+        normalizeText(visualAnalysis.diagnostic.desiredGoal) ||
+        buildDiagnostic(goal, mainPain, fit, faceLines, essence).desiredGoal,
+      gapSolution:
+        normalizeText(visualAnalysis.diagnostic.gapSolution) ||
+        buildDiagnostic(goal, mainPain, fit, faceLines, essence).gapSolution,
+    }
     : buildDiagnostic(goal, mainPain, fit, faceLines, essence);
 
   const bodyVisagism = visualAnalysis
     ? {
-        shoulders:
-          normalizeText(visualAnalysis.bodyVisagism.shoulders) ||
-          buildBodyVisagism(fit, faceLines).shoulders,
-        face: normalizeText(visualAnalysis.bodyVisagism.face) || buildBodyVisagism(fit, faceLines).face,
-        generalFit:
-          normalizeText(visualAnalysis.bodyVisagism.generalFit) ||
-          buildBodyVisagism(fit, faceLines).generalFit,
-      }
+      shoulders:
+        normalizeText(visualAnalysis.bodyVisagism.shoulders) ||
+        buildBodyVisagism(fit, faceLines).shoulders,
+      face: normalizeText(visualAnalysis.bodyVisagism.face) || buildBodyVisagism(fit, faceLines).face,
+      generalFit:
+        normalizeText(visualAnalysis.bodyVisagism.generalFit) ||
+        buildBodyVisagism(fit, faceLines).generalFit,
+    }
     : buildBodyVisagism(fit, faceLines);
 
   const accessories = buildAccessories(goalKey, metal, essence);

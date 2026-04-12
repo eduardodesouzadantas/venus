@@ -36,12 +36,12 @@ function SaveProfileForm() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-black p-6 pt-20">
-      <div className="pointer-events-none absolute left-1/2 top-1/2 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#D4AF37]/10 blur-[100px]" />
+      <div className="pointer-events-none absolute left-1/2 top-1/2 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#C9A84C]/10 blur-[100px]" />
 
       <GlassContainer className="relative z-10 w-full text-center shadow-2xl">
         <div className="mb-4 flex w-full justify-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full border border-[#D4AF37] bg-[#D4AF37]/20 shadow-[0_0_20px_rgba(212,175,55,0.4)]">
-            <CheckCircle2 className="h-8 w-8 text-[#D4AF37]" />
+          <div className="flex h-16 w-16 items-center justify-center rounded-full border border-[#C9A84C] bg-[#C9A84C]/20 shadow-[0_0_20px_rgba(212,175,55,0.4)]">
+            <CheckCircle2 className="h-8 w-8 text-[#C9A84C]" />
           </div>
         </div>
 
@@ -65,7 +65,7 @@ function SaveProfileForm() {
               name="name"
               required
               placeholder="Ex: Isabela"
-              className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-white transition-colors placeholder:text-white/30 focus:border-[#D4AF37] focus:outline-none"
+              className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-white transition-colors placeholder:text-white/30 focus:border-[#C9A84C] focus:outline-none"
             />
           </div>
 
@@ -76,7 +76,7 @@ function SaveProfileForm() {
               type="email"
               required
               placeholder="voce@email.com"
-              className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-white transition-colors placeholder:text-white/30 focus:border-[#D4AF37] focus:outline-none"
+              className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-white transition-colors placeholder:text-white/30 focus:border-[#C9A84C] focus:outline-none"
             />
           </div>
 
@@ -84,7 +84,7 @@ function SaveProfileForm() {
             variant="solid"
             type="submit"
             disabled={loading}
-            className="mt-6 w-full bg-[#D4AF37] text-black hover:bg-[#D4AF37]/80"
+            className="mt-6 w-full bg-[#C9A84C] text-black hover:bg-[#C9A84C]/80"
           >
             {loading ? "Salvando..." : "Salvar leitura"}
           </VenusButton>

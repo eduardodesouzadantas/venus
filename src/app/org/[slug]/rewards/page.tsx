@@ -12,26 +12,26 @@ import { rewardTypeLabel, rewardTypeNeedsValue, type MerchantRewardRecord, type 
 
 type RewardsResponse =
   | {
-      ok: true;
-      org: {
-        id: string;
-        slug: string;
-        name: string;
-      };
-      rewards: MerchantRewardRecord[];
-    }
-  | {
-      error?: string;
+    ok: true;
+    org: {
+      id: string;
+      slug: string;
+      name: string;
     };
+    rewards: MerchantRewardRecord[];
+  }
+  | {
+    error?: string;
+  };
 
 type RewardMutationResponse =
   | {
-      ok: true;
-      reward: MerchantRewardRecord;
-    }
+    ok: true;
+    reward: MerchantRewardRecord;
+  }
   | {
-      error?: string;
-    };
+    error?: string;
+  };
 
 const REWARD_OPTIONS: Array<{ value: MerchantRewardType; description: string }> = MERCHANT_REWARD_TYPES.map((type) => ({
   value: type,
@@ -197,7 +197,7 @@ export default function MerchantRewardsPage({ params }: { params: Promise<{ slug
       <main className="flex-1 p-8 md:p-12 overflow-y-auto no-scrollbar">
         <header className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between mb-10">
           <div className="space-y-2">
-            <Text className="text-[10px] uppercase font-bold tracking-[0.4em] text-[#D4AF37]">
+            <Text className="text-[10px] uppercase font-bold tracking-[0.4em] text-[#C9A84C]">
               {orgName}
             </Text>
             <Heading as="h1" className="text-3xl md:text-4xl tracking-tighter uppercase leading-none">
@@ -218,7 +218,7 @@ export default function MerchantRewardsPage({ params }: { params: Promise<{ slug
               onClick={handleCreate}
               disabled={loading || saving || !label.trim() || (rewardTypeNeedsValue(type) && !value.trim())}
               variant="solid"
-              className="h-12 px-6 rounded-full text-[10px] uppercase tracking-[0.08em] font-medium bg-[#D4AF37] text-black"
+              className="h-12 px-6 rounded-full text-[10px] uppercase tracking-[0.08em] font-medium bg-[#C9A84C] text-black"
             >
               {saving ? "Salvando..." : "Criar recompensa"}
             </VenusButton>
@@ -249,11 +249,10 @@ export default function MerchantRewardsPage({ params }: { params: Promise<{ slug
                     key={option.value}
                     type="button"
                     onClick={() => setType(option.value)}
-                    className={`rounded-[28px] border px-4 py-4 text-left transition-colors ${
-                      type === option.value
-                        ? "border-[#D4AF37]/30 bg-[#D4AF37]/10 text-white"
+                    className={`rounded-[28px] border px-4 py-4 text-left transition-colors ${type === option.value
+                        ? "border-[#C9A84C]/30 bg-[#C9A84C]/10 text-white"
                         : "border-white/10 bg-black/30 text-white/80 hover:bg-white/5"
-                    }`}
+                      }`}
                   >
                     <div className="text-sm font-medium">{rewardTypeLabel(option.value)}</div>
                     <div className="mt-1 text-[11px] text-white/45">{option.description}</div>
@@ -267,7 +266,7 @@ export default function MerchantRewardsPage({ params }: { params: Promise<{ slug
                   <input
                     value={label}
                     onChange={(event) => setLabel(event.target.value)}
-                    className="h-14 w-full rounded-3xl border border-white/10 bg-white/5 px-5 text-sm text-white outline-none transition-colors focus:border-[#D4AF37]/40"
+                    className="h-14 w-full rounded-3xl border border-white/10 bg-white/5 px-5 text-sm text-white outline-none transition-colors focus:border-[#C9A84C]/40"
                     placeholder="Ex: 10% na proxima compra"
                   />
                 </label>
@@ -279,7 +278,7 @@ export default function MerchantRewardsPage({ params }: { params: Promise<{ slug
                       type="number"
                       value={value}
                       onChange={(event) => setValue(event.target.value)}
-                      className="h-14 w-full rounded-3xl border border-white/10 bg-white/5 px-5 text-sm text-white outline-none transition-colors focus:border-[#D4AF37]/40"
+                      className="h-14 w-full rounded-3xl border border-white/10 bg-white/5 px-5 text-sm text-white outline-none transition-colors focus:border-[#C9A84C]/40"
                       placeholder={type === "discount_percent" ? "10" : "50"}
                     />
                   </label>
@@ -291,7 +290,7 @@ export default function MerchantRewardsPage({ params }: { params: Promise<{ slug
                     type="date"
                     value={expiresAt}
                     onChange={(event) => setExpiresAt(event.target.value)}
-                    className="h-14 w-full rounded-3xl border border-white/10 bg-white/5 px-5 text-sm text-white outline-none transition-colors focus:border-[#D4AF37]/40"
+                    className="h-14 w-full rounded-3xl border border-white/10 bg-white/5 px-5 text-sm text-white outline-none transition-colors focus:border-[#C9A84C]/40"
                   />
                 </label>
               </div>
@@ -337,15 +336,14 @@ function RewardCard({
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[#D4AF37]">
+            <span className="rounded-full border border-[#C9A84C]/20 bg-[#C9A84C]/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[#C9A84C]">
               {rewardTypeLabel(reward.type)}
             </span>
             <span
-              className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${
-                reward.active
+              className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${reward.active
                   ? "border-green-500/20 bg-green-500/10 text-green-300"
                   : "border-white/10 bg-white/5 text-white/45"
-              }`}
+                }`}
             >
               {reward.active ? "Ativa" : "Inativa"}
             </span>
@@ -400,9 +398,8 @@ function NavItem({ href, icon, label, active = false }: { href: string; icon: Re
   return (
     <Link
       href={href}
-      className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all ${
-        active ? "bg-white text-black shadow-2xl" : "text-white/40 hover:bg-white/5 hover:text-white"
-      }`}
+      className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all ${active ? "bg-white text-black shadow-2xl" : "text-white/40 hover:bg-white/5 hover:text-white"
+        }`}
     >
       {icon}
       <span className="text-[11px] font-bold uppercase tracking-widest">{label}</span>
@@ -414,7 +411,7 @@ function EmptyState({ title, description }: { title: string; description: string
   return (
     <div className="rounded-[24px] border border-dashed border-white/10 bg-black/20 p-4 text-sm text-white/50">
       <div className="flex items-center gap-2 text-white/80">
-        <Check size={14} className="text-[#D4AF37]" />
+        <Check size={14} className="text-[#C9A84C]" />
         <span className="font-medium">{title}</span>
       </div>
       <div className="mt-1 text-xs text-white/45">{description}</div>

@@ -21,7 +21,7 @@ export default function MerchantProofDashboard() {
       metric: "+45%",
       label: "Conversão Adicional",
       desc: "O recurso 'Ver em mim' remove a última barreira de dúvida, transformando a visualização em posse imediata.",
-      icon: <Sparkles className="w-6 h-6 text-[#D4AF37]" />,
+      icon: <Sparkles className="w-6 h-6 text-[#C9A84C]" />,
       whyItMatters: "Aumenta a confiança do cliente e reduz drasticamente a taxa de abandono de carrinho."
     },
     {
@@ -35,15 +35,15 @@ export default function MerchantProofDashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-black text-white pb-32 selection:bg-[#D4AF37] selection:text-black">
+    <div className="min-h-screen bg-black text-white pb-32 selection:bg-[#C9A84C] selection:text-black">
       
       {/* Premium Hero Section */}
       <div className="relative px-6 pt-24 pb-16 overflow-hidden">
-         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[120%] h-[500px] bg-gradient-to-b from-[#D4AF37]/10 via-transparent to-transparent blur-[120px] pointer-events-none" />
+         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[120%] h-[500px] bg-gradient-to-b from-[#C9A84C]/10 via-transparent to-transparent blur-[120px] pointer-events-none" />
          
          <div className="relative z-10 flex flex-col items-center text-center space-y-6">
-            <div className="w-16 h-px bg-[#D4AF37] mb-2 shadow-[0_0_20px_rgba(212,175,55,0.8)]" />
-            <Text className="text-[10px] uppercase font-bold tracking-[0.6em] text-[#D4AF37]">Merchant Proof</Text>
+            <div className="w-16 h-px bg-[#C9A84C] mb-2 shadow-[0_0_20px_rgba(212,175,55,0.8)]" />
+            <Text className="text-[10px] uppercase font-bold tracking-[0.6em] text-[#C9A84C]">Merchant Proof</Text>
             <Heading as="h1" className="text-4xl tracking-tighter uppercase max-w-[320px] leading-none">
                Como o Venus gera valor real
             </Heading>
@@ -81,12 +81,12 @@ export default function MerchantProofDashboard() {
               <div className="p-8 rounded-[48px] bg-white/[0.03] border border-white/5 space-y-4">
                  <Heading as="h2" className="text-3xl tracking-tighter">R$ 2.4k</Heading>
                  <Text className="text-[9px] uppercase tracking-widest text-white/40 font-bold leading-tight">Ticket Médio (AOV)</Text>
-                 <Text className="text-[10px] text-[#D4AF37] font-bold">3.2x BOOST</Text>
+                 <Text className="text-[10px] text-[#C9A84C] font-bold">3.2x BOOST</Text>
               </div>
               <div className="p-8 rounded-[48px] bg-white/[0.03] border border-white/5 space-y-4">
                  <Heading as="h2" className="text-3xl tracking-tighter">+45%</Heading>
                  <Text className="text-[9px] uppercase tracking-widest text-white/40 font-bold leading-tight">Decisão via Try-On</Text>
-                 <Text className="text-[10px] text-[#D4AF37] font-bold">GAP KILLER</Text>
+                 <Text className="text-[10px] text-[#C9A84C] font-bold">GAP KILLER</Text>
               </div>
            </div>
         </div>
@@ -100,9 +100,9 @@ export default function MerchantProofDashboard() {
            
            <div className="space-y-4">
               {funnelStages.map((stage, i) => (
-                <div key={i} className={`p-6 rounded-[32px] border flex items-center justify-between transition-all ${stage.success ? "bg-[#D4AF37] text-black border-[#D4AF37]" : stage.highlight ? "bg-white/[0.08] border-[#D4AF37]/30" : "bg-white/[0.02] border-white/5 opacity-60"}`}>
+                <div key={i} className={`p-6 rounded-[32px] border flex items-center justify-between transition-all ${stage.success ? "bg-[#C9A84C] text-black border-[#C9A84C]" : stage.highlight ? "bg-white/[0.08] border-[#C9A84C]/30" : "bg-white/[0.02] border-white/5 opacity-60"}`}>
                    <div className="flex items-center gap-4">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-mono font-bold ${stage.success ? "bg-black text-[#D4AF37]" : "bg-white/10 text-white/40"}`}>{i+1}</div>
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-mono font-bold ${stage.success ? "bg-black text-[#C9A84C]" : "bg-white/10 text-white/40"}`}>{i+1}</div>
                       <div className="flex flex-col">
                          <span className={`text-[10px] uppercase font-bold tracking-widest ${stage.success ? "text-black/60" : "text-white/40"}`}>{stage.desc}</span>
                          <Heading as="h4" className="text-sm tracking-tight">{stage.name}</Heading>
@@ -120,15 +120,15 @@ export default function MerchantProofDashboard() {
            <div className="space-y-6">
               {valueDrivers.map((driver, i) => (
                 <div key={i} className="p-10 rounded-[60px] bg-white/[0.03] border border-white/10 space-y-8 relative group overflow-hidden">
-                   <div className="absolute top-0 right-0 w-32 h-32 bg-[#D4AF37]/5 blur-[80px] -mr-16 -mt-16" />
+                   <div className="absolute top-0 right-0 w-32 h-32 bg-[#C9A84C]/5 blur-[80px] -mr-16 -mt-16" />
                    
                    <div className="flex items-center justify-between">
                       <div className="w-14 h-14 rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center">
                          {driver.icon}
                       </div>
                       <div className="flex flex-col items-end">
-                         <span className="text-3xl tracking-tighter text-[#D4AF37]">{driver.metric}</span>
-                         <span className="text-[10px] uppercase font-bold tracking-widest text-[#D4AF37]">{driver.label}</span>
+                         <span className="text-3xl tracking-tighter text-[#C9A84C]">{driver.metric}</span>
+                         <span className="text-[10px] uppercase font-bold tracking-widest text-[#C9A84C]">{driver.label}</span>
                       </div>
                    </div>
                    
@@ -152,7 +152,7 @@ export default function MerchantProofDashboard() {
         </section>
 
         {/* Revenue Opportunities (Step 4) */}
-        <section className="p-10 rounded-[60px] bg-[#D4AF37] text-black space-y-10 shadow-[0_0_80px_rgba(212,175,55,0.2)]">
+        <section className="p-10 rounded-[60px] bg-[#C9A84C] text-black space-y-10 shadow-[0_0_80px_rgba(212,175,55,0.2)]">
            <div className="space-y-2">
               <Heading as="h3" className="text-xl uppercase tracking-tighter">Onde o valor cresce</Heading>
               <Text className="text-xs text-black/60 font-medium uppercase tracking-widest">Operational Growth</Text>
@@ -185,7 +185,7 @@ export default function MerchantProofDashboard() {
            </div>
            
            <Link href="/merchant" className="block">
-              <VenusButton variant="solid" className="w-full py-8 h-auto bg-black text-[#D4AF37] rounded-full text-[11px] font-bold uppercase tracking-[0.4em] shadow-2xl active:scale-95 transition-all">
+              <VenusButton variant="solid" className="w-full py-8 h-auto bg-black text-[#C9A84C] rounded-full text-[11px] font-bold uppercase tracking-[0.4em] shadow-2xl active:scale-95 transition-all">
                  Abrir operação do merchant
               </VenusButton>
            </Link>
@@ -203,7 +203,7 @@ export default function MerchantProofDashboard() {
                 >
                 </div>
               ))}
-              <div className="w-10 h-10 rounded-full border-2 border-black bg-[#D4AF37] flex items-center justify-center text-black text-[10px] font-bold">+82</div>
+              <div className="w-10 h-10 rounded-full border-2 border-black bg-[#C9A84C] flex items-center justify-center text-black text-[10px] font-bold">+82</div>
            </div>
            <Heading as="h3" className="text-lg uppercase tracking-tight">82 lojistas já operam com Venus</Heading>
            <Text className="text-[10px] text-white/20 uppercase tracking-[0.5em] font-mono uppercase">Operational proof · 2026</Text>
@@ -212,7 +212,7 @@ export default function MerchantProofDashboard() {
       </div>
 
       {/* Floating Accent */}
-      <div className="fixed bottom-0 left-0 w-full h-1/2 bg-gradient-to-t from-[#D4AF37]/5 to-transparent pointer-events-none -z-10" />
+      <div className="fixed bottom-0 left-0 w-full h-1/2 bg-gradient-to-t from-[#C9A84C]/5 to-transparent pointer-events-none -z-10" />
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { OnboardingData, OnboardingConversationData, defaultOnboardingData } fro
 
 interface OnboardingContextProps {
   data: OnboardingData;
-  updateData: <K extends keyof OnboardingData>(step: K, values: Partial<OnboardingData[K]>) => void;
+  updateData: <K extends keyof OnboardingData>(step: K, values: Partial<OnboardingData[K]> | OnboardingData[K]) => void;
   updateConversation: (values: Partial<OnboardingConversationData>) => void;
 }
 
@@ -97,10 +97,18 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     }
   }, [data, isLoaded]);
 
-  const updateData = <K extends keyof OnboardingData>(step: K, values: Partial<OnboardingData[K]>) => {
+  const updateData = <K extends keyof OnboardingData>(step: K, values: Partial<OnboardingData[K]> | OnboardingData[K]) => {
+    const isMergeable = (input: unknown): input is Record<string, unknown> => !!input && typeof input === "object" && !Array.isArray(input);
+
     setData((prev) => ({
       ...prev,
-      [step]: { ...prev[step], ...values },
+      [step]: (() => {
+        const current = prev[step] as unknown;
+        if (isMergeable(current) && isMergeable(values)) {
+          return { ...(current as Record<string, unknown>), ...(values as Record<string, unknown>) } as OnboardingData[K];
+        }
+        return values as OnboardingData[K];
+      })(),
     }));
   };
 

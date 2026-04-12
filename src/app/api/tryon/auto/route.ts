@@ -1,14 +1,17 @@
-﻿import { fal } from "@fal-ai/client";
+import { fal } from "@fal-ai/client";
 import { NextRequest, NextResponse } from "next/server";
 import { getTryOnResult, getTryOnStatus } from "@/lib/tryon/client";
 
 export const dynamic = "force-dynamic";
 
 type TryOnAutoBody = {
+  personImageUrl?: string;
+  garmentImageUrl?: string;
+  orgId?: string;
+  category?: string;
   person_image_url?: string;
   garment_image_url?: string;
   org_id?: string;
-  category?: string;
 };
 
 function normalizeText(value: unknown): string {
@@ -18,7 +21,7 @@ function normalizeText(value: unknown): string {
 function detectCategory(value: string): "tops" | "bottoms" | "one-pieces" {
   const text = normalizeText(value).toLowerCase();
   if (text.includes("dress") || text.includes("vestido")) return "one-pieces";
-  if (text.includes("calca") || text.includes("calÃ§a") || text.includes("saia") || text.includes("pants") || text.includes("skirt")) return "bottoms";
+  if (text.includes("calca") || text.includes("calça") || text.includes("saia") || text.includes("pants") || text.includes("skirt")) return "bottoms";
   return "tops";
 }
 
@@ -31,7 +34,7 @@ function buildTryOnInput(personImageUrl: string, garmentImageUrl: string, catego
 }
 
 function toRequestId(params: URLSearchParams) {
-  return params.get("request_id") || params.get("id") || "";
+  return params.get("request_id") || params.get("requestId") || params.get("id") || "";
 }
 
 export async function POST(req: NextRequest) {
@@ -43,9 +46,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
 
-  const personImageUrl = normalizeText(body.person_image_url);
-  const garmentImageUrl = normalizeText(body.garment_image_url);
-  const orgId = normalizeText(body.org_id);
+  const personImageUrl = normalizeText(body.personImageUrl || body.person_image_url);
+  const garmentImageUrl = normalizeText(body.garmentImageUrl || body.garment_image_url);
+  const orgId = normalizeText(body.orgId || body.org_id);
   const category = normalizeText(body.category) || "tops";
 
   if (!personImageUrl || !garmentImageUrl) {
@@ -86,9 +89,9 @@ export async function POST(req: NextRequest) {
       if (generatedImageUrl) {
         return NextResponse.json({
           status: "completed",
-          generated_image_url: generatedImageUrl,
-          request_id: requestId || null,
-          org_id: orgId || null,
+          generatedImageUrl,
+          requestId: requestId || null,
+          orgId: orgId || null,
         });
       }
     }
@@ -99,8 +102,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       status: "processing",
-      request_id: requestId,
-      org_id: orgId || null,
+      requestId,
+      orgId: orgId || null,
     });
   } catch (error) {
     console.error("[tryon/auto] start error:", error);
@@ -113,7 +116,7 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   const requestId = toRequestId(req.nextUrl.searchParams);
-  const orgId = normalizeText(req.nextUrl.searchParams.get("org_id"));
+  const orgId = normalizeText(req.nextUrl.searchParams.get("orgId") || req.nextUrl.searchParams.get("org_id"));
 
   if (!requestId) {
     return NextResponse.json({ error: "Missing request_id" }, { status: 400 });
@@ -136,20 +139,20 @@ export async function GET(req: NextRequest) {
       const generatedImageUrl = result.images[0]?.url || "";
       return NextResponse.json({
         status: "completed",
-        generated_image_url: generatedImageUrl,
-        request_id: requestId,
-        org_id: orgId || null,
+        generatedImageUrl,
+        requestId,
+        orgId: orgId || null,
       });
     }
 
     if (statusStr === "FAILED") {
-      return NextResponse.json({ status: "failed", request_id: requestId, org_id: orgId || null });
+      return NextResponse.json({ status: "failed", requestId, orgId: orgId || null });
     }
 
     return NextResponse.json({
       status: statusStr === "IN_PROGRESS" ? "processing" : "queued",
-      request_id: requestId,
-      org_id: orgId || null,
+      requestId,
+      orgId: orgId || null,
     });
   } catch (error) {
     console.error("[tryon/auto] status error:", error);

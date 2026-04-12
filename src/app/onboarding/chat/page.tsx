@@ -1,4 +1,4 @@
-ï»¿"use client";
+"use client";
 
 import { AnimatePresence, motion } from "framer-motion";
 import { SendHorizonal } from "lucide-react";
@@ -17,31 +17,39 @@ type ChoiceOption = {
 
 type ChatStep =
   | {
-      key: "line";
-      kind: "single";
-      prompt: string;
-      placeholder: string;
-      options: ChoiceOption[];
-    }
+    key: "line";
+    kind: "single";
+    prompt: string;
+    placeholder: string;
+    options: ChoiceOption[];
+  }
   | {
-      key: "imageGoal";
-      kind: "single";
-      prompt: string;
-      placeholder: string;
-      options: ChoiceOption[];
-    }
+    key: "imageGoal";
+    kind: "single";
+    prompt: string;
+    placeholder: string;
+    options: ChoiceOption[];
+  }
   | {
-      key: "styleDirection";
-      kind: "text";
-      prompt: string;
-      placeholder: string;
-    };
+    key: "styleDirection";
+    kind: "text";
+    prompt: string;
+    placeholder: string;
+  }
+  | {
+    key: "avoidColorNote";
+    kind: "text";
+    prompt: string;
+    placeholder: string;
+    optional: true;
+  };
 
 type Message = {
   id: string;
   role: ChatRole;
   text: string;
 };
+
 
 const CHAT_STEPS: ChatStep[] = [
   {
@@ -76,8 +84,8 @@ const CHAT_STEPS: ChatStep[] = [
   },
 ];
 
-const INTRO_MESSAGE = "Oi. Eu sou a Venus Stylist. Vou ler sua presenÃ§a em trÃªs perguntas e cruzar sua foto com a colorimetria.";
-const CLOSING_MESSAGE = "Perfeito. Agora vou ler sua presenÃ§a.";
+const INTRO_MESSAGE = "Oi. Eu sou a Venus Stylist. Vou ler sua presença em três perguntas e cruzar sua foto com a colorimetria.";
+const CLOSING_MESSAGE = "Perfeito. Agora vou ler sua presença.";
 
 function normalize(text: string) {
   return text
@@ -103,13 +111,13 @@ function TypingBubble() {
   return (
     <div className="flex items-start gap-3">
       <div className="mt-1 shrink-0">
-        <VenusAvatar size={30} animated />
+        <VenusAvatar size={34} animated />
       </div>
-      <div className="rounded-[22px] rounded-bl-md border border-white/10 bg-white/[0.055] px-4 py-3 text-sm text-white/68 shadow-[0_12px_40px_rgba(0,0,0,0.22)] backdrop-blur-xl">
+      <div className="rounded-[22px] rounded-bl-none border border-white/10 bg-white/[0.055] px-5 py-4 text-sm text-white/68 shadow-[0_12px_40px_rgba(0,0,0,0.4)] backdrop-blur-xl">
         <span className="inline-flex items-center gap-1.5">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#D4AF37]" />
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#D4AF37] [animation-delay:120ms]" />
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#D4AF37] [animation-delay:240ms]" />
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#C9A84C]" />
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#C9A84C] [animation-delay:120ms]" />
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#C9A84C] [animation-delay:240ms]" />
         </span>
       </div>
     </div>
@@ -123,16 +131,16 @@ function MessageBubble({ message }: { message: Message }) {
     <div className={`flex items-end gap-3 ${isVenus ? "justify-start" : "justify-end"}`}>
       {isVenus ? (
         <div className="mt-1 shrink-0">
-          <VenusAvatar size={30} animated />
+          <VenusAvatar size={34} animated />
         </div>
       ) : null}
 
       <div
         className={[
-          "max-w-[min(84vw,32rem)] rounded-[26px] px-4 py-3 text-sm leading-7 shadow-[0_20px_50px_rgba(0,0,0,0.25)]",
+          "max-w-[min(84vw,32rem)] rounded-[26px] px-5 py-4 text-[15px] leading-7 shadow-[0_20px_60px_rgba(0,0,0,0.5)]",
           isVenus
-            ? "rounded-bl-md border border-white/10 bg-white/[0.055] text-white/88 backdrop-blur-xl"
-            : "rounded-br-md border border-[#D4AF37]/25 bg-[linear-gradient(180deg,rgba(212,175,55,0.18)_0%,rgba(212,175,55,0.08)_100%)] text-white",
+            ? "rounded-bl-none border border-white/10 bg-white/[0.055] text-white/95 backdrop-blur-xl"
+            : "rounded-br-none border border-[#C9A84C]/25 bg-[linear-gradient(180deg,rgba(201,168,76,0.15)_0%,rgba(201,168,76,0.05)_100%)] text-white",
         ].join(" ")}
       >
         <p className="whitespace-pre-line">{message.text}</p>
@@ -160,7 +168,7 @@ function ChoiceChip({
       className={[
         "inline-flex min-h-11 items-center justify-center rounded-full border px-4 py-2 text-[13px] font-medium transition-all duration-200 active:scale-[0.98]",
         selected
-          ? "border-[#D4AF37]/40 bg-[#D4AF37]/18 text-[#F5E2A0] shadow-[0_12px_24px_rgba(212,175,55,0.12)]"
+          ? "border-[#C9A84C]/40 bg-[#C9A84C]/18 text-[#F5E2A0] shadow-[0_12px_24px_rgba(212,175,55,0.12)]"
           : "border-white/10 bg-white/[0.04] text-white/74 hover:border-white/18 hover:bg-white/[0.07]",
         disabled ? "cursor-not-allowed opacity-50" : "",
       ].join(" ")}
@@ -231,6 +239,7 @@ function ChatContent() {
     }
   }, [currentStep, isTyping]);
 
+
   const scheduleNextStep = (nextIndex: number) => {
     setIsTyping(true);
     stepTimerRef.current = setTimeout(() => {
@@ -263,7 +272,7 @@ function ChatContent() {
       redirectTimerRef.current = setTimeout(() => {
         router.push(nextHref);
       }, 900);
-    }, 800);
+    }, 3500);
   };
 
   const handleChoiceSelect = (option: ChoiceOption) => {
@@ -297,20 +306,28 @@ function ChatContent() {
 
     if (currentStep.kind === "text") {
       const trimmed = inputValue.trim();
-      if (!trimmed) {
+      if (!trimmed && !("optional" in currentStep && currentStep.optional)) {
         setError("Escreva uma resposta antes de enviar.");
         return;
       }
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `${currentStep.key}-answer`,
-          role: "client",
-          text: trimmed,
-        },
-      ]);
-      updateConversation({ styleDirection: trimmed });
+      if (trimmed) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `${currentStep.key}-answer`,
+            role: "client",
+            text: trimmed,
+          },
+        ]);
+      }
+
+      if (currentStep.key === "styleDirection" && trimmed) {
+        updateConversation({ styleDirection: trimmed });
+      } else if (currentStep.key === "avoidColorNote" && trimmed) {
+        updateConversation({ avoidColorNote: trimmed });
+      }
+
       setInputValue("");
       setError(null);
       setActiveStepIndex(null);
@@ -341,21 +358,25 @@ function ChatContent() {
     }
   };
 
-  const canSend = !!currentStep && !isTyping && !isFinishing && (currentStep.kind === "text" ? inputValue.trim().length > 0 : Boolean(inputValue.trim()));
+  const canSend =
+    !!currentStep &&
+    !isTyping &&
+    !isFinishing &&
+    (currentStep.kind === "text" ? inputValue.trim().length > 0 || ("optional" in currentStep && currentStep.optional) : Boolean(inputValue.trim()));
 
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden bg-[#0a0a0a] text-white">
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute left-[-10%] top-[-8%] h-72 w-72 rounded-full bg-[#D4AF37]/8 blur-[100px]" />
+        <div className="absolute left-[-10%] top-[-8%] h-72 w-72 rounded-full bg-[#C9A84C]/8 blur-[100px]" />
         <div className="absolute right-[-8%] top-[18%] h-64 w-64 rounded-full bg-white/5 blur-[120px]" />
-        <div className="absolute bottom-[-8%] left-[18%] h-80 w-80 rounded-full bg-[#D4AF37]/5 blur-[120px]" />
+        <div className="absolute bottom-[-8%] left-[18%] h-80 w-80 rounded-full bg-[#C9A84C]/5 blur-[120px]" />
       </div>
 
       <header className="relative z-10 flex items-center gap-3 px-4 pb-3 pt-4 sm:px-6">
         <div className="flex items-center gap-3">
           <VenusAvatar size={42} animated />
           <div className="space-y-0.5">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.38em] text-[#D4AF37]">Venus Stylist</div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.38em] text-[#C9A84C]">Venus Stylist</div>
             <div className="text-[11px] text-white/42">Conversa consultiva em andamento</div>
           </div>
         </div>
@@ -388,7 +409,7 @@ function ChatContent() {
           {currentStep ? (
             <div className="mb-3 space-y-3">
               <div className="rounded-[28px] border border-white/10 bg-white/[0.045] px-4 py-4 shadow-[0_18px_50px_rgba(0,0,0,0.2)]">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.34em] text-[#D4AF37]">Venus</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.34em] text-[#C9A84C]">Venus</p>
                 <p className="mt-2 text-[15px] leading-7 text-white/90 sm:text-[16px]">{currentStep.prompt}</p>
               </div>
 
@@ -410,7 +431,9 @@ function ChatContent() {
                 </div>
               ) : (
                 <div className="rounded-[24px] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/48">
-                  Responda em texto livre. A Venus le o contexto, nao so palavras-chave.
+                  {"optional" in currentStep && currentStep.optional
+                    ? "Opcional. Se quiser, deixe um comentario rapido; se nao, pode seguir."
+                    : "Responda em texto livre. A Venus le o contexto, nao so palavras-chave."}
                 </div>
               )}
             </div>
@@ -430,14 +453,14 @@ function ChatContent() {
               rows={currentStep?.kind === "text" ? 3 : 1}
               disabled={!currentStep || isTyping || isFinishing}
               placeholder={currentStep?.placeholder || "Aguarde a proxima pergunta."}
-              className="min-h-14 flex-1 resize-none rounded-[26px] border border-white/10 bg-white/[0.04] px-4 py-4 text-[15px] leading-6 text-white outline-none placeholder:text-white/28 focus:border-[#D4AF37]/35 disabled:cursor-not-allowed disabled:opacity-50"
+              className="min-h-14 flex-1 resize-none rounded-[26px] border border-white/10 bg-white/[0.04] px-4 py-4 text-[15px] leading-6 text-white outline-none placeholder:text-white/28 focus:border-[#C9A84C]/35 disabled:cursor-not-allowed disabled:opacity-50"
             />
 
             <button
               type="button"
               onClick={handleSubmit}
               disabled={!canSend}
-              className="inline-flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-[22px] border border-[#D4AF37]/25 bg-[linear-gradient(180deg,#F1D77A_0%,#D4AF37_100%)] text-[#0a0a0a] shadow-[0_20px_40px_rgba(212,175,55,0.18)] transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-[22px] border border-[#C9A84C]/25 bg-[linear-gradient(180deg,#F1D77A_0%,#C9A84C_100%)] text-[#0a0a0a] shadow-[0_20px_40px_rgba(212,175,55,0.18)] transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
               aria-label="Enviar resposta"
             >
               <SendHorizonal className="h-4 w-4" />
@@ -456,3 +479,4 @@ export default function OnboardingChatPage() {
     </Suspense>
   );
 }
+

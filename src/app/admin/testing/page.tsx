@@ -40,7 +40,7 @@ export default function AdminTestingDashboard() {
       <div className="px-6 pt-12 pb-8 border-b border-white/5 bg-black/50 backdrop-blur-xl sticky top-0 z-50">
         <div className="flex items-center justify-between">
           <div className="flex flex-col">
-            <span className="text-[10px] uppercase font-bold tracking-[0.4em] text-[#D4AF37] mb-1">Conversion Lab</span>
+            <span className="text-[10px] uppercase font-bold tracking-[0.4em] text-[#C9A84C] mb-1">Conversion Lab</span>
             <Heading as="h1" className="text-2xl tracking-tighter uppercase">Simulação de Conversão</Heading>
           </div>
           <VenusButton 
@@ -49,7 +49,7 @@ export default function AdminTestingDashboard() {
             disabled={isRunning}
             className="border-white/10 rounded-full h-12 px-6 flex items-center justify-center gap-2 group"
           >
-             {isRunning ? <RefreshCw className="w-4 h-4 animate-spin text-[#D4AF37]" /> : <Play className="w-4 h-4 text-[#D4AF37] group-active:scale-95 transition-transform" />}
+             {isRunning ? <RefreshCw className="w-4 h-4 animate-spin text-[#C9A84C]" /> : <Play className="w-4 h-4 text-[#C9A84C] group-active:scale-95 transition-transform" />}
              <span className="text-[10px] font-bold uppercase tracking-widest">Executar Stress Test (100 Users)</span>
           </VenusButton>
         </div>
@@ -59,7 +59,7 @@ export default function AdminTestingDashboard() {
         {/* Real-time Summary */}
         <div className="grid grid-cols-2 gap-4">
            <div className="p-6 rounded-[32px] bg-white/[0.03] border border-white/5 space-y-3">
-              <div className="flex items-center gap-2 text-[#D4AF37]">
+              <div className="flex items-center gap-2 text-[#C9A84C]">
                  <TrendingUp size={16} />
                  <span className="text-[9px] uppercase font-bold tracking-widest">Revenue Potencial (Simulado)</span>
               </div>
@@ -98,7 +98,7 @@ export default function AdminTestingDashboard() {
                       <div className="flex flex-col">
                          <span className="text-xs font-bold text-white/80">{stage.name}</span>
                          <div className="flex items-center gap-3 mt-1">
-                            <span className="text-[9px] text-[#D4AF37] font-bold">{stage.rate}% Progress</span>
+                            <span className="text-[9px] text-[#C9A84C] font-bold">{stage.rate}% Progress</span>
                             {stage.drop > 0 && <span className="text-[9px] text-red-500/60 uppercase font-bold">Drop: {stage.drop}%</span>}
                          </div>
                       </div>
@@ -138,12 +138,12 @@ export default function AdminTestingDashboard() {
         <section className="space-y-6">
            <Heading as="h3" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">Hotspot IQ Analytics</Heading>
            <div className="grid grid-cols-2 gap-4">
-              <div className="p-6 rounded-[32px] bg-[#D4AF37]/5 border border-[#D4AF37]/20 flex flex-col items-center text-center gap-4 group">
-                 <div className="w-12 h-12 rounded-full bg-[#D4AF37]/10 flex items-center justify-center text-[#D4AF37] group-hover:scale-110 transition-transform">
+              <div className="p-6 rounded-[32px] bg-[#C9A84C]/5 border border-[#C9A84C]/20 flex flex-col items-center text-center gap-4 group">
+                 <div className="w-12 h-12 rounded-full bg-[#C9A84C]/10 flex items-center justify-center text-[#C9A84C] group-hover:scale-110 transition-transform">
                     <Sparkles size={24} />
                  </div>
                  <div className="space-y-1">
-                    <Text className="text-[9px] uppercase tracking-widest text-[#D4AF37] font-bold">Try-On Effectiveness (Ver em Mim)</Text>
+                    <Text className="text-[9px] uppercase tracking-widest text-[#C9A84C] font-bold">Try-On Effectiveness (Ver em Mim)</Text>
                     <Heading as="h4" className="text-2xl tracking-tighter">+45% Conv LIft</Heading>
                     <Text className="text-[8px] text-white/30 italic">Drive sharing & conversion</Text>
                  </div>
@@ -163,10 +163,10 @@ export default function AdminTestingDashboard() {
         </section>
 
         {/* Actionable Insights (Step 8 & 9) */}
-        <section className="space-y-6 p-8 rounded-[48px] bg-gradient-to-br from-[#D4AF37]/20 to-transparent border border-[#D4AF37]/30 shadow-2xl relative overflow-hidden">
-           <div className="absolute top-0 right-0 w-32 h-32 bg-[#D4AF37]/10 blur-[80px] -mr-16 -mt-16" />
+        <section className="space-y-6 p-8 rounded-[48px] bg-gradient-to-br from-[#C9A84C]/20 to-transparent border border-[#C9A84C]/30 shadow-2xl relative overflow-hidden">
+           <div className="absolute top-0 right-0 w-32 h-32 bg-[#C9A84C]/10 blur-[80px] -mr-16 -mt-16" />
            <div className="flex items-center gap-3 mb-6">
-              <Target className="w-6 h-6 text-[#D4AF37]" />
+              <Target className="w-6 h-6 text-[#C9A84C]" />
                <Heading as="h3" className="text-lg uppercase tracking-tight">Síntese de Validação Venus</Heading>
            </div>
            
@@ -195,7 +195,7 @@ export default function AdminTestingDashboard() {
       </div>
 
       {/* Floating Background Accent */}
-      <div className="fixed top-0 left-0 w-full h-[50vh] bg-gradient-to-b from-[#D4AF37]/5 to-transparent pointer-events-none -z-10" />
+      <div className="fixed top-0 left-0 w-full h-[50vh] bg-gradient-to-b from-[#C9A84C]/5 to-transparent pointer-events-none -z-10" />
     </div>
   );
 }

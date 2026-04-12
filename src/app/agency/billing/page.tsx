@@ -25,6 +25,16 @@ type RevenueHistoryRow = {
   cost_cents: number | null;
 };
 
+type CommissionHistoryRow = {
+  org_id: string | null;
+  client_phone: string | null;
+  product_id: string | null;
+  sale_amount: number | null;
+  commission_rate: number | null;
+  commission_amount: number | null;
+  confirmed_at: string | null;
+};
+
 function planPrice(planId: string | null | undefined) {
   return PLAN_MRR[(planId || "starter").toLowerCase()] ?? PLAN_MRR.starter;
 }
@@ -106,6 +116,21 @@ async function loadRevenueHistory() {
   return (result.data || []) as RevenueHistoryRow[];
 }
 
+async function loadCommissionHistory() {
+  const admin = createAdminClient();
+  const result = await queryWithTimeout(
+    admin
+      .from("commission_events")
+      .select("org_id, client_phone, product_id, sale_amount, commission_rate, commission_amount, confirmed_at")
+      .order("confirmed_at", { ascending: false })
+      .limit(100),
+    { data: [], error: null }
+  );
+
+  if (result.error) return [];
+  return (result.data || []) as CommissionHistoryRow[];
+}
+
 export default async function AgencyBillingPage() {
   try {
     await resolveAgencySession();
@@ -113,9 +138,10 @@ export default async function AgencyBillingPage() {
     redirect("/login");
   }
 
-  const [rows, revenueRows] = await Promise.all([
+  const [rows, revenueRows, commissionRows] = await Promise.all([
     listAgencyBillingRows({ range: "all" }).catch(() => [] as AgencyBillingRow[]),
     loadRevenueHistory().catch(() => [] as RevenueHistoryRow[]),
+    loadCommissionHistory().catch(() => [] as CommissionHistoryRow[]),
   ]);
 
   const activeRows = rows.filter((row) => row.status === "active" && !row.kill_switch);
@@ -124,6 +150,18 @@ export default async function AgencyBillingPage() {
   const pendingRows = rows.filter((row) => row.status !== "active" || row.kill_switch || row.billing_risk === "high");
   const revenueTotal = revenueRows.reduce((sum, row) => sum + Math.round((row.revenue_cents || 0) / 100), 0);
   const costTotal = revenueRows.reduce((sum, row) => sum + Math.round((row.cost_cents || 0) / 100), 0);
+  const commissionTotal = commissionRows.reduce((sum, row) => sum + Number(row.commission_amount || 0), 0);
+  const commissionByOrg = commissionRows.reduce<Record<string, { amount: number; count: number }>>((acc, row) => {
+    const key = row.org_id || "unknown";
+    const current = acc[key] || { amount: 0, count: 0 };
+    current.amount += Number(row.commission_amount || 0);
+    current.count += 1;
+    acc[key] = current;
+    return acc;
+  }, {});
+  const commissionBreakdown = Object.entries(commissionByOrg)
+    .map(([orgId, value]) => ({ orgId, ...value }))
+    .sort((left, right) => right.amount - left.amount);
 
   return (
     <main className="min-h-screen bg-[#080c0a] text-[#e8f0e9]">
@@ -204,6 +242,28 @@ export default async function AgencyBillingPage() {
         </div>
 
         <aside className="space-y-6 bg-[#0f1410] p-6">
+          <div className="rounded-none border border-[#1e2820] bg-[#141a15] p-5">
+            <h2 className="font-mono text-xs uppercase tracking-[1px] text-[#6b7d6c]">Comissão separada do MRR</h2>
+            <div className="mt-5 space-y-3">
+              <p className="font-mono text-lg font-bold text-[#C9A84C]">{formatMoney(commissionTotal)}</p>
+              <p className="text-sm text-[#6b7d6c]">
+                Comissão confirmada por venda. O valor abaixo não entra no MRR e fica segregado por loja.
+              </p>
+              <div className="space-y-2">
+                {commissionBreakdown.length ? (
+                  commissionBreakdown.slice(0, 6).map((row) => (
+                    <div key={row.orgId} className="flex items-center justify-between border-b border-[#1e2820] pb-2">
+                      <span className="text-[10px] uppercase tracking-[1px] text-white/70">{row.orgId}</span>
+                      <span className="font-mono text-sm text-[#C9A84C]">{formatMoney(row.amount)}</span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-[#6b7d6c]">Sem eventos de comissão registrados.</p>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div className="rounded-none border border-[#1e2820] bg-[#141a15] p-5">
             <h2 className="font-mono text-xs uppercase tracking-[1px] text-[#6b7d6c]">Histórico de receita</h2>
             <div className="mt-5 space-y-3">

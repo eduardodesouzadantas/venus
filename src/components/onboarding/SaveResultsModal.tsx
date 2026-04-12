@@ -13,10 +13,10 @@ interface SaveResultsModalProps {
   isOpen: boolean;
   onClose: () => void;
   onGoToLooks?: () => void;
-  stats: any;
+  surface: any;
 }
 
-export const SaveResultsModal = ({ isOpen, onClose, onGoToLooks, stats }: SaveResultsModalProps) => {
+export const SaveResultsModal = ({ isOpen, onClose, onGoToLooks, surface }: SaveResultsModalProps) => {
   const { data, updateData } = useOnboarding();
   const [formData, setFormData] = useState({
     name: data.contact?.name || "",
@@ -32,7 +32,7 @@ export const SaveResultsModal = ({ isOpen, onClose, onGoToLooks, stats }: SaveRe
 
     setTimeout(() => {
       triggerReEngagement(
-        { name: formData.name, phone: formData.phone, context: stats as any },
+        { name: formData.name, phone: formData.phone, context: surface as any },
         "high_intent_exit"
       );
     }, 5000);

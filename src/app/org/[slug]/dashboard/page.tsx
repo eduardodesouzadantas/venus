@@ -47,6 +47,7 @@ interface DashboardStats {
   urgentLead: { name: string } | null;
   leadsByStatus: { new: number; engaged: number; qualified: number; offer: number; won: number };
   productsWithTryons: Array<{ id: string; name: string; image_url: string | null; stock: number; tryon_count: number }>;
+  inventoryInsights: Array<{ id: string; severity: "critical" | "alert" | "info"; title: string; description: string }>;
 }
 
 async function getDashboardData(orgId: string): Promise<DashboardStats> {
@@ -66,6 +67,7 @@ async function getDashboardData(orgId: string): Promise<DashboardStats> {
     urgentLeadResult,
     leadsByStatusResult,
     productsResult,
+    variantsResult,
   ] = await Promise.all([
     supabase.from("crm_leads").select("*", { count: "exact", head: true }).eq("org_id", orgId).in("status", ["new", "engaged", "qualified"]),
     supabase.from("crm_leads").select("*", { count: "exact", head: true }).eq("org_id", orgId).eq("status", "won").gte("updated_at", startOfMonth.toISOString()),
@@ -95,7 +97,52 @@ async function getDashboardData(orgId: string): Promise<DashboardStats> {
         tryon_count: tryonCounts[p.id] || 0,
       }));
     }),
+    supabase.from("product_variants").select("product_id, size, quantity, active").eq("org_id", orgId).limit(2000),
   ]);
+
+  const variants = (variantsResult.data || []) as Array<{ product_id: string | null; size: string | null; quantity: number | null; active: boolean | null }>;
+  const variantsByProduct = variants.reduce<Record<string, Array<{ product_id: string | null; size: string | null; quantity: number | null; active: boolean | null }>>>((acc, row) => {
+    if (!row.product_id) return acc;
+    const current = acc[row.product_id] || [];
+    current.push(row);
+    acc[row.product_id] = current;
+    return acc;
+  }, {});
+  const inventoryInsights = (productsResult as DashboardStats["productsWithTryons"]).flatMap((product) => {
+    const productVariants = variantsByProduct[product.id] || [];
+    const zeroSizes = productVariants.filter((variant) => variant.active !== false && Number(variant.quantity || 0) <= 0);
+    const demandGap = product.tryon_count > product.stock ? product.tryon_count - product.stock : 0;
+    const insights: DashboardStats["inventoryInsights"] = [];
+
+    if (demandGap > 0) {
+      insights.push({
+        id: `demand-${product.id}`,
+        severity: demandGap > 3 ? "critical" : "alert",
+        title: "Demanda reprimida",
+        description: `${product.name} recebeu ${product.tryon_count} try-ons com apenas ${product.stock} em estoque.`,
+      });
+    }
+
+    if (product.tryon_count === 0 && product.stock > 0) {
+      insights.push({
+        id: `dead-${product.id}`,
+        severity: product.stock > 5 ? "alert" : "info",
+        title: "Dead stock",
+        description: `${product.name} ficou 30 dias sem try-on e ainda tem ${product.stock} unidades.`,
+      });
+    }
+
+    if (zeroSizes.length > 0) {
+      insights.push({
+        id: `size-${product.id}`,
+        severity: "critical",
+        title: "Ruptura por tamanho",
+        description: `${product.name} está zerado em ${zeroSizes.map((variant) => variant.size || "tamanho").join(", ")}.`,
+      });
+    }
+
+    return insights;
+  }).slice(0, 6);
 
   return {
     leadsAtivos: leadsAtivosResult.count ?? 0,
@@ -106,6 +153,7 @@ async function getDashboardData(orgId: string): Promise<DashboardStats> {
     urgentLead: urgentLeadResult.data ?? null,
     leadsByStatus: typeof leadsByStatusResult === "object" ? leadsByStatusResult : { new: 0, engaged: 0, qualified: 0, offer: 0, won: 0 },
     productsWithTryons: productsResult as DashboardStats["productsWithTryons"],
+    inventoryInsights,
   };
 }
 
@@ -238,6 +286,7 @@ export default async function MerchantDashboard({ params }: { params: Promise<{ 
 
   const navItems = [
     { href: `${orgBase}/dashboard`, icon: <LayoutGrid size={16} />, label: "Executivo", active: true },
+    { href: `${orgBase}/crm`, icon: <Target size={16} />, label: "CRM Mercury" },
     { href: `${orgBase}/catalog`, icon: <ImageIcon size={16} />, label: "Catálogo AI" },
     { href: `${orgBase}/performance`, icon: <Activity size={16} />, label: "Performance" },
     { href: `${orgBase}/audience`, icon: <Users size={16} />, label: "Audiência" },
@@ -250,7 +299,7 @@ export default async function MerchantDashboard({ params }: { params: Promise<{ 
     <div className="min-h-screen bg-black text-white flex">
       <aside className="w-56 flex-shrink-0 border-r border-white/5 flex flex-col p-4 space-y-6 sticky top-0 h-screen">
         <div className="flex items-center gap-3 px-2">
-          <div className="w-8 h-8 rounded-full border border-[#D4AF37] flex items-center justify-center overflow-hidden bg-white/5 text-[#D4AF37] font-serif font-bold text-xs">
+          <div className="w-8 h-8 rounded-full border border-[#C9A84C] flex items-center justify-center overflow-hidden bg-white/5 text-[#C9A84C] font-serif font-bold text-xs">
             {org.logo_url ? (
               <img src={org.logo_url} alt={displayName} className="h-full w-full object-cover" />
             ) : (
@@ -265,9 +314,8 @@ export default async function MerchantDashboard({ params }: { params: Promise<{ 
             <Link
               key={item.label}
               href={item.href}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-[10px] ${
-                item.active ? "bg-white text-black font-bold" : "text-white/50 hover:bg-white/5 hover:text-white"
-              }`}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-[10px] ${item.active ? "bg-white text-black font-bold" : "text-white/50 hover:bg-white/5 hover:text-white"
+                }`}
             >
               {item.icon}
               <span className="uppercase tracking-wider">{item.label}</span>
@@ -276,12 +324,12 @@ export default async function MerchantDashboard({ params }: { params: Promise<{ 
         </nav>
 
         <div className="p-3 rounded-xl bg-white/5 flex items-center gap-3">
-          <div className="w-6 h-6 rounded-full bg-[#D4AF37]/20 flex items-center justify-center text-[#D4AF37] font-bold text-[10px]">
+          <div className="w-6 h-6 rounded-full bg-[#C9A84C]/20 flex items-center justify-center text-[#C9A84C] font-bold text-[10px]">
             {user.email?.charAt(0).toUpperCase() ?? "?"}
           </div>
           <div className="flex flex-col min-w-0">
             <span className="text-[9px] font-bold truncate">{userMeta?.name ?? user.email?.split("@")[0] ?? "Operador"}</span>
-            <span className="text-[7px] text-[#D4AF37] uppercase tracking-widest">{userRole || "store"}</span>
+            <span className="text-[7px] text-[#C9A84C] uppercase tracking-widest">{userRole || "store"}</span>
           </div>
         </div>
       </aside>
@@ -289,7 +337,7 @@ export default async function MerchantDashboard({ params }: { params: Promise<{ 
       <main className="flex-1 p-6 overflow-y-auto no-scrollbar">
         <header className="flex items-center justify-between mb-0 border-b border-white/5 -mx-6 px-6 py-3 bg-black">
           <div className="flex items-center gap-2">
-            <div className="w-px h-3 bg-[#D4AF37]" />
+            <div className="w-px h-3 bg-[#C9A84C]" />
             <span className="text-[10px] uppercase font-bold tracking-[0.3em] text-white/80">{displayName}</span>
           </div>
           <div className="flex items-center gap-4">
@@ -312,7 +360,7 @@ export default async function MerchantDashboard({ params }: { params: Promise<{ 
               </div>
             </div>
             <Link href={`${orgBase}/whatsapp/inbox`} className="px-4 py-2 rounded-full bg-red-500 text-white text-[9px] font-bold uppercase">
-             -intervir
+              -intervir
             </Link>
           </div>
         )}
@@ -337,7 +385,7 @@ export default async function MerchantDashboard({ params }: { params: Promise<{ 
           <section className="col-span-2">
             <div className="flex items-center justify-between mb-3">
               <span className="text-[9px] font-bold uppercase tracking-wider text-white/40">CATÁLOGO</span>
-              <Link href={`${orgBase}/catalog`} className="text-[9px] text-[#D4AF37]">gerenciar →</Link>
+              <Link href={`${orgBase}/catalog`} className="text-[9px] text-[#C9A84C]">gerenciar →</Link>
             </div>
             <div className="space-y-2">
               {stats.productsWithTryons.slice(0, 4).map((product) => (
@@ -345,11 +393,11 @@ export default async function MerchantDashboard({ params }: { params: Promise<{ 
               ))}
               {stats.productsWithTryons.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-12 rounded-2xl border border-dashed border-white/10 bg-white/[0.01]">
-                   <ShoppingBag size={24} className="text-white/10 mb-3" />
-                   <span className="text-white/40 text-[11px] mb-4">Seu catálogo está vazio</span>
-                   <Link href={`${orgBase}/catalog/new`} className="px-5 py-2 rounded-full bg-[linear-gradient(180deg,#F1D77A_0%,#D4AF37_100%)] text-black text-[9px] font-bold uppercase tracking-wider">
-                     Adicionar primeiro produto →
-                   </Link>
+                  <ShoppingBag size={24} className="text-white/10 mb-3" />
+                  <span className="text-white/40 text-[11px] mb-4">Seu catálogo está vazio</span>
+                  <Link href={`${orgBase}/catalog/new`} className="px-5 py-2 rounded-full bg-[linear-gradient(180deg,#F1D77A_0%,#C9A84C_100%)] text-black text-[9px] font-bold uppercase tracking-wider">
+                    Adicionar primeiro produto →
+                  </Link>
                 </div>
               )}
             </div>
@@ -365,8 +413,44 @@ export default async function MerchantDashboard({ params }: { params: Promise<{ 
           </section>
         </div>
 
-        <div className="p-4 rounded-2xl bg-[#D4AF37]/10 border border-[#D4AF37]/20">
-          <div className="text-[9px] font-bold uppercase tracking-wider text-[#D4AF37] mb-2">LOOP VIRAL HOJE</div>
+        <section className="mb-6 space-y-4 rounded-[32px] border border-white/5 bg-white/[0.03] p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <Text className="text-[9px] font-bold uppercase tracking-[0.35em] text-[#C9A84C]">Estoque</Text>
+              <Heading as="h3" className="text-xl uppercase tracking-tight">
+                Radar inteligente
+              </Heading>
+            </div>
+            <Link href={`${orgBase}/catalog`} className="text-[9px] font-bold uppercase tracking-[0.3em] text-[#C9A84C]">
+              Ver catálogo
+            </Link>
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            {stats.inventoryInsights.length ? (
+              stats.inventoryInsights.map((item) => (
+                <div
+                  key={item.id}
+                  className={`rounded-[24px] border p-4 ${item.severity === "critical"
+                      ? "border-red-500/20 bg-red-500/10"
+                      : item.severity === "alert"
+                        ? "border-amber-500/20 bg-amber-500/10"
+                        : "border-white/5 bg-black/20"
+                    }`}
+                >
+                  <Text className="text-[9px] font-bold uppercase tracking-[0.35em] text-white/30">{item.title}</Text>
+                  <p className="mt-2 text-sm text-white/80">{item.description}</p>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-[24px] border border-white/5 bg-black/20 p-4 text-sm text-white/45 md:col-span-3">
+                Nenhum insight relevante de estoque no momento.
+              </div>
+            )}
+          </div>
+        </section>
+
+        <div className="p-4 rounded-2xl bg-[#C9A84C]/10 border border-[#C9A84C]/20">
+          <div className="text-[9px] font-bold uppercase tracking-wider text-[#C9A84C] mb-2">LOOP VIRAL HOJE</div>
           <div className="flex items-center gap-8">
             <div className="font-mono text-xl"><span className="text-white/60">{stats.postagensWeek}</span> posts</div>
             <div className="font-mono text-xl"><span className="text-white/60">{stats.referralsWeek}</span> entradas</div>

@@ -264,7 +264,7 @@ export default async function MerchantEntryPage() {
       <div className="px-6 pt-10 pb-8 border-b border-white/5 sticky top-0 z-40 bg-black/80 backdrop-blur-2xl">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="space-y-2">
-            <Text className="text-[10px] uppercase font-bold tracking-[0.5em] text-[#D4AF37]">Merchant Group</Text>
+            <Text className="text-[10px] uppercase font-bold tracking-[0.5em] text-[#C9A84C]">Merchant Group</Text>
             <Heading as="h1" className="text-3xl uppercase tracking-tighter">
               {group.name}
             </Heading>
@@ -306,8 +306,8 @@ export default async function MerchantEntryPage() {
         </section>
 
         {summary.urgentLead && (
-          <div className="rounded-[32px] border border-[#D4AF37]/20 bg-[#D4AF37]/10 p-6">
-            <Text className="text-[10px] uppercase tracking-[0.35em] text-[#D4AF37]">Lead urgente</Text>
+          <div className="rounded-[32px] border border-[#C9A84C]/20 bg-[#C9A84C]/10 p-6">
+            <Text className="text-[10px] uppercase tracking-[0.35em] text-[#C9A84C]">Lead urgente</Text>
             <Heading as="h2" className="mt-2 text-2xl uppercase tracking-tighter">
               {summary.urgentLead.name}
             </Heading>
@@ -330,7 +330,7 @@ export default async function MerchantEntryPage() {
                 <div
                   key={branch.id}
                   className={`rounded-[32px] border p-5 space-y-5 ${
-                    isActive ? "border-[#D4AF37]/30 bg-[#D4AF37]/8" : "border-white/5 bg-white/[0.03]"
+                    isActive ? "border-[#C9A84C]/30 bg-[#C9A84C]/8" : "border-white/5 bg-white/[0.03]"
                   }`}
                 >
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -340,7 +340,7 @@ export default async function MerchantEntryPage() {
                           {panelLabel(branch)}
                         </Heading>
                         {isActive && (
-                          <span className="px-2.5 py-1 rounded-full text-[8px] uppercase tracking-[0.28em] font-bold border bg-[#D4AF37]/10 text-[#D4AF37] border-[#D4AF37]/20">
+                          <span className="px-2.5 py-1 rounded-full text-[8px] uppercase tracking-[0.28em] font-bold border bg-[#C9A84C]/10 text-[#C9A84C] border-[#C9A84C]/20">
                             Atual
                           </span>
                         )}

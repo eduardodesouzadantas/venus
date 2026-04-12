@@ -137,6 +137,20 @@ export async function loadContext(phone_number: string, org_id: string): Promise
     productsRows = [];
   }
 
+  let wardrobeRows: Array<Record<string, unknown>> = [];
+  try {
+    const { data } = await admin
+      .from("wardrobe_items")
+      .select("name, category, color, image_url, created_at")
+      .eq("client_phone", phone_number)
+      .eq("org_id", org_id)
+      .order("created_at", { ascending: false })
+      .limit(10);
+    wardrobeRows = (data || []) as Array<Record<string, unknown>>;
+  } catch {
+    wardrobeRows = [];
+  }
+
   let conversationData: Record<string, unknown> | null = null;
   try {
     const { data } = await admin
@@ -226,6 +240,13 @@ export async function loadContext(phone_number: string, org_id: string): Promise
     return formatCatalogLine(product, stock);
   });
 
+  const wardrobeLines = wardrobeRows.map((item) => {
+    const name = normalize(item.name) || "Peça registrada";
+    const category = normalize(item.category) || "categoria indefinida";
+    const color = normalize(item.color) || "cor não informada";
+    return `${name} — ${category} — ${color}`;
+  });
+
   if (!productStock && productsRows[0]) {
     productStock = stockByProductId.get(normalize(productsRows[0].id)) || 0;
   }
@@ -253,6 +274,7 @@ export async function loadContext(phone_number: string, org_id: string): Promise
     productStock,
     stockSummary,
     catalogSummary: catalogLines.join("\n"),
+    wardrobeSummary: wardrobeLines.join("\n"),
     history: messages,
     state: "curiosidade",
   };

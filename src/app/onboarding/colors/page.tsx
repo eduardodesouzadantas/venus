@@ -1,4 +1,4 @@
-ï»¿"use client";
+"use client";
 
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
@@ -26,14 +26,14 @@ export default function ColorsPage() {
       <Heading as="h2" className="max-w-[12ch]">
         Sua paleta
       </Heading>
-      <Text className="mt-2 max-w-[28ch] text-white/60">As cores que sustentam sua presenÃ§a e as que quebram a leitura.</Text>
+      <Text className="mt-2 max-w-[28ch] text-white/60">As cores que sustentam sua presença e as que quebram a leitura.</Text>
 
       <GlassContainer className="mt-6 flex-1 space-y-6 sm:mt-8 sm:space-y-8">
         <div className="space-y-3 sm:space-y-4">
           <Heading as="h4" className="text-[15px] sm:text-lg">
-            FamÃ­lias que mais te favorecem
+            Famílias que mais te favorecem
           </Heading>
-          <Text className="text-sm text-white/55">Escolha as famÃ­lias que mais sustentam sua presenÃ§a visual.</Text>
+          <Text className="text-sm text-white/55">Escolha as famílias que mais sustentam sua presença visual.</Text>
           <PillSelector
             options={COLOR_FAMILIES}
             selected={favoriteColors}
@@ -44,7 +44,7 @@ export default function ColorsPage() {
 
         <div className="space-y-3 border-t border-white/10 pt-4 sm:space-y-4">
           <Heading as="h4" className="text-[15px] sm:text-lg">
-            FamÃ­lias que vocÃª evita
+            Famílias que você evita
           </Heading>
           <Text className="text-sm text-white/55">Aqui entendemos quais tons enfraquecem a leitura da sua imagem.</Text>
           <PillSelector
@@ -64,7 +64,7 @@ export default function ColorsPage() {
               onClick={() => updateData("colors", { metal: "Dourado" })}
               className={`flex-1 rounded-2xl border px-3 py-6 sm:py-8 ${
                 metal === "Dourado"
-                  ? "border-[#D4AF37] ring-1 ring-[#D4AF37] shadow-[0_0_15px_rgba(212,175,55,0.4)]"
+                  ? "border-[#C9A84C] ring-1 ring-[#C9A84C] shadow-[0_0_15px_rgba(212,175,55,0.4)]"
                   : "border-white/10 opacity-50"
               }`}
               style={{ background: "linear-gradient(135deg, #FFD700 0%, #B8860B 100%)" }}
@@ -88,3 +88,4 @@ export default function ColorsPage() {
     </div>
   );
 }
+

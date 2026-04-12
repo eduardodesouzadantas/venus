@@ -37,7 +37,7 @@ export async function GET(_request: Request, context: RouteContext) {
           slug: access.org.slug,
           name: access.org.name,
           logo_url: access.org.logo_url || null,
-          primary_color: access.org.primary_color || "#D4AF37",
+          primary_color: access.org.primary_color || "#C9A84C",
           whatsapp_number: access.org.whatsapp_number || "",
           plan_id: access.org.plan_id || null,
           status: access.org.status,
@@ -72,7 +72,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   const currentName = access.org.name;
-  const currentPrimaryColor = access.org.primary_color || "#D4AF37";
+  const currentPrimaryColor = access.org.primary_color || "#C9A84C";
   const currentWhatsAppNumber = access.org.whatsapp_number || "";
 
   const nextName = normalize(formData.get("name")) || currentName;
@@ -121,7 +121,7 @@ export async function PATCH(request: Request, context: RouteContext) {
         slug: data.slug,
         name: data.name,
         logo_url: data.logo_url || null,
-        primary_color: data.primary_color || "#D4AF37",
+        primary_color: data.primary_color || "#C9A84C",
         whatsapp_number: data.whatsapp_number || "",
         plan_id: data.plan_id || null,
         status: data.status,

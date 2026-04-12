@@ -54,7 +54,7 @@ function Field({
         placeholder={placeholder}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-14 w-full rounded-3xl border border-white/10 bg-white/[0.04] px-5 text-sm text-white outline-none transition-all placeholder:text-white/15 focus:border-[#D4AF37]/40"
+        className="h-14 w-full rounded-3xl border border-white/10 bg-white/[0.04] px-5 text-sm text-white outline-none transition-all placeholder:text-white/15 focus:border-[#C9A84C]/40"
       />
     </div>
   );
@@ -209,8 +209,8 @@ export default function MerchantIntegrations({ params }: { params: Promise<{ slu
         <header className="mb-16 flex items-center justify-between gap-8">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <div className="h-6 w-px bg-[#D4AF37]" />
-              <Text className="text-[10px] font-bold uppercase tracking-[0.4em] text-[#D4AF37]">
+              <div className="h-6 w-px bg-[#C9A84C]" />
+              <Text className="text-[10px] font-bold uppercase tracking-[0.4em] text-[#C9A84C]">
                 Venus Engine Ecosystem
               </Text>
             </div>
@@ -250,9 +250,8 @@ export default function MerchantIntegrations({ params }: { params: Promise<{ slu
                 <div className="flex items-start justify-between gap-6">
                   <div className="flex items-center gap-5">
                     <div
-                      className={`flex h-20 w-20 items-center justify-center rounded-[28px] transition-all duration-700 ${
-                        metaState?.connected ? "bg-green-500 text-black shadow-[0_0_40px_rgba(34,197,94,0.25)]" : "bg-white/5 text-white/20"
-                      }`}
+                      className={`flex h-20 w-20 items-center justify-center rounded-[28px] transition-all duration-700 ${metaState?.connected ? "bg-green-500 text-black shadow-[0_0_40px_rgba(34,197,94,0.25)]" : "bg-white/5 text-white/20"
+                        }`}
                     >
                       <MessageSquare size={30} />
                     </div>
@@ -269,9 +268,8 @@ export default function MerchantIntegrations({ params }: { params: Promise<{ slu
                   <VenusButton
                     onClick={metaState?.connected ? handleDisconnectMeta : handleConnectMeta}
                     variant={metaState?.connected ? "outline" : "solid"}
-                    className={`h-10 rounded-full px-6 text-[9px] font-bold uppercase tracking-widest transition-all ${
-                      metaState?.connected ? "border-red-500/20 bg-red-500/5 text-red-500" : "bg-[#D4AF37] text-black"
-                    }`}
+                    className={`h-10 rounded-full px-6 text-[9px] font-bold uppercase tracking-widest transition-all ${metaState?.connected ? "border-red-500/20 bg-red-500/5 text-red-500" : "bg-[#C9A84C] text-black"
+                      }`}
                     disabled={isSaving}
                   >
                     {isSaving ? "Processando..." : metaState?.connected ? "Desconectar" : "Conectar na Meta"}
@@ -301,7 +299,7 @@ export default function MerchantIntegrations({ params }: { params: Promise<{ slu
                   </div>
 
                   <div className="rounded-[32px] border border-white/5 bg-black/40 p-6 space-y-3">
-                    <Text className="text-[9px] font-bold uppercase tracking-[0.35em] text-[#D4AF37]">Como ativar</Text>
+                    <Text className="text-[9px] font-bold uppercase tracking-[0.35em] text-[#C9A84C]">Como ativar</Text>
                     <ul className="list-inside list-disc space-y-2 text-sm leading-relaxed text-white/45">
                       <li>cole o token da Meta com permissão de mensageria</li>
                       <li>cole o Business Account ID da conta WhatsApp</li>
@@ -329,8 +327,8 @@ export default function MerchantIntegrations({ params }: { params: Promise<{ slu
                   </Text>
                 </div>
 
-                <div className="rounded-[48px] border border-[#D4AF37]/20 bg-[#D4AF37]/5 p-8 space-y-4">
-                  <Text className="text-[9px] font-bold uppercase tracking-[0.35em] text-[#D4AF37]">Webhook da plataforma</Text>
+                <div className="rounded-[48px] border border-[#C9A84C]/20 bg-[#C9A84C]/5 p-8 space-y-4">
+                  <Text className="text-[9px] font-bold uppercase tracking-[0.35em] text-[#C9A84C]">Webhook da plataforma</Text>
                   <Heading as="h4" className="text-lg tracking-tight uppercase leading-tight">
                     {metaState?.webhook_url || "Webhook oficial"}
                   </Heading>
@@ -377,8 +375,8 @@ export default function MerchantIntegrations({ params }: { params: Promise<{ slu
             </div>
           </section>
 
-          <section id="crm" className="flex items-start gap-4 rounded-[48px] border border-[#D4AF37]/20 bg-[#D4AF37]/5 p-8">
-            <ShieldCheck className="mt-1 h-5 w-5 flex-shrink-0 text-[#D4AF37]" />
+          <section id="crm" className="flex items-start gap-4 rounded-[48px] border border-[#C9A84C]/20 bg-[#C9A84C]/5 p-8">
+            <ShieldCheck className="mt-1 h-5 w-5 flex-shrink-0 text-[#C9A84C]" />
             <div className="space-y-2">
               <Heading as="h5" className="text-sm uppercase tracking-tight">
                 Acesso protegido
@@ -398,9 +396,8 @@ function NavItem({ href, icon, label, active = false }: NavItemProps) {
   return (
     <Link
       href={href}
-      className={`flex w-full items-center gap-4 rounded-2xl px-4 py-3 transition-all ${
-        active ? "bg-white text-black shadow-2xl" : "text-white/40 hover:bg-white/5 hover:text-white"
-      }`}
+      className={`flex w-full items-center gap-4 rounded-2xl px-4 py-3 transition-all ${active ? "bg-white text-black shadow-2xl" : "text-white/40 hover:bg-white/5 hover:text-white"
+        }`}
     >
       {icon}
       <span className="text-[11px] font-bold uppercase tracking-widest">{label}</span>

@@ -43,11 +43,11 @@ export default function LoginPage() {
     <div className="min-h-screen bg-black text-white flex items-center justify-center p-6 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-white/[0.05] via-transparent to-transparent overflow-hidden">
       <div className="w-full max-w-sm space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-1000">
         <div className="flex flex-col items-center text-center space-y-4">
-          <div className="w-16 h-16 rounded-full bg-[#D4AF37] flex items-center justify-center text-black font-serif text-2xl font-bold shadow-[0_0_40px_rgba(212,175,55,0.4)]">
+          <div className="w-16 h-16 rounded-full bg-[#C9A84C] flex items-center justify-center text-black font-serif text-2xl font-bold shadow-[0_0_40px_rgba(212,175,55,0.4)]">
             V
           </div>
           <div className="space-y-1">
-            <Text className="text-[10px] uppercase font-bold tracking-[0.6em] text-[#D4AF37]">Venus Engine</Text>
+            <Text className="text-[10px] uppercase font-bold tracking-[0.6em] text-[#C9A84C]">Venus Engine</Text>
             <Heading as="h1" className="text-3xl tracking-tighter uppercase leading-none">Acesso Restrito</Heading>
           </div>
         </div>
@@ -65,7 +65,7 @@ export default function LoginPage() {
             onClick={() => setRole("agency")}
             className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all ${
               role === "agency"
-                ? "bg-[#D4AF37] text-black shadow-[0_0_20px_rgba(212,175,55,0.4)]"
+                ? "bg-[#C9A84C] text-black shadow-[0_0_20px_rgba(212,175,55,0.4)]"
                 : "text-white/40 hover:text-white"
             }`}
           >
@@ -82,25 +82,25 @@ export default function LoginPage() {
 
           <div className="space-y-4">
             <div className="relative group">
-              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 group-focus-within:text-[#D4AF37] transition-colors" />
+              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 group-focus-within:text-[#C9A84C] transition-colors" />
               <input
                 type="email"
                 placeholder="Email corporativo"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full h-14 bg-white/5 border border-white/10 rounded-3xl pl-12 pr-6 text-sm text-white focus:border-[#D4AF37]/40 outline-none transition-all"
+                className="w-full h-14 bg-white/5 border border-white/10 rounded-3xl pl-12 pr-6 text-sm text-white focus:border-[#C9A84C]/40 outline-none transition-all"
                 required
               />
             </div>
 
             <div className="relative group">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 group-focus-within:text-[#D4AF37] transition-colors" />
+              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 group-focus-within:text-[#C9A84C] transition-colors" />
               <input
                 type={showPass ? "text" : "password"}
                 placeholder="Sua senha"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full h-14 bg-white/5 border border-white/10 rounded-3xl pl-12 pr-12 text-sm text-white focus:border-[#D4AF37]/40 outline-none transition-all"
+                className="w-full h-14 bg-white/5 border border-white/10 rounded-3xl pl-12 pr-12 text-sm text-white focus:border-[#C9A84C]/40 outline-none transition-all"
                 required
               />
               <button
@@ -114,13 +114,13 @@ export default function LoginPage() {
 
             {role === "merchant" && (
               <div className="relative group">
-                <Store className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 group-focus-within:text-[#D4AF37] transition-colors" />
+                <Store className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 group-focus-within:text-[#C9A84C] transition-colors" />
                 <input
                   type="text"
                   placeholder="Slug da loja (ex: minha-loja)"
                   value={orgSlug}
                   onChange={(e) => setOrgSlug(e.target.value.toLowerCase().replace(/\s+/g, "-"))}
-                  className="w-full h-14 bg-white/5 border border-white/10 rounded-3xl pl-12 pr-6 text-sm text-white focus:border-[#D4AF37]/40 outline-none transition-all"
+                  className="w-full h-14 bg-white/5 border border-white/10 rounded-3xl pl-12 pr-6 text-sm text-white focus:border-[#C9A84C]/40 outline-none transition-all"
                   required
                 />
               </div>
@@ -132,7 +132,7 @@ export default function LoginPage() {
             disabled={isLoading}
             variant="solid"
             className={`w-full py-8 h-auto text-[11px] font-bold uppercase tracking-[0.4em] rounded-full shadow-2xl active:scale-[0.98] transition-all ${
-              role === "agency" ? "bg-[#D4AF37] text-black" : "bg-white text-black"
+              role === "agency" ? "bg-[#C9A84C] text-black" : "bg-white text-black"
             }`}
           >
             {isLoading ? "Validando Acesso..." : role === "merchant" ? "ENTRAR NO PAINEL" : "ENTRAR NA AGÊNCIA"}
@@ -150,7 +150,7 @@ export default function LoginPage() {
         <div className="flex flex-col items-center pt-10 border-t border-white/5">
           <Text className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-4">Integridade Multi-Tenant Ativa</Text>
           <div className="flex gap-4">
-            <ShieldCheck className="w-4 h-4 text-[#D4AF37]" aria-label="Secure Session" />
+            <ShieldCheck className="w-4 h-4 text-[#C9A84C]" aria-label="Secure Session" />
             <Lock className="w-4 h-4 text-green-500" aria-label="Isolated Scope" />
           </div>
         </div>

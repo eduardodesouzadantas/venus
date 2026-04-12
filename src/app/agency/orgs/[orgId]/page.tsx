@@ -11,8 +11,10 @@ import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { VenusButton } from "@/components/ui/VenusButton";
 import { ExportActions } from "@/components/agency/ExportActions";
+import { CommissionControls } from "@/components/agency/CommissionControls";
 import { LEAD_STATUSES, getLeadStatusLabel, type LeadStatus } from "@/lib/leads";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { isAgencyRole, isMerchantRole, resolveTenantContext } from "@/lib/tenant/core";
 import { getAgencyOrgDetail } from "@/lib/agency/org-details";
 import { normalizeAgencyTimeRange, type AgencyTimeRange } from "@/lib/agency/time-range";
@@ -410,6 +412,12 @@ export default async function AgencyOrgDetailPage({
   }
 
   const org = detail.org;
+  const admin = createAdminClient();
+  const { data: commissionSettings } = await admin
+    .from("orgs")
+    .select("commission_active, commission_rate")
+    .eq("id", org.id)
+    .maybeSingle<{ commission_active: boolean | null; commission_rate: number | null }>();
   const billing = detail.billing.summary;
   const usageRows = detail.billing.recent_usage_rows;
   const statusLabel = org.kill_switch ? "blocked" : org.status;
@@ -487,11 +495,11 @@ export default async function AgencyOrgDetailPage({
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="space-y-2">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-[#D4AF37] flex items-center justify-center text-black font-serif font-bold shadow-[0_0_24px_rgba(212,175,55,0.35)]">
+              <div className="w-10 h-10 rounded-full bg-[#C9A84C] flex items-center justify-center text-black font-serif font-bold shadow-[0_0_24px_rgba(212,175,55,0.35)]">
                 V
               </div>
               <div>
-                <Text className="text-[10px] uppercase font-bold tracking-[0.5em] text-[#D4AF37]">
+                <Text className="text-[10px] uppercase font-bold tracking-[0.5em] text-[#C9A84C]">
                   Agency Org Drill-Down
                 </Text>
                 <Heading as="h1" className="text-3xl uppercase tracking-tighter">
@@ -567,6 +575,12 @@ export default async function AgencyOrgDetailPage({
           <SimpleCard label="Leads" value={formatNumber(org.total_leads)} subvalue="totais consolidados" />
           <SimpleCard label="Saved results" value={formatNumber(org.total_saved_results)} subvalue="totais consolidados" />
         </div>
+
+        <CommissionControls
+          orgId={org.id}
+          initialActive={Boolean(commissionSettings?.commission_active)}
+          initialRate={Number(commissionSettings?.commission_rate || 3)}
+        />
 
         <SectionShell
           title="Resumo operacional"
@@ -986,142 +1000,142 @@ export default async function AgencyOrgDetailPage({
               {sortedLeads.length > 0 ? (
                 <div className="space-y-3">
                   {sortedLeads.map((lead) => {
-                  const followUpState = classifyLeadFollowUp(lead.next_follow_up_at, now);
-                  const followUpLabel =
-                    followUpState === "overdue"
-                      ? "Vencido"
-                      : followUpState === "today"
-                        ? "Hoje"
-                        : followUpState === "with_follow_up"
-                          ? "Próximo"
-                          : "Sem follow-up";
-                  const followUpBadge = followUpState === "overdue" ? "blocked" : followUpState === "today" ? "risk-medium" : followUpState === "with_follow_up" ? "active" : "neutral";
+                    const followUpState = classifyLeadFollowUp(lead.next_follow_up_at, now);
+                    const followUpLabel =
+                      followUpState === "overdue"
+                        ? "Vencido"
+                        : followUpState === "today"
+                          ? "Hoje"
+                          : followUpState === "with_follow_up"
+                            ? "Próximo"
+                            : "Sem follow-up";
+                    const followUpBadge = followUpState === "overdue" ? "blocked" : followUpState === "today" ? "risk-medium" : followUpState === "with_follow_up" ? "active" : "neutral";
 
-                  return (
-                  <div key={lead.id} className="p-4 rounded-[24px] bg-white/[0.03] border border-white/5">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                      <div className="space-y-1">
-                        <Heading as="h3" className="text-lg tracking-tighter">
-                          {lead.name || "Sem nome"}
-                        </Heading>
-                        <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
-                          {lead.email || "Sem email"} · {lead.phone || "Sem telefone"} · source {lead.source || "sem dados"}
-                        </Text>
-                      </div>
-                      <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.3em]">
-                        <span className={`px-3 py-1 rounded-full border ${badge(leadStatusChipKind(lead.status))}`}>
-                          {leadStatusDisplayLabel(lead.status)}
-                        </span>
-                        <span className={`px-3 py-1 rounded-full border ${badge("neutral")}`}>
-                          intent {lead.intent_score === null ? "Sem dados" : lead.intent_score.toFixed(0)}
-                        </span>
-                        <span className={`px-3 py-1 rounded-full border ${badge(followUpBadge)}`}>{followUpLabel}</span>
-                        <span className={`px-3 py-1 rounded-full border ${badge("neutral")}`}>
-                          follow-up {lead.next_follow_up_at ? formatDate(lead.next_follow_up_at) : "Sem follow-up"}
-                        </span>
-                        <span className={`px-3 py-1 rounded-full border ${badge("neutral")}`}>
-                          {formatDate(lead.last_interaction_at || lead.updated_at || lead.created_at)}
-                        </span>
-                      </div>
-                      {lead.status !== "won" && lead.status !== "lost" ? (
-                        <div className="flex flex-wrap gap-2">
-                          {lead.status !== "offer_sent" && lead.status !== "closing" ? (
-                            <form action={`/api/admin/orgs/${org.id}/leads/${lead.id}`} method="post">
-                              <input type="hidden" name="status" value="offer_sent" />
-                              <input type="hidden" name="redirect_to" value={detailHref} />
-                              <VenusButton
-                                type="submit"
-                                variant="outline"
-                                className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-yellow-500/20 text-yellow-200"
-                              >
-                                Oferta enviada
-                              </VenusButton>
-                            </form>
-                          ) : null}
-                          {lead.status !== "closing" ? (
-                            <form action={`/api/admin/orgs/${org.id}/leads/${lead.id}`} method="post">
-                              <input type="hidden" name="status" value="closing" />
-                              <input type="hidden" name="redirect_to" value={detailHref} />
-                              <VenusButton
-                                type="submit"
-                                variant="outline"
-                                className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-yellow-500/20 text-yellow-200"
-                              >
-                                Fechamento iniciado
-                              </VenusButton>
-                            </form>
-                          ) : (
-                            <span className={`px-3 py-1 rounded-full border ${badge("risk-medium")}`}>
-                              Fechamento iniciado
+                    return (
+                      <div key={lead.id} className="p-4 rounded-[24px] bg-white/[0.03] border border-white/5">
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                          <div className="space-y-1">
+                            <Heading as="h3" className="text-lg tracking-tighter">
+                              {lead.name || "Sem nome"}
+                            </Heading>
+                            <Text className="text-[10px] uppercase tracking-[0.3em] text-white/35">
+                              {lead.email || "Sem email"} · {lead.phone || "Sem telefone"} · source {lead.source || "sem dados"}
+                            </Text>
+                          </div>
+                          <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.3em]">
+                            <span className={`px-3 py-1 rounded-full border ${badge(leadStatusChipKind(lead.status))}`}>
+                              {leadStatusDisplayLabel(lead.status)}
                             </span>
+                            <span className={`px-3 py-1 rounded-full border ${badge("neutral")}`}>
+                              intent {lead.intent_score === null ? "Sem dados" : lead.intent_score.toFixed(0)}
+                            </span>
+                            <span className={`px-3 py-1 rounded-full border ${badge(followUpBadge)}`}>{followUpLabel}</span>
+                            <span className={`px-3 py-1 rounded-full border ${badge("neutral")}`}>
+                              follow-up {lead.next_follow_up_at ? formatDate(lead.next_follow_up_at) : "Sem follow-up"}
+                            </span>
+                            <span className={`px-3 py-1 rounded-full border ${badge("neutral")}`}>
+                              {formatDate(lead.last_interaction_at || lead.updated_at || lead.created_at)}
+                            </span>
+                          </div>
+                          {lead.status !== "won" && lead.status !== "lost" ? (
+                            <div className="flex flex-wrap gap-2">
+                              {lead.status !== "offer_sent" && lead.status !== "closing" ? (
+                                <form action={`/api/admin/orgs/${org.id}/leads/${lead.id}`} method="post">
+                                  <input type="hidden" name="status" value="offer_sent" />
+                                  <input type="hidden" name="redirect_to" value={detailHref} />
+                                  <VenusButton
+                                    type="submit"
+                                    variant="outline"
+                                    className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-yellow-500/20 text-yellow-200"
+                                  >
+                                    Oferta enviada
+                                  </VenusButton>
+                                </form>
+                              ) : null}
+                              {lead.status !== "closing" ? (
+                                <form action={`/api/admin/orgs/${org.id}/leads/${lead.id}`} method="post">
+                                  <input type="hidden" name="status" value="closing" />
+                                  <input type="hidden" name="redirect_to" value={detailHref} />
+                                  <VenusButton
+                                    type="submit"
+                                    variant="outline"
+                                    className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-yellow-500/20 text-yellow-200"
+                                  >
+                                    Fechamento iniciado
+                                  </VenusButton>
+                                </form>
+                              ) : (
+                                <span className={`px-3 py-1 rounded-full border ${badge("risk-medium")}`}>
+                                  Fechamento iniciado
+                                </span>
+                              )}
+                              <form action={`/api/admin/orgs/${org.id}/leads/${lead.id}`} method="post">
+                                <input type="hidden" name="status" value="won" />
+                                <input type="hidden" name="redirect_to" value={detailHref} />
+                                <VenusButton
+                                  type="submit"
+                                  variant="outline"
+                                  className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-green-500/20 text-green-300"
+                                >
+                                  Ganho
+                                </VenusButton>
+                              </form>
+                              <form action={`/api/admin/orgs/${org.id}/leads/${lead.id}`} method="post">
+                                <input type="hidden" name="status" value="lost" />
+                                <input type="hidden" name="redirect_to" value={detailHref} />
+                                <VenusButton
+                                  type="submit"
+                                  variant="outline"
+                                  className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-red-500/20 text-red-300"
+                                >
+                                  Perdido
+                                </VenusButton>
+                              </form>
+                            </div>
+                          ) : (
+                            <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.3em] text-white/40">
+                              <span className={`px-3 py-1 rounded-full border ${badge(lead.status === "won" ? "active" : "blocked")}`}>
+                                Fechamento comercial
+                              </span>
+                            </div>
                           )}
-                          <form action={`/api/admin/orgs/${org.id}/leads/${lead.id}`} method="post">
-                            <input type="hidden" name="status" value="won" />
+                          <form action={`/api/admin/orgs/${org.id}/leads/${lead.id}`} method="post" className="flex flex-wrap items-end gap-2">
                             <input type="hidden" name="redirect_to" value={detailHref} />
+                            <label className="space-y-1">
+                              <span className="block text-[8px] uppercase tracking-[0.3em] text-white/30 font-bold">Estágio</span>
+                              <select
+                                name="status"
+                                defaultValue={lead.status}
+                                className="h-10 rounded-full bg-black/40 border border-white/10 px-4 text-[10px] uppercase tracking-[0.3em] font-bold text-white outline-none"
+                              >
+                                {LEAD_STATUSES.map((status) => (
+                                  <option key={status} value={status}>
+                                    {getLeadStatusLabel(status)}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label className="space-y-1">
+                              <span className="block text-[8px] uppercase tracking-[0.3em] text-white/30 font-bold">Próximo follow-up</span>
+                              <input
+                                type="datetime-local"
+                                name="next_follow_up_at"
+                                defaultValue={formatDateTimeLocal(lead.next_follow_up_at)}
+                                className="h-10 rounded-full bg-black/40 border border-white/10 px-4 text-[10px] uppercase tracking-[0.3em] font-bold text-white outline-none"
+                              />
+                            </label>
                             <VenusButton
                               type="submit"
                               variant="outline"
-                              className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-green-500/20 text-green-300"
+                              className="h-10 px-4 rounded-full uppercase tracking-[0.3em] text-[8px] font-bold border-white/10"
                             >
-                              Ganho
-                            </VenusButton>
-                          </form>
-                          <form action={`/api/admin/orgs/${org.id}/leads/${lead.id}`} method="post">
-                            <input type="hidden" name="status" value="lost" />
-                            <input type="hidden" name="redirect_to" value={detailHref} />
-                            <VenusButton
-                              type="submit"
-                              variant="outline"
-                              className="h-9 px-4 rounded-full uppercase tracking-[0.25em] text-[8px] font-bold border-red-500/20 text-red-300"
-                            >
-                              Perdido
+                              Salvar lead
                             </VenusButton>
                           </form>
                         </div>
-                      ) : (
-                        <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.3em] text-white/40">
-                          <span className={`px-3 py-1 rounded-full border ${badge(lead.status === "won" ? "active" : "blocked")}`}>
-                            Fechamento comercial
-                          </span>
-                        </div>
-                      )}
-                      <form action={`/api/admin/orgs/${org.id}/leads/${lead.id}`} method="post" className="flex flex-wrap items-end gap-2">
-                        <input type="hidden" name="redirect_to" value={detailHref} />
-                        <label className="space-y-1">
-                          <span className="block text-[8px] uppercase tracking-[0.3em] text-white/30 font-bold">Estágio</span>
-                          <select
-                            name="status"
-                            defaultValue={lead.status}
-                            className="h-10 rounded-full bg-black/40 border border-white/10 px-4 text-[10px] uppercase tracking-[0.3em] font-bold text-white outline-none"
-                          >
-                            {LEAD_STATUSES.map((status) => (
-                              <option key={status} value={status}>
-                                {getLeadStatusLabel(status)}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label className="space-y-1">
-                          <span className="block text-[8px] uppercase tracking-[0.3em] text-white/30 font-bold">Próximo follow-up</span>
-                          <input
-                            type="datetime-local"
-                            name="next_follow_up_at"
-                            defaultValue={formatDateTimeLocal(lead.next_follow_up_at)}
-                            className="h-10 rounded-full bg-black/40 border border-white/10 px-4 text-[10px] uppercase tracking-[0.3em] font-bold text-white outline-none"
-                          />
-                        </label>
-                        <VenusButton
-                          type="submit"
-                          variant="outline"
-                          className="h-10 px-4 rounded-full uppercase tracking-[0.3em] text-[8px] font-bold border-white/10"
-                        >
-                          Salvar lead
-                        </VenusButton>
-                      </form>
-                    </div>
-                  </div>
-                  );
-                })}
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
                 <EmptyState
@@ -1479,7 +1493,7 @@ export default async function AgencyOrgDetailPage({
         <SectionShell title="Recomendação operacional" description={`Próxima ação sugerida para ${org.name}, derivada dos sinais agregados da janela.`}>
           {operationalRecommendations.length > 0 ? (
             <div className="space-y-3">
-              <div className="p-5 rounded-[28px] bg-[#D4AF37]/5 border border-[#D4AF37]/15 space-y-3">
+              <div className="p-5 rounded-[28px] bg-[#C9A84C]/5 border border-[#C9A84C]/15 space-y-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1">
                     <Text className="text-[9px] uppercase tracking-[0.35em] text-white/30 font-bold">
@@ -1490,13 +1504,12 @@ export default async function AgencyOrgDetailPage({
                     </Heading>
                   </div>
                   <span
-                    className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${
-                      operationalRecommendations[0].priority === "high"
+                    className={`px-3 py-1 rounded-full text-[8px] uppercase tracking-[0.3em] font-bold border ${operationalRecommendations[0].priority === "high"
                         ? badge("risk-high")
                         : operationalRecommendations[0].priority === "medium"
                           ? badge("risk-medium")
                           : badge("risk-low")
-                    }`}
+                      }`}
                   >
                     {formatOperationalPriorityLabel(operationalRecommendations[0].priority)}
                   </span>

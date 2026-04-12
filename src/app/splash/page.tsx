@@ -32,46 +32,54 @@ function SplashContent() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-[#0a0a0a] text-white px-6 overflow-hidden relative">
-      {/* Halo Pulsante de Luxo - Agora como um anel fino */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: [0.2, 0.4, 0.2], scale: [1, 1.05, 1] }}
-        transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-        className="absolute w-[180px] h-[180px] rounded-full border border-[#D4AF37]/40 z-0"
+    <div className="flex flex-col items-center justify-center min-h-screen bg-[#0a0a0a] text-[#f0ece4] px-6 overflow-hidden relative">
+      <style jsx global>{`
+        @keyframes subtle-pulse {
+          0%, 100% { opacity: 0.12; transform: scale(1); }
+          50% { opacity: 0.22; transform: scale(1.15); }
+        }
+      `}</style>
+
+      {/* Halo Pulsante de Luxo - Radial Glow */}
+      <div
+        className="absolute w-[400px] h-[400px] rounded-full pointer-events-none z-0"
+        style={{
+          background: "radial-gradient(circle, rgba(201,168,76,0.12) 0%, transparent 70%)",
+          animation: "subtle-pulse 8s infinite ease-in-out"
+        }}
       />
 
       {/* Logo V Dourado */}
       <motion.div
-        initial={{ opacity: 0, scale: 0.9 }}
+        initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 1.5, ease: "easeOut" }}
-        className="mb-12 relative z-10"
+        transition={{ duration: 2, ease: [0.22, 1, 0.36, 1] }}
+        className="mb-14 relative z-10"
       >
         <div className="relative">
-             {/* Efeito de brilho muito sutil e contido */}
-            <motion.div 
-                animate={{ opacity: [0.1, 0.2, 0.1] }}
-                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-                className="absolute inset-x-[-10px] inset-y-[-10px] bg-[#D4AF37]/10 rounded-full blur-md"
-            />
-            <VenusAvatar size={120} animated />
+          {/* Efeito de brilho sutil */}
+          <motion.div
+            animate={{ opacity: [0.05, 0.1, 0.05] }}
+            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            className="absolute inset-x-[-25px] inset-y-[-25px] bg-[#C9A84C]/10 rounded-full blur-2xl"
+          />
+          <VenusAvatar size={140} animated />
         </div>
       </motion.div>
 
       {/* Frase sequencial */}
-      <div className="flex flex-wrap justify-center gap-x-2 gap-y-1 max-w-xs text-center mb-16 relative z-10">
+      <div className="flex flex-wrap justify-center gap-x-3 gap-y-2 max-w-sm text-center mb-20 relative z-10">
         {words.map((word, i) => (
           <motion.span
             key={i}
-            initial={{ opacity: 0, y: 10 }}
-            animate={showText ? { opacity: 1, y: 0 } : {}}
+            initial={{ opacity: 0, y: 15, filter: "blur(8px)", scale: 0.9 }}
+            animate={showText ? { opacity: 1, y: 0, filter: "blur(0px)", scale: 1 } : {}}
             transition={{
-              duration: 0.8,
-              delay: i * 0.3,
-              ease: "easeOut"
+              duration: 1.2,
+              delay: i * 0.45,
+              ease: [0.22, 1, 0.36, 1]
             }}
-            className="font-serif text-2xl sm:text-3xl italic tracking-wide text-[#D4AF37]"
+            className="font-serif text-3xl sm:text-4xl italic tracking-tight text-[#C9A84C]/90"
           >
             {word}
           </motion.span>
@@ -86,11 +94,11 @@ function SplashContent() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.8 }}
+              transition={{ duration: 1, delay: 0.4 }}
               onClick={handleStart}
-              className="inline-flex min-h-14 items-center justify-center rounded-full bg-[linear-gradient(180deg,#F1D77A_0%,#D4AF37_100%)] px-10 py-4 text-[13px] font-bold uppercase tracking-[0.3em] text-[#0A0A0A] shadow-[0_20px_50px_rgba(212,175,55,0.25)] transition-transform active:scale-[0.98]"
+              className="inline-flex min-h-16 items-center justify-center rounded-full bg-[#C9A84C] px-12 py-5 text-[11px] font-bold uppercase tracking-[0.4em] text-[#0A0A0A] shadow-[0_20px_60px_rgba(201,168,76,0.2)] transition-all hover:scale-[1.03] active:scale-[0.98]"
             >
-              Descobrir meu estilo →
+              Começar jornada →
             </motion.button>
           )}
         </AnimatePresence>

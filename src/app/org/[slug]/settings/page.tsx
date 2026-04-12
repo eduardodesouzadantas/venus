@@ -23,12 +23,12 @@ type MerchantOrgSettings = {
 
 type SettingsResponse =
   | {
-      ok: true;
-      org: MerchantOrgSettings;
-    }
+    ok: true;
+    org: MerchantOrgSettings;
+  }
   | {
-      error?: string;
-    };
+    error?: string;
+  };
 
 type NavItemProps = {
   href: string;
@@ -39,7 +39,7 @@ type NavItemProps = {
 
 function normalizeHex(value: string) {
   const trimmed = value.trim();
-  return /^#[0-9a-fA-F]{6}$/.test(trimmed) ? trimmed.toUpperCase() : "#D4AF37";
+  return /^#[0-9a-fA-F]{6}$/.test(trimmed) ? trimmed.toUpperCase() : "#C9A84C";
 }
 
 export default function MerchantSettings({ params }: { params: Promise<{ slug: string }> }) {
@@ -53,7 +53,7 @@ export default function MerchantSettings({ params }: { params: Promise<{ slug: s
   const [error, setError] = useState<string | null>(null);
   const [orgName, setOrgName] = useState("");
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [primaryColor, setPrimaryColor] = useState("#D4AF37");
+  const [primaryColor, setPrimaryColor] = useState("#C9A84C");
   const [whatsappNumber, setWhatsappNumber] = useState("");
   const [planId, setPlanId] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -81,7 +81,7 @@ export default function MerchantSettings({ params }: { params: Promise<{ slug: s
 
         setOrgName(payload.org.name || "");
         setLogoUrl(payload.org.logo_url);
-        setPrimaryColor(payload.org.primary_color || "#D4AF37");
+        setPrimaryColor(payload.org.primary_color || "#C9A84C");
         setWhatsappNumber(payload.org.whatsapp_number || "");
         setPlanId(payload.org.plan_id || null);
       } catch (loadError) {
@@ -157,7 +157,7 @@ export default function MerchantSettings({ params }: { params: Promise<{ slug: s
 
       setOrgName(payload.org.name || "");
       setLogoUrl(payload.org.logo_url);
-      setPrimaryColor(payload.org.primary_color || "#D4AF37");
+      setPrimaryColor(payload.org.primary_color || "#C9A84C");
       setWhatsappNumber(payload.org.whatsapp_number || "");
       setPlanId(payload.org.plan_id || null);
       setLogoFile(null);
@@ -211,7 +211,7 @@ export default function MerchantSettings({ params }: { params: Promise<{ slug: s
       <main className="flex-1 p-8 md:p-12 overflow-y-auto no-scrollbar">
         <header className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between mb-10">
           <div className="space-y-2">
-            <Text className="text-[10px] uppercase font-bold tracking-[0.4em] text-[#D4AF37]">
+            <Text className="text-[10px] uppercase font-bold tracking-[0.4em] text-[#C9A84C]">
               {slug} Configuracoes
             </Text>
             <Heading as="h1" className="text-3xl md:text-4xl tracking-tighter uppercase leading-none">
@@ -232,7 +232,7 @@ export default function MerchantSettings({ params }: { params: Promise<{ slug: s
               onClick={handleSave}
               disabled={loading || saving}
               variant="solid"
-              className="h-12 px-6 rounded-full text-[10px] uppercase tracking-[0.08em] font-medium bg-[#D4AF37] text-black"
+              className="h-12 px-6 rounded-full text-[10px] uppercase tracking-[0.08em] font-medium bg-[#C9A84C] text-black"
             >
               {saving ? "Salvando..." : saved ? "Salvo" : "Salvar alteracoes"}
             </VenusButton>
@@ -289,7 +289,7 @@ export default function MerchantSettings({ params }: { params: Promise<{ slug: s
                     <input
                       value={orgName}
                       onChange={(event) => setOrgName(event.target.value)}
-                      className="h-14 w-full rounded-3xl border border-white/10 bg-white/5 px-5 text-sm text-white outline-none transition-colors focus:border-[#D4AF37]/40"
+                      className="h-14 w-full rounded-3xl border border-white/10 bg-white/5 px-5 text-sm text-white outline-none transition-colors focus:border-[#C9A84C]/40"
                       placeholder="Nome da sua loja"
                     />
                   </label>
@@ -306,8 +306,8 @@ export default function MerchantSettings({ params }: { params: Promise<{ slug: s
                       <input
                         value={primaryColor}
                         onChange={(event) => setPrimaryColor(event.target.value)}
-                        className="h-14 flex-1 rounded-3xl border border-white/10 bg-white/5 px-5 text-sm text-white outline-none transition-colors focus:border-[#D4AF37]/40"
-                        placeholder="#D4AF37"
+                        className="h-14 flex-1 rounded-3xl border border-white/10 bg-white/5 px-5 text-sm text-white outline-none transition-colors focus:border-[#C9A84C]/40"
+                        placeholder="#C9A84C"
                       />
                     </div>
                   </div>
@@ -319,7 +319,7 @@ export default function MerchantSettings({ params }: { params: Promise<{ slug: s
                     </div>
                     <div className="mt-3 flex items-center justify-between gap-3">
                       <span className="text-[10px] uppercase tracking-[0.3em] text-white/35">Plano</span>
-                      <span className="rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[#D4AF37]">
+                      <span className="rounded-full border border-[#C9A84C]/20 bg-[#C9A84C]/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[#C9A84C]">
                         {planId || "sem plano"}
                       </span>
                     </div>
@@ -338,7 +338,7 @@ export default function MerchantSettings({ params }: { params: Promise<{ slug: s
                 <input
                   value={whatsappNumber}
                   onChange={(event) => setWhatsappNumber(event.target.value)}
-                  className="h-14 w-full rounded-3xl border border-white/10 bg-white/5 px-5 text-sm text-white outline-none transition-colors focus:border-[#D4AF37]/40"
+                  className="h-14 w-full rounded-3xl border border-white/10 bg-white/5 px-5 text-sm text-white outline-none transition-colors focus:border-[#C9A84C]/40"
                   placeholder="+55 11 99999-9999"
                 />
               </label>
@@ -381,9 +381,8 @@ function NavItem({ href, icon, label, active = false }: NavItemProps) {
   return (
     <Link
       href={href}
-      className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all ${
-        active ? "bg-white text-black shadow-2xl" : "text-white/40 hover:bg-white/5 hover:text-white"
-      }`}
+      className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all ${active ? "bg-white text-black shadow-2xl" : "text-white/40 hover:bg-white/5 hover:text-white"
+        }`}
     >
       {icon}
       <span className="text-[11px] font-bold uppercase tracking-widest">{label}</span>

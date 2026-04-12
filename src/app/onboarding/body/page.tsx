@@ -1,4 +1,4 @@
-ï»¿"use client";
+"use client";
 
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
@@ -7,10 +7,10 @@ import { PillSelector } from "@/components/ui/PillSelector";
 import { BottomNav } from "@/components/ui/BottomNav";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
 
-const BODY_PARTS = ["Ombros", "Cintura", "Quadril", "Pernas", "Colo/Busto", "BraÃ§os"];
-const FIT_PREFERENCES = ["JustÃ­ssimo", "Slim", "Relaxed", "Oversized"];
+const BODY_PARTS = ["Ombros", "Cintura", "Quadril", "Pernas", "Colo/Busto", "Braços"];
+const FIT_PREFERENCES = ["Justíssimo", "Slim", "Relaxed", "Oversized"];
 const FACE_LINES = ["Suaves (arredondado)", "Marcantes (angular)"];
-const HAIR_LENGTH = ["Curto", "MÃ©dio", "Longo"];
+const HAIR_LENGTH = ["Curto", "Médio", "Longo"];
 
 export default function BodyPage() {
   const { data, updateData } = useOnboarding();
@@ -21,7 +21,7 @@ export default function BodyPage() {
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-[560px] flex-col px-5 pb-7 pt-12 sm:px-6 sm:pb-8 sm:pt-14">
       <Heading as="h2" className="max-w-[15ch]">
-        Mapa da presenÃ§a
+        Mapa da presença
       </Heading>
       <Text className="mt-2 max-w-[28ch] text-white/60">O que destacar, o que suavizar e como o caimento deve sustentar sua leitura.</Text>
 
@@ -30,7 +30,7 @@ export default function BodyPage() {
           <Heading as="h4" className="text-[15px] sm:text-lg">
             O que eu quero destacar
           </Heading>
-          <Text className="text-sm text-white/55">Marque o que vocÃª quer evidenciar com mais intenÃ§Ã£o e equilÃ­brio.</Text>
+          <Text className="text-sm text-white/55">Marque o que você quer evidenciar com mais intenção e equilíbrio.</Text>
           <PillSelector
             options={BODY_PARTS.filter((p) => !camouflage.includes(p))}
             selected={highlight}
@@ -43,7 +43,7 @@ export default function BodyPage() {
           <Heading as="h4" className="text-[15px] sm:text-lg">
             O que eu prefiro suavizar
           </Heading>
-          <Text className="text-sm text-white/55">Aqui a leitura entende o que vocÃª prefere nÃ£o enfatizar no corpo e no look.</Text>
+          <Text className="text-sm text-white/55">Aqui a leitura entende o que você prefere não enfatizar no corpo e no look.</Text>
           <PillSelector
             options={BODY_PARTS.filter((p) => !highlight.includes(p))}
             selected={camouflage}
@@ -54,9 +54,9 @@ export default function BodyPage() {
 
         <div className="space-y-3 border-t border-white/10 pt-4 sm:space-y-4">
           <Heading as="h4" className="text-[15px] sm:text-lg">
-            Como vocÃª prefere o caimento?
+            Como você prefere o caimento?
           </Heading>
-          <Text className="text-sm text-white/55">O caimento muda completamente a leitura da peÃ§a no corpo.</Text>
+          <Text className="text-sm text-white/55">O caimento muda completamente a leitura da peça no corpo.</Text>
           <PillSelector
             options={FIT_PREFERENCES}
             selected={fit ? [fit] : []}
@@ -68,7 +68,7 @@ export default function BodyPage() {
           <Heading as="h4" className="text-[15px] sm:text-lg">
             Rosto e cabelo
           </Heading>
-          <Text className="text-sm text-white/55">Essa leitura ajuda a alinhar linhas, proporÃ§Ã£o e acabamento visual do styling.</Text>
+          <Text className="text-sm text-white/55">Essa leitura ajuda a alinhar linhas, proporção e acabamento visual do styling.</Text>
           <div className="space-y-3">
             <PillSelector
               options={FACE_LINES}
@@ -88,3 +88,4 @@ export default function BodyPage() {
     </div>
   );
 }
+

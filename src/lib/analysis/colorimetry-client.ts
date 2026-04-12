@@ -1,26 +1,32 @@
 "use client";
 
-export interface ColorimetryAnalysisResponse {
-  skinTone: string;
-  undertone: string;
-  contrast: string;
-  favoriteColors: string[];
-  avoidColors: string[];
-  colorArchetype: string;
-  justification: string;
-}
+import type { ColorimetryAnalysisData } from "@/types/onboarding";
+
+export type ColorimetryAnalysisResponse = ColorimetryAnalysisData;
 
 function isColorArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === "string");
 }
 
-export async function analyzeColorimetry(imageBase64: string): Promise<ColorimetryAnalysisResponse | null> {
+function isShape(value: unknown): value is ColorimetryAnalysisData["faceShape"] {
+  return (
+    value === "oval" ||
+    value === "redondo" ||
+    value === "quadrado" ||
+    value === "coração" ||
+    value === "losango" ||
+    value === "retangular" ||
+    value === ""
+  );
+}
+
+export async function analyzeColorimetry(imageBase64: string, orgId = ""): Promise<ColorimetryAnalysisResponse | null> {
   const response = await fetch("/api/analysis/colorimetry", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ image_base64: imageBase64 }),
+    body: JSON.stringify({ imageBase64, orgId }),
   });
 
   if (!response.ok) {
@@ -36,10 +42,15 @@ export async function analyzeColorimetry(imageBase64: string): Promise<Colorimet
     typeof payload.skinTone !== "string" ||
     typeof payload.undertone !== "string" ||
     typeof payload.contrast !== "string" ||
-    typeof payload.colorArchetype !== "string" ||
-    typeof payload.justification !== "string" ||
+    typeof payload.colorSeason !== "string" ||
     !isColorArray(payload.favoriteColors) ||
-    !isColorArray(payload.avoidColors)
+    !isColorArray(payload.avoidColors) ||
+    !isShape(payload.faceShape) ||
+    typeof payload.idealNeckline !== "string" ||
+    typeof payload.idealFit !== "string" ||
+    !isColorArray(payload.idealFabrics) ||
+    !isColorArray(payload.avoidFabrics) ||
+    typeof payload.justification !== "string"
   ) {
     return null;
   }
@@ -48,9 +59,14 @@ export async function analyzeColorimetry(imageBase64: string): Promise<Colorimet
     skinTone: payload.skinTone,
     undertone: payload.undertone,
     contrast: payload.contrast,
+    colorSeason: payload.colorSeason,
     favoriteColors: payload.favoriteColors,
     avoidColors: payload.avoidColors,
-    colorArchetype: payload.colorArchetype,
+    faceShape: payload.faceShape,
+    idealNeckline: payload.idealNeckline,
+    idealFit: payload.idealFit,
+    idealFabrics: payload.idealFabrics,
+    avoidFabrics: payload.avoidFabrics,
     justification: payload.justification,
   };
 }

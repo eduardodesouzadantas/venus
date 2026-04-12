@@ -51,6 +51,7 @@ CONTEXTO DO CLIENTE:
 - Estoque: ${ctx.stockSummary}
 - Histórico: ${buildHistorySummary(ctx)}
 - Catálogo: ${ctx.catalogSummary || "sem catálogo relevante"}
+- Guarda-roupa: ${ctx.wardrobeSummary || "sem itens registrados"}
 
 COMO FALAR:
 - Linguagem elegante, direta, emocional — nunca robótica

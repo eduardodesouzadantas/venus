@@ -2,7 +2,7 @@
 @import "tw-animate-css";
 
 @theme {
-  --color-venus-gold: #D4AF37;
+  --color-venus-gold: #C9A84C;
   --color-venus-black: #000000;
   --color-venus-charcoal: #121212;
   --color-venus-glass: rgba(255, 255, 255, 0.05);
@@ -168,7 +168,7 @@
 .delay-1500 { animation-delay: 1.5s; }
 
 .shimmer-text {
-  background: linear-gradient(90deg, #D4AF37 0%, #F8F3E2 45%, #D4AF37 65%, #A9871D 100%);
+  background: linear-gradient(90deg, #C9A84C 0%, #F8F3E2 45%, #C9A84C 65%, #A9871D 100%);
   background-size: 200% auto;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -186,12 +186,12 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #D4AF3733;
+  background: #C9A84C33;
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #D4AF3766;
+  background: #C9A84C66;
 }
 
 .no-scrollbar {
@@ -207,4 +207,8 @@
   .result-page * {
     min-height: 0 !important;
   }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }

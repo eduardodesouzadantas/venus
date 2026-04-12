@@ -51,7 +51,7 @@ export default function AdminCatalogAddPage() {
       <div className="px-6 pt-12 pb-8 border-b border-white/5 bg-black/50 backdrop-blur-xl sticky top-0 z-50">
         <div className="flex items-center justify-between">
           <div className="flex flex-col">
-            <span className="text-[10px] uppercase font-bold tracking-[0.4em] text-[#D4AF37] mb-1">Catalog Enzyme</span>
+            <span className="text-[10px] uppercase font-bold tracking-[0.4em] text-[#C9A84C] mb-1">Catalog Enzyme</span>
             <Heading as="h1" className="text-2xl tracking-tighter">Enriquecer Produto</Heading>
           </div>
           <VenusButton variant="outline" className="border-white/10 rounded-full h-10 w-10 flex items-center justify-center p-0">
@@ -65,11 +65,11 @@ export default function AdminCatalogAddPage() {
         <div className="space-y-6">
            <div className="flex items-center justify-between">
               <Heading as="h3" className="text-sm uppercase tracking-widest text-white/60">1. Ativos Visuais</Heading>
-              {images.length > 0 && <Text className="text-[10px] text-[#D4AF37] font-bold">{images.length} IMAGENS</Text>}
+              {images.length > 0 && <Text className="text-[10px] text-[#C9A84C] font-bold">{images.length} IMAGENS</Text>}
            </div>
 
            <div 
-             className={`relative w-full aspect-video rounded-[32px] border-2 border-dashed border-white/10 flex flex-col items-center justify-center gap-4 group transition-all hover:border-[#D4AF37]/30 hover:bg-[#D4AF37]/5 ${status !== "idle" ? "hidden" : "flex"}`}
+             className={`relative w-full aspect-video rounded-[32px] border-2 border-dashed border-white/10 flex flex-col items-center justify-center gap-4 group transition-all hover:border-[#C9A84C]/30 hover:bg-[#C9A84C]/5 ${status !== "idle" ? "hidden" : "flex"}`}
              onClick={() => fileInputRef.current?.click()}
            >
               <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center border border-white/10 group-hover:scale-110 transition-transform">
@@ -97,7 +97,7 @@ export default function AdminCatalogAddPage() {
                      {status === "enriched" && (
                        <div className="absolute bottom-2 left-2 right-2">
                           <div className="px-2 py-1 rounded-lg bg-black/80 backdrop-blur-md border border-white/10 flex items-center justify-between">
-                             <span className="text-[8px] uppercase tracking-widest text-[#D4AF37] font-bold">
+                             <span className="text-[8px] uppercase tracking-widest text-[#C9A84C] font-bold">
                                 {Object.values(item.imageRoles || {})[i] || "Extra"}
                              </span>
                              <ChevronRight className="w-2 h-2 text-white/20" />
@@ -149,9 +149,9 @@ export default function AdminCatalogAddPage() {
              <div className="space-y-6">
                 <div className="flex items-center justify-between">
                    <Heading as="h3" className="text-sm uppercase tracking-widest text-white/60">2. Narrativa de Venda</Heading>
-                   <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-[#D4AF37]/10 border border-[#D4AF37]/30">
-                      <ShieldCheck className="w-3 h-3 text-[#D4AF37]" />
-                      <span className="text-[8px] text-[#D4AF37] font-bold uppercase tracking-widest">IA Validada</span>
+                   <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-[#C9A84C]/10 border border-[#C9A84C]/30">
+                      <ShieldCheck className="w-3 h-3 text-[#C9A84C]" />
+                      <span className="text-[8px] text-[#C9A84C] font-bold uppercase tracking-widest">IA Validada</span>
                    </div>
                 </div>
 
@@ -159,7 +159,7 @@ export default function AdminCatalogAddPage() {
                    <div className="space-y-2">
                       <Text className="text-[9px] uppercase tracking-widest text-white/30 font-bold ml-1">Título Premium</Text>
                       <input 
-                         className="w-full bg-white/[0.03] border border-white/10 p-4 rounded-2xl text-sm focus:outline-none focus:border-[#D4AF37]/50 transition-colors" 
+                         className="w-full bg-white/[0.03] border border-white/10 p-4 rounded-2xl text-sm focus:outline-none focus:border-[#C9A84C]/50 transition-colors" 
                          value={item.premiumTitle}
                          onChange={(e) => setItem({...item, premiumTitle: e.target.value})}
                       />
@@ -168,7 +168,7 @@ export default function AdminCatalogAddPage() {
                    <div className="space-y-2">
                       <Text className="text-[9px] uppercase tracking-widest text-white/30 font-bold ml-1">Impact Line (Persuasão)</Text>
                       <input 
-                         className="w-full bg-white/[0.03] border border-white/10 p-4 rounded-2xl text-xs font-medium italic focus:outline-none focus:border-[#D4AF37]/50 transition-colors" 
+                         className="w-full bg-white/[0.03] border border-white/10 p-4 rounded-2xl text-xs font-medium italic focus:outline-none focus:border-[#C9A84C]/50 transition-colors" 
                          value={item.impactLine}
                          onChange={(e) => setItem({...item, impactLine: e.target.value})}
                       />
@@ -177,7 +177,7 @@ export default function AdminCatalogAddPage() {
                    <div className="space-y-2">
                       <Text className="text-[9px] uppercase tracking-widest text-white/30 font-bold ml-1">Benefício Estrutural</Text>
                       <textarea 
-                         className="w-full bg-white/[0.03] border border-white/10 p-4 rounded-2xl text-xs leading-relaxed h-20 focus:outline-none focus:border-[#D4AF37]/50 transition-colors" 
+                         className="w-full bg-white/[0.03] border border-white/10 p-4 rounded-2xl text-xs leading-relaxed h-20 focus:outline-none focus:border-[#C9A84C]/50 transition-colors" 
                          value={item.functionalBenefit}
                          onChange={(e) => setItem({...item, functionalBenefit: e.target.value})}
                       />
@@ -186,7 +186,7 @@ export default function AdminCatalogAddPage() {
                    <div className="space-y-2">
                       <Text className="text-[9px] uppercase tracking-widest text-white/30 font-bold ml-1">Efeito Social</Text>
                       <textarea 
-                         className="w-full bg-white/[0.03] border border-white/10 p-4 rounded-2xl text-xs leading-relaxed h-20 focus:outline-none focus:border-[#D4AF37]/50 transition-colors" 
+                         className="w-full bg-white/[0.03] border border-white/10 p-4 rounded-2xl text-xs leading-relaxed h-20 focus:outline-none focus:border-[#C9A84C]/50 transition-colors" 
                          value={item.socialEffect}
                          onChange={(e) => setItem({...item, socialEffect: e.target.value})}
                       />
@@ -213,10 +213,10 @@ export default function AdminCatalogAddPage() {
                       </div>
                    </div>
 
-                   <div className="bg-[#D4AF37]/5 border border-[#D4AF37]/10 p-6 rounded-[32px] space-y-4">
+                   <div className="bg-[#C9A84C]/5 border border-[#C9A84C]/10 p-6 rounded-[32px] space-y-4">
                       <div className="flex items-center gap-2 mb-2">
-                         <Star className="w-4 h-4 text-[#D4AF37]" />
-                         <span className="text-[10px] font-bold uppercase tracking-widest text-[#D4AF37]">Sugestões de Venda</span>
+                         <Star className="w-4 h-4 text-[#C9A84C]" />
+                         <span className="text-[10px] font-bold uppercase tracking-widest text-[#C9A84C]">Sugestões de Venda</span>
                       </div>
                       <div className="space-y-4">
                          <div className="flex flex-col gap-1">
@@ -237,7 +237,7 @@ export default function AdminCatalogAddPage() {
                 <VenusButton 
                   variant="solid" 
                   onClick={handleSave}
-                  className="w-full py-8 h-auto text-[11px] font-bold uppercase tracking-[0.3em] bg-[#D4AF37] text-black shadow-2xl rounded-full active:scale-[0.98] transition-all group"
+                  className="w-full py-8 h-auto text-[11px] font-bold uppercase tracking-[0.3em] bg-[#C9A84C] text-black shadow-2xl rounded-full active:scale-[0.98] transition-all group"
                 >
                    <span className="flex items-center justify-center gap-3">
                      Publicar Catálogo Master
@@ -254,7 +254,7 @@ export default function AdminCatalogAddPage() {
 
         {status === "saved" && (
           <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center p-8 text-center space-y-8 animate-fade-in">
-             <div className="w-20 h-20 rounded-full bg-[#D4AF37]/10 border border-[#D4AF37]/30 flex items-center justify-center text-[#D4AF37]">
+             <div className="w-20 h-20 rounded-full bg-[#C9A84C]/10 border border-[#C9A84C]/30 flex items-center justify-center text-[#C9A84C]">
                 <CheckCircle2 size={40} className="animate-bounce" />
              </div>
              <div className="space-y-4">
@@ -276,7 +276,7 @@ export default function AdminCatalogAddPage() {
       </div>
 
       {/* Background Accent */}
-      <div className="fixed top-0 left-0 w-full h-[60vh] bg-gradient-to-b from-[#D4AF37]/5 to-transparent pointer-events-none -z-10" />
+      <div className="fixed top-0 left-0 w-full h-[60vh] bg-gradient-to-b from-[#C9A84C]/5 to-transparent pointer-events-none -z-10" />
     </div>
   );
 }

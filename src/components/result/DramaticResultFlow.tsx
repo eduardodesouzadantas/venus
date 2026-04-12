@@ -499,7 +499,7 @@ Quer descobrir o seu?`;
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onGoToLooks={handleGoToLooks}
-        stats={statsSummary}
+        surface={surface}
       />
     </div>
   );

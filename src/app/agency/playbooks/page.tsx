@@ -151,7 +151,7 @@ export default async function AgencyPlaybooksPage({
       <div className="px-6 pt-10 pb-8 border-b border-white/5 sticky top-0 z-40 bg-black/80 backdrop-blur-2xl">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="space-y-2">
-            <Text className="text-[10px] uppercase font-bold tracking-[0.5em] text-[#D4AF37]">
+            <Text className="text-[10px] uppercase font-bold tracking-[0.5em] text-[#C9A84C]">
               Agency Playbooks Queue
             </Text>
             <Heading as="h1" className="text-3xl uppercase tracking-tighter">

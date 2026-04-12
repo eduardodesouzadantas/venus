@@ -64,7 +64,7 @@ export default function AdminPerformancePage() {
       <div className="px-6 pt-12 pb-8 border-b border-white/5 bg-black/50 backdrop-blur-xl sticky top-0 z-50">
         <div className="flex items-center justify-between">
           <div className="flex flex-col">
-            <span className="text-[10px] uppercase font-bold tracking-[0.4em] text-[#D4AF37] mb-1">Merchant Intelligence</span>
+            <span className="text-[10px] uppercase font-bold tracking-[0.4em] text-[#C9A84C] mb-1">Merchant Intelligence</span>
             <Heading as="h1" className="text-2xl tracking-tighter uppercase">Performance & Insights</Heading>
           </div>
           <div className="flex gap-2">
@@ -79,7 +79,7 @@ export default function AdminPerformancePage() {
         {/* Quick Summary Cards (Step 1) */}
         <div className="grid grid-cols-2 gap-4">
            <div className="p-6 rounded-[32px] bg-white/[0.03] border border-white/5 space-y-3">
-              <div className="flex items-center gap-2 text-[#D4AF37]">
+              <div className="flex items-center gap-2 text-[#C9A84C]">
                  <TrendingUp size={16} />
                  <span className="text-[9px] uppercase font-bold tracking-widest">Desejo Gerado</span>
               </div>
@@ -107,7 +107,7 @@ export default function AdminPerformancePage() {
         <section className="space-y-6">
            <div className="flex items-baseline justify-between">
               <Heading as="h3" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">Ações Prioritárias</Heading>
-              <Text className="text-[10px] text-[#D4AF37] font-bold">3 ALERTA</Text>
+              <Text className="text-[10px] text-[#C9A84C] font-bold">3 ALERTA</Text>
            </div>
            
            {bottlenecks.map((item) => (
@@ -125,7 +125,7 @@ export default function AdminPerformancePage() {
                 <div className="space-y-3">
                    <Text className="text-xs text-white/60 leading-relaxed italic">&quot;{item.problem}&quot;</Text>
                    <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
-                      <span className="text-[9px] text-[#D4AF37] uppercase font-bold tracking-widest block mb-1">Recomendação Venus:</span>
+                      <span className="text-[9px] text-[#C9A84C] uppercase font-bold tracking-widest block mb-1">Recomendação Venus:</span>
                       <Text className="text-xs text-white/80 leading-relaxed">{item.fix}</Text>
                    </div>
                 </div>
@@ -142,11 +142,11 @@ export default function AdminPerformancePage() {
                <div key={item.id} className="p-6 rounded-[40px] bg-white/[0.04] border border-white/10 space-y-6 relative group active:scale-[0.98] transition-all">
                   <div className="flex items-center justify-between">
                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-[#D4AF37]/10 border border-[#D4AF37]/20 flex items-center justify-center text-[#D4AF37]">
+                        <div className="w-12 h-12 rounded-2xl bg-[#C9A84C]/10 border border-[#C9A84C]/20 flex items-center justify-center text-[#C9A84C]">
                            {item.category === "look" ? <LayoutGrid size={24} /> : <ShoppingBag size={24} />}
                         </div>
                         <div className="flex flex-col">
-                           <span className="text-[9px] uppercase tracking-widest text-[#D4AF37] font-bold mb-1">{item.category}</span>
+                           <span className="text-[9px] uppercase tracking-widest text-[#C9A84C] font-bold mb-1">{item.category}</span>
                            <Heading as="h4" className="text-lg tracking-tight">{item.name}</Heading>
                         </div>
                      </div>
@@ -163,7 +163,7 @@ export default function AdminPerformancePage() {
 
                   <div className="grid grid-cols-1 gap-5">
                      <div className="flex gap-4">
-                        <Zap className="w-5 h-5 text-[#D4AF37] flex-shrink-0" />
+                        <Zap className="w-5 h-5 text-[#C9A84C] flex-shrink-0" />
                         <div className="flex flex-col gap-1">
                            <span className="text-[10px] text-white/30 uppercase tracking-widest font-bold">Interpretação</span>
                            <Text className="text-xs text-white/80 leading-relaxed">{item.insight}</Text>
@@ -178,7 +178,7 @@ export default function AdminPerformancePage() {
                      </div>
                   </div>
                   
-                  <ChevronRight className="absolute bottom-6 right-6 w-5 h-5 text-white/10 group-hover:text-[#D4AF37] group-hover:translate-x-1 transition-all" />
+                  <ChevronRight className="absolute bottom-6 right-6 w-5 h-5 text-white/10 group-hover:text-[#C9A84C] group-hover:translate-x-1 transition-all" />
                </div>
              ))}
            </div>
@@ -187,12 +187,12 @@ export default function AdminPerformancePage() {
         {/* User Taste Signals (Step 5) */}
         <section className="space-y-6">
            <Heading as="h3" className="text-xs uppercase tracking-[0.4em] text-white/40 font-bold">Tendências de Atendimento</Heading>
-           <div className="p-8 rounded-[48px] bg-gradient-to-br from-[#D4AF37]/10 to-transparent border border-[#D4AF37]/20 space-y-8">
+           <div className="p-8 rounded-[48px] bg-gradient-to-br from-[#C9A84C]/10 to-transparent border border-[#C9A84C]/20 space-y-8">
               <div className="grid grid-cols-2 gap-8">
                  <div className="space-y-2">
                     <Text className="text-[10px] text-white/40 uppercase tracking-widest font-bold">Estética Dominante</Text>
-                    <Heading as="h4" className="text-xl tracking-tighter text-[#D4AF37]">Quiet Luxury</Heading>
-                    <Text className="text-[10px] text-[#D4AF37] font-bold">92% PREFERENCE</Text>
+                    <Heading as="h4" className="text-xl tracking-tighter text-[#C9A84C]">Quiet Luxury</Heading>
+                    <Text className="text-[10px] text-[#C9A84C] font-bold">92% PREFERENCE</Text>
                  </div>
                  <div className="space-y-2">
                     <Text className="text-[10px] text-white/40 uppercase tracking-widest font-bold">Ticket de Escolha</Text>
@@ -255,7 +255,7 @@ export default function AdminPerformancePage() {
       </div>
 
       {/* Floating BG Accent */}
-      <div className="fixed top-0 left-0 w-full h-[50vh] bg-gradient-to-b from-[#D4AF37]/5 to-transparent pointer-events-none -z-10" />
+      <div className="fixed top-0 left-0 w-full h-[50vh] bg-gradient-to-b from-[#C9A84C]/5 to-transparent pointer-events-none -z-10" />
     </div>
   );
 }

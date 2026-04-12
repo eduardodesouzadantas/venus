@@ -20,13 +20,32 @@ export default function BodyScannerPage() {
     updateData("scanner", { bodyPhoto: imageData });
     setUserPhoto(imageData);
 
-    if ((!data.colors.favoriteColors.length || !data.colors.avoidColors.length) && data.scanner.facePhoto) {
-      const analysis = await analyzeColorimetry(data.scanner.facePhoto);
+    const sourceImage = data.scanner.facePhoto || imageData;
+    if ((!data.colorimetry.justification || !data.favoriteColors.length || !data.avoidColors.length) && sourceImage) {
+      const analysis = await analyzeColorimetry(sourceImage, data.tenant?.orgId || data.tenant?.orgSlug || "");
       if (analysis) {
+        updateData("colorimetry", analysis);
         updateData("colors", {
           favoriteColors: analysis.favoriteColors,
           avoidColors: analysis.avoidColors,
+          colorSeason: analysis.colorSeason,
+          skinTone: analysis.skinTone,
+          undertone: analysis.undertone,
+          contrast: analysis.contrast,
+          faceShape: analysis.faceShape,
+          idealNeckline: analysis.idealNeckline,
+          idealFit: analysis.idealFit,
+          idealFabrics: analysis.idealFabrics,
+          avoidFabrics: analysis.avoidFabrics,
         });
+        updateData("favoriteColors", analysis.favoriteColors);
+        updateData("avoidColors", analysis.avoidColors);
+        updateData("colorSeason", analysis.colorSeason);
+        updateData("faceShape", analysis.faceShape);
+        updateData("idealNeckline", analysis.idealNeckline);
+        updateData("idealFit", analysis.idealFit);
+        updateData("idealFabrics", analysis.idealFabrics);
+        updateData("avoidFabrics", analysis.avoidFabrics);
         updateConversation({
           favoriteColors: analysis.favoriteColors,
           avoidColors: analysis.avoidColors,
@@ -41,7 +60,7 @@ export default function BodyScannerPage() {
     <div className="flex min-h-screen flex-col items-center bg-black px-4 pb-6 pt-12 sm:px-6 sm:pt-24">
       <div className="w-full max-w-[520px]">
         <div className="mb-4 space-y-2 text-center sm:mb-6">
-          <span className="text-[9px] font-bold uppercase tracking-[0.34em] text-[#D4AF37]">Leitura 04 de 04</span>
+          <span className="text-[9px] font-bold uppercase tracking-[0.34em] text-[#C9A84C]">Leitura 04 de 04</span>
           <Heading as="h3" className="font-serif text-2xl text-white/90 sm:text-3xl">
             Agora a Venus ajusta a presença no corpo
           </Heading>
