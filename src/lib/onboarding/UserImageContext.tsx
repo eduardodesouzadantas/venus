@@ -10,21 +10,38 @@ interface UserImageContextType {
 
 const UserImageContext = createContext<UserImageContextType | undefined>(undefined);
 
+function safeLocalStorageGet(key: string) {
+  try {
+    return typeof window === "undefined" ? null : window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeLocalStorageSet(key: string, value: string | null) {
+  try {
+    if (typeof window === "undefined") return;
+    if (value) {
+      window.localStorage.setItem(key, value);
+    } else {
+      window.localStorage.removeItem(key);
+    }
+  } catch {
+    // Ignore storage failures on browsers that block localStorage.
+  }
+}
+
 export function UserImageProvider({ children }: { children: React.ReactNode }) {
   const [userPhoto, setUserPhotoState] = useState<string | null>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem("venus_user_photo");
+    const saved = safeLocalStorageGet("venus_user_photo");
     if (saved) setUserPhotoState(saved);
   }, []);
 
   const setUserPhoto = (photo: string | null) => {
     setUserPhotoState(photo);
-    if (photo) {
-      localStorage.setItem("venus_user_photo", photo);
-    } else {
-      localStorage.removeItem("venus_user_photo");
-    }
+    safeLocalStorageSet("venus_user_photo", photo);
   };
 
   return (

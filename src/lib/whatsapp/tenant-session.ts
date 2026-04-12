@@ -24,6 +24,32 @@ function safeParse<T>(value: string | null): T | null {
   }
 }
 
+function safeLocalStorageGet(key: string) {
+  try {
+    return typeof window === "undefined" ? null : window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeLocalStorageSet(key: string, value: string) {
+  try {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Ignore storage failures on restricted browsers.
+  }
+}
+
+function safeLocalStorageRemove(key: string) {
+  try {
+    if (typeof window === "undefined") return;
+    window.localStorage.removeItem(key);
+  } catch {
+    // Ignore storage failures on restricted browsers.
+  }
+}
+
 export function resolveCurrentOrgSlug(): string | null {
   if (typeof window === "undefined") return null;
 
@@ -53,31 +79,35 @@ function decodeJwtExpiry(token: string): number | null {
 
 export function readCachedWhatsAppToken(orgSlug: string): WhatsAppTenantToken | null {
   if (typeof window === "undefined") return null;
-  return safeParse<WhatsAppTenantToken>(window.localStorage.getItem(tokenStorageKey(orgSlug)));
+  return safeParse<WhatsAppTenantToken>(safeLocalStorageGet(tokenStorageKey(orgSlug)));
 }
 
 export function clearCachedWhatsAppToken(orgSlug?: string) {
   if (typeof window === "undefined") return;
 
   if (orgSlug) {
-    window.localStorage.removeItem(tokenStorageKey(orgSlug));
+    safeLocalStorageRemove(tokenStorageKey(orgSlug));
     return;
   }
 
   const keys: string[] = [];
-  for (let index = 0; index < window.localStorage.length; index += 1) {
-    const key = window.localStorage.key(index);
-    if (key && key.startsWith(WHATSAPP_TOKEN_PREFIX)) {
-      keys.push(key);
+  try {
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index);
+      if (key && key.startsWith(WHATSAPP_TOKEN_PREFIX)) {
+        keys.push(key);
+      }
     }
+  } catch {
+    return;
   }
 
-  keys.forEach((key) => window.localStorage.removeItem(key));
+  keys.forEach((key) => safeLocalStorageRemove(key));
 }
 
 export function storeWhatsAppToken(session: WhatsAppTenantToken) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(tokenStorageKey(session.org_slug), JSON.stringify(session));
+  safeLocalStorageSet(tokenStorageKey(session.org_slug), JSON.stringify(session));
 }
 
 function isTokenFresh(session: WhatsAppTenantToken | null) {

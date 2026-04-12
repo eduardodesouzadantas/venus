@@ -173,6 +173,10 @@ function ResultDashboardContent() {
   }
 
   const result = surface;
+  const looks = Array.isArray(result?.looks) ? result.looks : [];
+  const essenceLabel = result?.essence?.label ?? "Sua Presença";
+  const paletteFamily = result?.palette?.family ?? "Personalizada";
+  const paletteColors = Array.isArray(result?.palette?.colors) ? result.palette.colors : [];
   const org = {
     name: tenantContext?.branchName || tenantContext?.orgSlug || "sua loja",
     whatsapp_phone: tenantContext?.whatsappNumber || "5511967011133"
@@ -182,9 +186,9 @@ function ResultDashboardContent() {
     if (!result || !surface) return "";
     const message = buildWhatsAppHandoffMessage({
       contactName: onboardingData.contact?.name,
-      styleIdentity: result.essence.label,
+      styleIdentity: essenceLabel,
       imageGoal: onboardingData.intent?.imageGoal,
-      lookSummary: result.looks as any,
+      lookSummary: looks as any,
       lastTryOn: tryOnImageUrl ? { image_url: tryOnImageUrl, status: "completed" } : persistedTryOn,
       decision: decision ? { action: decision.chosenAction, reason: decision.reason } : undefined,
     });
@@ -196,7 +200,7 @@ function ResultDashboardContent() {
   const displayImageUrl = tryOnImageUrl || persistedTryOn?.image_url;
   const isPreviousLook = !tryOnImageUrl && !!persistedTryOn?.image_url;
   const isGenerating = tryOnStatus === "queued" || tryOnStatus === "processing";
-  const firstTryOnProduct = result.looks[0]?.items?.[0] || null;
+  const firstTryOnProduct = looks[0]?.items?.[0] || null;
 
   const currentLoadingMessage = (() => {
     if (tryOnProgress < 30) return TRYON_LOADING_MESSAGES[0];
@@ -206,7 +210,7 @@ function ResultDashboardContent() {
 
   const handleGenerateTryOn = (productId: string) => {
     if (!tryOnPersonImage || !resolvedOrgId || !id) return;
-    const selectedProduct = result.looks[0]?.items?.find((item) => item.id === productId) || firstTryOnProduct;
+    const selectedProduct = looks[0]?.items?.find((item) => item.id === productId) || firstTryOnProduct;
     setPendingTryOnProduct(
       selectedProduct
         ? {
@@ -240,7 +244,7 @@ function ResultDashboardContent() {
         personImageUrl: tryOnPersonImage || null,
         garmentImageUrl: pendingTryOnProduct.photoUrl || null,
         generatedImageUrl: tryOnImageUrl,
-        lookName: pendingTryOnProduct.name || result.looks[0]?.name || null,
+        lookName: pendingTryOnProduct.name || looks[0]?.name || null,
         lookId: pendingTryOnProduct.id,
         category: pendingTryOnProduct.category || inferTryOnCategory(pendingTryOnProduct),
         requestId: null,
@@ -251,7 +255,7 @@ function ResultDashboardContent() {
     });
 
     setPendingTryOnProduct(null);
-  }, [tryOnStatus, tryOnImageUrl, resolvedOrgId, id, pendingTryOnProduct, tryOnPersonImage, result.looks]);
+  }, [tryOnStatus, tryOnImageUrl, resolvedOrgId, id, pendingTryOnProduct, tryOnPersonImage, looks]);
 
   React.useEffect(() => {
     if (loading || !result) return;
@@ -261,7 +265,7 @@ function ResultDashboardContent() {
       intent_score: intentScore,
       last_tryon: tryOnImageUrl ? { image_url: tryOnImageUrl, status: "completed" } : persistedTryOn,
       last_products_viewed: [],
-      last_recommendations: result.looks || [],
+      last_recommendations: looks || [],
       whatsapp_context: {},
       emotional_state: {},
       timestamps: {
@@ -294,7 +298,8 @@ function ResultDashboardContent() {
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
-  return (
+  try {
+    return (
     <main className="min-h-screen bg-[#0a0a0a] pb-24 text-[#f0ece4] selection:bg-[#C9A84C]/30">
       <section className="px-5 pt-8">
         <div className="relative mx-auto max-w-lg">
@@ -334,7 +339,7 @@ function ResultDashboardContent() {
                   A Venus está pronta para projetar seu primeiro look.
                 </p>
                 <VenusButton
-                  onClick={() => result.looks[0]?.items[0] && handleGenerateTryOn(result.looks[0].items[0].id)}
+                  onClick={() => looks[0]?.items[0] && handleGenerateTryOn(looks[0].items[0].id)}
                   className="mt-8"
                 >
                   Gerar minha imagem
@@ -364,7 +369,7 @@ function ResultDashboardContent() {
             <div className="space-y-3">
               <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#C9A84C]">Sua Presença</p>
               <h1 className="font-serif text-3xl font-bold tracking-tight text-white">
-                {result.essence.label}
+                {essenceLabel}
               </h1>
               <p className="mx-auto max-w-sm text-[16px] leading-relaxed text-white/60">
                 {isPreviousLook
@@ -417,9 +422,9 @@ function ResultDashboardContent() {
       <section className="mt-16 bg-white/[0.02] border-y border-white/5 py-12 px-5">
         <div className="mx-auto max-w-lg space-y-10">
           <div>
-            <p className="mb-6 font-mono text-[9px] uppercase tracking-[0.3em] text-[#C9A84C]">Análise de Paleta • {result.palette.family}</p>
+            <p className="mb-6 font-mono text-[9px] uppercase tracking-[0.3em] text-[#C9A84C]">Análise de Paleta • {paletteFamily}</p>
             <div className="flex gap-2">
-              {result.palette.colors.slice(0, 5).map((cor: any, i: number) => (
+              {paletteColors.slice(0, 5).map((cor: any, i: number) => (
                 <div key={i} className="flex-1">
                   <div className="h-14 rounded-xl border border-white/5 shadow-lg" style={{ background: cor.hex }} />
                   <p className="mt-2 text-[8px] text-center text-white/40 uppercase">{cor.name}</p>
@@ -473,7 +478,18 @@ function ResultDashboardContent() {
 
       <SaveResultsModal isOpen={showSaveModal} onClose={() => setShowSaveModal(false)} surface={surface} />
     </main>
-  );
+    );
+  } catch (err) {
+    console.error("[RENDER CRASH]", err, result);
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a] px-6 text-center text-white">
+        <div className="max-w-sm space-y-3">
+          <p className="text-sm uppercase tracking-[0.3em] text-[#C9A84C]">Erro ao renderizar</p>
+          <p className="text-sm text-white/60">A leitura foi carregada, mas a tela encontrou um erro ao montar a interface.</p>
+        </div>
+      </div>
+    );
+  }
 }
 
 export default function ResultDashboardPage() {

@@ -15,6 +15,23 @@ function normalize(value: string | null | undefined) {
   return typeof value === "string" ? value.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9_-]/g, "") : "";
 }
 
+function safeSessionStorageGet(key: string) {
+  try {
+    return typeof window === "undefined" ? null : window.sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSessionStorageSet(key: string, value: string) {
+  try {
+    if (typeof window === "undefined") return;
+    window.sessionStorage.setItem(key, value);
+  } catch {
+    // Ignore storage failures on browsers with restricted storage access.
+  }
+}
+
 function mergeOnboardingData(parsed: Partial<OnboardingData>, queryOrgSlug: string): OnboardingData {
   return {
     ...defaultOnboardingData,
@@ -56,7 +73,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    const saved = sessionStorage.getItem("venus_onboarding");
+    const saved = safeSessionStorageGet("venus_onboarding");
     const queryOrgSlug = typeof window !== "undefined" ? normalize(new URLSearchParams(window.location.search).get("org")) : "";
 
     if (saved) {
@@ -93,7 +110,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     if (isLoaded) {
-      sessionStorage.setItem("venus_onboarding", JSON.stringify(data));
+      safeSessionStorageSet("venus_onboarding", JSON.stringify(data));
     }
   }, [data, isLoaded]);
 
