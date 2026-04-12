@@ -246,6 +246,7 @@ export async function POST(request: Request) {
 
   const message = buildWhatsAppHandoffMessage({
     ...body.payload,
+    resultState: contextForMessage?.last_tryon?.status === "completed" ? "hero" : undefined,
     decision: decision ? { action: decision.chosenAction, reason: decision.reason } : undefined,
     lastTryOn: contextForMessage?.last_tryon,
   });

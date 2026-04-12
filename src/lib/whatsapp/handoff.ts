@@ -1,6 +1,7 @@
 import { LookData } from "@/types/result";
 import type { WhatsAppLookSummary } from "@/types/whatsapp";
 import { describeLookIntelligence } from "@/lib/whatsapp/fashion-consultant";
+import { buildVenusWhatsAppLeadIn, type VenusResultState } from "@/lib/venus/brand";
 
 type HandoffLook = WhatsAppLookSummary & {
   items?: Array<NonNullable<LookData["items"]>[number]>;
@@ -10,6 +11,7 @@ export interface WhatsAppHandoffInput {
   resultId?: string | null;
   contactName?: string;
   contactPhone?: string;
+  resultState?: VenusResultState;
   styleIdentity?: string;
   dominantStyle?: string;
   imageGoal?: string;
@@ -58,7 +60,11 @@ const inferOutcome = (input: WhatsAppHandoffInput) => {
 const trimSentence = (value: string) => value.replace(/\s+/g, " ").replace(/[.?!\s]+$/, "").trim();
 
 export function buildWhatsAppHandoffMessage(input: WhatsAppHandoffInput) {
-  const leadName = input.contactName ? `Oi, ${input.contactName}!` : "Oi!";
+  const leadIntro = buildVenusWhatsAppLeadIn({
+    contactName: input.contactName,
+    state: input.resultState,
+    lookName: input.lookSummary?.[0]?.name || input.lastTryOn?.product_name || null,
+  });
   const style = input.styleIdentity || input.dominantStyle || "sua assinatura de estilo";
   const goal = input.imageGoal || "seguir evoluindo a sua imagem";
   const outcome = inferOutcome(input);
@@ -70,10 +76,10 @@ export function buildWhatsAppHandoffMessage(input: WhatsAppHandoffInput) {
   const isAggressive = input.decision?.action === "SEND_WHATSAPP_MESSAGE";
 
   const lines = [
-    leadName,
+    leadIntro,
     isAggressive
-      ? `Acabei de provar meu look digital e o resultado foi impressionante!`
-      : `Acabei de ver meus looks recomendados e quero continuar por aqui.`,
+      ? `Esse resultado ficou impressionante e já abriu caminho para a próxima peça certa.`
+      : `Quero continuar por aqui com a mesma leitura consultiva.`,
     `Meu perfil ficou mais alinhado com ${style}, com foco em ${goal}.`,
     `O efeito que eu busco é ${outcome}.`,
     lastTryOn?.image_url

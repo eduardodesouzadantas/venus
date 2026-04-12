@@ -3,8 +3,7 @@
 import React, { Suspense, useMemo } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
-import { ArrowRight, Sparkles, Loader2 } from "lucide-react";
-import { Text } from "@/components/ui/Text";
+import { ArrowRight, Sparkles } from "lucide-react";
 import { VenusButton } from "@/components/ui/VenusButton";
 import { SaveResultsModal } from "@/components/onboarding/SaveResultsModal";
 import { SocialShareActions } from "@/components/ui/SocialShareActions";
@@ -20,6 +19,7 @@ import { DecisionResult } from "@/lib/decision-engine/types";
 import { buildWhatsAppHandoffMessage, buildWhatsAppHandoffUrl } from "@/lib/whatsapp/handoff";
 import { ensureTryOnProductId } from "@/lib/tryon/product-id";
 import { classifyTryOnQuality } from "@/lib/tryon/result-quality";
+import { buildVenusResultNarrative, VENUS_STYLIST_NAME } from "@/lib/venus/brand";
 
 // Categorization logic for the try-on engine
 function inferTryOnCategory(product: any): "tops" | "bottoms" | "one-pieces" {
@@ -106,29 +106,29 @@ function ResultDashboardContent() {
     surface?.hero?.subtitle,
     resolvedOrgId,
   ]);
+  const resultNarrative = useMemo(
+    () =>
+      buildVenusResultNarrative({
+        state: tryOnQuality.state,
+        reason: tryOnQuality.reason,
+        hasArtifact: hasTryOnArtifact,
+        hasLegacy: hasLegacyTryOnLooks,
+      }),
+    [tryOnQuality.state, tryOnQuality.reason, hasTryOnArtifact, hasLegacyTryOnLooks]
+  );
 
   const currentLoadingMessage = (() => {
     if (tryOnProgress < 30) return TRYON_LOADING_MESSAGES[0];
     if (tryOnProgress < 70) return TRYON_LOADING_MESSAGES[1];
     return TRYON_LOADING_MESSAGES[2];
   })();
-  const needsPhotoRetry = tryOnQuality.state === "retry_required" && (hasLegacyTryOnLooks || !tryOnPersonImage || !!tryOnError);
   const shouldShowRetryCopy = tryOnQuality.state === "retry_required" && (hasTryOnArtifact || hasLegacyTryOnLooks || !!tryOnError);
   const retryPhotoHref = tenantContext?.orgSlug
     ? `/scanner/face?org=${encodeURIComponent(tenantContext.orgSlug)}`
     : "/scanner/face";
   const mainCtaLabel =
-    tryOnQuality.state === "hero"
-      ? "Garantir esse look agora"
-      : tryOnQuality.state === "preview"
-        ? "Refazer foto"
-        : needsPhotoRetry
-          ? "Tirar nova foto"
-          : "Gerar minha imagem";
-  const secondaryCtaLabel =
-    tryOnQuality.state === "hero" || tryOnQuality.state === "preview"
-      ? "Ver no WhatsApp"
-      : "Voltar ao fluxo";
+    resultNarrative.primaryCta;
+  const secondaryCtaLabel = resultNarrative.secondaryCta;
 
   React.useEffect(() => {
     if (!surface) return;
@@ -163,6 +163,7 @@ function ResultDashboardContent() {
     if (!surface) return "";
     const message = buildWhatsAppHandoffMessage({
       contactName: onboardingData?.contact?.name,
+      resultState: tryOnQuality.state,
       styleIdentity: essenceLabel,
       imageGoal: onboardingData?.intent?.imageGoal,
       lookSummary: looks as any,
@@ -367,6 +368,7 @@ function ResultDashboardContent() {
           whatsappContext: {
             source: "result_page",
             destination: url,
+            resultState: tryOnQuality.state,
             whatsappClickedAt: new Date().toISOString(),
             lastAction: "SEND_WHATSAPP_MESSAGE",
             lastActionOutcome: "WHATSAPP_CLICKED",
@@ -388,7 +390,7 @@ function ResultDashboardContent() {
       <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a]">
         <div className="flex flex-col items-center gap-4 text-center">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#C9A84C] border-t-transparent" />
-          <p className="font-mono text-[9px] tracking-[0.2em] text-[#C9A84C]">REINICIANDO FLUXO...</p>
+          <p className="font-mono text-[9px] tracking-[0.2em] text-[#C9A84C]">ALINHANDO SUA REVELAÇÃO...</p>
         </div>
       </div>
     );
@@ -399,7 +401,7 @@ function ResultDashboardContent() {
       <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a]">
         <div className="flex flex-col items-center gap-4">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#C9A84C] border-t-transparent" />
-          <p className="font-mono text-[9px] tracking-[0.2em] text-[#C9A84C]">SINTONIZANDO ESSÊNCIA...</p>
+          <p className="font-mono text-[9px] tracking-[0.2em] text-[#C9A84C]">PREPARANDO SUA REVELAÇÃO...</p>
         </div>
       </div>
     );
@@ -416,16 +418,16 @@ function ResultDashboardContent() {
             </div>
           </div>
           <div className="space-y-2">
-            <p className="font-serif text-xl text-white">Quase lá...</p>
+            <p className="font-serif text-xl text-white">Sua revelação está a caminho...</p>
             <p className="max-w-xs text-sm text-white/40 leading-relaxed">
-              Estamos finalizando a sintonização do seu look. Essa conexão leva alguns segundos.
+              Estamos finalizando sua leitura premium. Se demorar um instante, a Venus está ajustando os últimos detalhes.
             </p>
           </div>
           <button
             onClick={() => window.location.reload()}
             className="mt-4 rounded-full border border-white/10 bg-white/5 px-8 py-3 text-[10px] font-bold uppercase tracking-widest text-[#C9A84C] transition-colors hover:bg-white/10"
           >
-            Tentar Sincronizar Agora
+            Continuar revelação
           </button>
           <Link href="/" className="text-[10px] font-bold uppercase tracking-widest text-white/20 hover:text-white transition-colors">Voltar ao início</Link>
         </div>
@@ -441,6 +443,20 @@ function ResultDashboardContent() {
     <main className="min-h-screen bg-[#0a0a0a] pb-24 text-[#f0ece4] selection:bg-[#C9A84C]/30">
       <section className="px-5 pt-8">
           <div className="relative mx-auto max-w-lg">
+            <div className="mb-6 flex items-center justify-between gap-4 rounded-full border border-white/8 bg-white/[0.03] px-4 py-3 backdrop-blur-md">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[#C9A84C]/25 bg-[#C9A84C]/10 text-[#C9A84C]">
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em]">V</span>
+                </div>
+                <div>
+                  <p className="text-[9px] font-bold uppercase tracking-[0.32em] text-[#C9A84C]">{VENUS_STYLIST_NAME}</p>
+                  <p className="text-[10px] text-white/45">Revelação premium do seu resultado</p>
+                </div>
+              </div>
+              <div className="rounded-full border border-white/10 bg-black/40 px-3 py-1 text-[8px] font-bold uppercase tracking-[0.28em] text-white/60">
+                {resultNarrative.eyebrow}
+              </div>
+            </div>
             <div className="relative aspect-[3/4] overflow-hidden rounded-[32px] border border-white/10 bg-white/[0.02] shadow-[0_22px_70px_rgba(0,0,0,0.6)]">
             {isGenerating ? (
               <div className="flex h-full w-full flex-col items-center justify-center bg-black/60 p-8 text-center backdrop-blur-sm">
@@ -450,7 +466,7 @@ function ResultDashboardContent() {
                   <Sparkles className="absolute inset-5 h-6 w-6 animate-pulse text-[#C9A84C]" />
                 </div>
                 <p className="mt-8 font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-[#C9A84C]">
-                  Gerando seu look
+                  Venus Stylist está revelando seu look
                 </p>
                 <p className="mt-4 text-[13px] text-white/60">
                   {currentLoadingMessage}
@@ -555,19 +571,15 @@ function ResultDashboardContent() {
 
           <div className="mt-10 space-y-6 text-center">
             <div className="space-y-3">
-              <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#C9A84C]">Sua Presença</p>
+              <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#C9A84C]">{resultNarrative.eyebrow}</p>
               <h1 className="font-serif text-3xl font-bold tracking-tight text-white">
                 {essenceLabel}
               </h1>
               <p className="mx-auto max-w-sm text-[16px] leading-relaxed text-white/60">
-                {tryOnQuality.state === "hero"
-                  ? "Sua imagem foi elevada ao padrão premium. A curadoria fecha com produto real, foto consistente e narrativa de transformação."
-                  : tryOnQuality.state === "preview"
-                    ? "A imagem existe e está perto da faixa hero, mas ainda merece validação antes de virar vitrine."
-                    : shouldShowRetryCopy
-                      ? "Esse resultado não atingiu integridade suficiente para exibição premium. Reenvie uma foto melhor para liberar a versão hero."
-                      : "A Venus está pronta para projetar seu primeiro look."
-                }
+                {resultNarrative.subtitle}
+              </p>
+              <p className="mx-auto max-w-sm text-[12px] leading-relaxed text-white/40">
+                {resultNarrative.helper}
               </p>
             </div>
 
@@ -625,10 +637,13 @@ function ResultDashboardContent() {
         </div>
       </section>
 
-      <section className="mt-16 bg-white/[0.02] border-y border-white/5 py-12 px-5">
+      <section className="mt-16 border-y border-white/5 bg-white/[0.02] py-12 px-5">
         <div className="mx-auto max-w-lg space-y-10">
           <div>
-            <p className="mb-6 font-mono text-[9px] uppercase tracking-[0.3em] text-[#C9A84C]">Análise de Paleta • {paletteFamily}</p>
+            <p className="mb-3 font-mono text-[9px] uppercase tracking-[0.3em] text-[#C9A84C]">Leitura de cor • {paletteFamily}</p>
+            <p className="mb-6 text-[13px] leading-relaxed text-white/55">
+              A Venus usa essa paleta para manter a transformação coerente do corpo ao WhatsApp.
+            </p>
             <div className="flex gap-2">
               {paletteColors.slice(0, 5).map((cor: any, i: number) => (
                 <div key={i} className="flex-1">
@@ -654,7 +669,7 @@ function ResultDashboardContent() {
 
       <section className="px-5 py-12 pb-20">
         <div className="mx-auto max-w-lg text-center space-y-6">
-          <p className="text-[12px] text-white/40">Venus Engine v1.0 • Catalog Synchronization</p>
+          <p className="text-[12px] text-white/40">Curadoria assinada por {VENUS_STYLIST_NAME}</p>
           <div className="flex justify-center gap-4">
             <Link href="/" className="text-[10px] font-bold uppercase tracking-widest text-white/30 hover:text-[#C9A84C] transition-colors">
               Início
@@ -666,7 +681,7 @@ function ResultDashboardContent() {
       <div className="fixed bottom-0 left-0 right-0 z-[150] flex h-14 items-center justify-between bg-[#C9A84C] px-4 shadow-[0_-10px_40px_rgba(0,0,0,0.3)]">
         <span className="text-[10px] font-bold uppercase tracking-wider text-black flex items-center gap-2">
           <div className="h-2 w-2 rounded-full bg-black animate-pulse" />
-          A Venus está online — {org.name}
+          {VENUS_STYLIST_NAME} está online — {org.name}
         </span>
         <Link
           href={`https://wa.me/${org.whatsapp_phone}`}
@@ -678,7 +693,7 @@ function ResultDashboardContent() {
           }}
           className="rounded-lg bg-black px-4 py-2 text-[10px] font-black uppercase tracking-widest text-[#C9A84C] transition-transform active:scale-95"
         >
-          Conversar Agora
+          Falar com a Venus Stylist
         </Link>
       </div>
 

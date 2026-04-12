@@ -8,6 +8,7 @@ import { ShieldCheck, Phone, Mail, User, X, CheckCircle2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
 import { triggerReEngagement } from "@/lib/whatsapp/AutomationEngine";
+import { VENUS_STYLIST_NAME } from "@/lib/venus/brand";
 
 interface SaveResultsModalProps {
   isOpen: boolean;
@@ -64,7 +65,7 @@ export const SaveResultsModal = ({ isOpen, onClose, onGoToLooks, surface }: Save
                 Salvar minha leitura
               </Heading>
               <Text className="text-[10px] font-bold uppercase tracking-[0.4em] text-white/40">
-                Protocolo de leitura Venus
+                Protocolo de leitura {VENUS_STYLIST_NAME}
               </Text>
             </div>
 
@@ -72,7 +73,7 @@ export const SaveResultsModal = ({ isOpen, onClose, onGoToLooks, surface }: Save
               {!isSaved ? (
                 <form onSubmit={handleSave} className="space-y-6">
                   <p className="px-4 text-center font-serif text-xs italic leading-relaxed text-white/60">
-                    "Salve sua leitura para recuperar depois e receber novas sugestões de estilo por WhatsApp."
+                    "Guarde sua leitura para recuperar depois e continuar sua curadoria por WhatsApp."
                   </p>
 
                   <div className="space-y-4">
@@ -135,7 +136,7 @@ export const SaveResultsModal = ({ isOpen, onClose, onGoToLooks, surface }: Save
                       Leitura salva
                     </Heading>
                     <Text className="text-xs leading-relaxed uppercase tracking-widest text-white/40">
-                      Sua assinatura ficou vinculada ao Venus Engine. <br />
+                      Sua assinatura ficou vinculada à Venus Stylist. <br />
                       Em instantes, sua curadoria pode entrar em contato.
                     </Text>
                   </div>

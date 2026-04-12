@@ -9,6 +9,7 @@ import { RealCamera } from "@/components/ui/RealCamera";
 import { useUserImage } from "@/lib/onboarding/UserImageContext";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
 import { analyzeColorimetry } from "@/lib/analysis/colorimetry-client";
+import { buildVenusBodyScannerIntro } from "@/lib/venus/brand";
 
 export default function BodyScannerPage() {
   const router = useRouter();
@@ -62,10 +63,10 @@ export default function BodyScannerPage() {
         <div className="mb-4 space-y-2 text-center sm:mb-6">
           <span className="text-[9px] font-bold uppercase tracking-[0.34em] text-[#C9A84C]">Leitura 04 de 04</span>
           <Heading as="h3" className="font-serif text-2xl text-white/90 sm:text-3xl">
-            Agora a Venus ajusta a presença no corpo
+            {buildVenusBodyScannerIntro()}
           </Heading>
           <Text className="mx-auto max-w-[26ch] text-sm text-white/55">
-            Posicione a silhueta para calibrar proporção, caimento e leitura final do look.
+            Posicione a silhueta com luz frontal para calibrar proporção, caimento e presença final.
           </Text>
         </div>
 

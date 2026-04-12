@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { VenusAvatar } from "@/components/venus/VenusAvatar";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
 import { defaultOnboardingData, type OnboardingData } from "@/types/onboarding";
+import { buildVenusStylistIntro } from "@/lib/venus/brand";
 
 type ChatRole = "venus" | "client";
 
@@ -85,7 +86,7 @@ const CHAT_STEPS: ChatStep[] = [
   },
 ];
 
-const INTRO_MESSAGE = "Oi. Eu sou a Venus Stylist. Vou ler sua presença como consultora e cruzar sua foto com a colorimetria.";
+const INTRO_MESSAGE = buildVenusStylistIntro();
 
 function normalize(text: string) {
   return text

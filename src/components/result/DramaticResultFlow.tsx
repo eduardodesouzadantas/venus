@@ -497,6 +497,7 @@ Quer descobrir o seu?`;
                     resultId: id || "",
                     contactName: onboardingData.contact?.name || "",
                     contactPhone: onboardingData.contact?.phone || "",
+                    resultState: tryOnResult ? "hero" : "preview",
                     styleIdentity: surface.hero.dominantStyle,
                     dominantStyle: surface.hero.dominantStyle,
                     imageGoal: onboardingData.intent.imageGoal || surface.diagnostic.desiredGoal,
