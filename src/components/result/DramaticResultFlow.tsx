@@ -142,14 +142,14 @@ Quer descobrir o seu?`;
 
     setIsTryOnGenerating(true);
     setTryOnProgress(0);
-    setTryOnMessages(["Analisando sua silhueta..."]);
+    setTryOnMessages(["Lendo sua silhueta..."]);
     setTryOnResult(null);
     setTryOnError(null);
 
     const messages = [
-      "Analisando sua silhueta...",
-      "Aplicando a peça...",
-      "Ajustando os detalhes...",
+      "Lendo sua silhueta...",
+      "Vestindo a peça...",
+      "Lapidando o acabamento...",
     ];
 
     let progress = 0;
@@ -200,7 +200,7 @@ Quer descobrir o seu?`;
       setTimeout(() => setCurrentSection(3), 1500);
     } catch (error) {
       clearInterval(interval);
-      setTryOnError("Não foi possível gerar o try-on. Use a foto do look como alternativa.");
+      setTryOnError("A leitura ainda não ficou no ponto. Vou usar a foto da peça para seguir sem perder a direção.");
       setTryOnResult(lookImageUrl);
       setTimeout(() => setCurrentSection(3), 2000);
     } finally {
@@ -330,7 +330,7 @@ Quer descobrir o seu?`;
           <div className="w-full max-w-lg mx-auto space-y-6">
             <div className="text-center space-y-2">
               <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#D4AF37]">
-                A Venus escolheu a peça certa para o seu perfil
+                A Venus escolheu a peça certa para sua leitura
               </span>
               <h2 className="text-2xl font-serif uppercase">{featuredLook?.name}</h2>
             </div>
@@ -349,12 +349,12 @@ Quer descobrir o seu?`;
               {isTryOnGenerating ? (
                 <span className="flex items-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Gerando...
+                  Revelando...
                 </span>
               ) : (
                 <span className="flex items-center gap-2">
                   <Wand2 className="h-4 w-4" />
-                  Gerar meu look
+                  Revelar meu look
                 </span>
               )}
             </VenusButton>
@@ -390,7 +390,7 @@ Quer descobrir o seu?`;
         <div className="flex flex-col px-4 py-8">
           <div className="w-full max-w-md mx-auto space-y-6">
             <div className="text-center space-y-2">
-              <p className="text-xl font-serif text-white">Esse sou eu.</p>
+              <p className="text-xl font-serif text-white">Agora faz sentido.</p>
             </div>
 
             <div className="aspect-[3/4] rounded-[32px] overflow-hidden border border-white/10 shadow-2xl">
@@ -408,7 +408,7 @@ Quer descobrir o seu?`;
               >
                 <span className="flex items-center gap-2">
                   <Camera className="h-4 w-4" />
-                  Postar e desbloquear vantagens →
+                  Compartilhar a leitura →
                 </span>
               </VenusButton>
 
@@ -441,7 +441,7 @@ Quer descobrir o seu?`;
             <div className="space-y-4">
               <div>
                 <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/60 block mb-2">
-                  Légenda
+                  Legenda
                 </label>
                 <textarea
                   value={shareCaption}
@@ -451,7 +451,7 @@ Quer descobrir o seu?`;
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <span className="text-[9px] text-white/40">@VenusEngine @InovaCortex #VenusEngine</span>
+                <span className="text-[9px] text-white/40">Leitura assinada por Venus Stylist</span>
               </div>
             </div>
 
@@ -469,7 +469,7 @@ Quer descobrir o seu?`;
               onClick={() => setCurrentSection(4)}
               className="w-full text-center text-[10px] text-white/40 hover:text-white/60 py-2"
             >
-              Ver todos os looks →
+              Ver a coleção completa →
             </button>
           </div>
         </div>
@@ -512,7 +512,7 @@ Quer descobrir o seu?`;
                 }}
                 className="h-12 w-full text-[10px] tracking-[0.3em]"
               >
-                Falar com a loja no WhatsApp
+                Continuar no WhatsApp
               </VenusButton>
             </div>
           )}

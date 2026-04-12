@@ -65,7 +65,7 @@ export const SaveResultsModal = ({ isOpen, onClose, onGoToLooks, surface }: Save
                 Salvar minha leitura
               </Heading>
               <Text className="text-[10px] font-bold uppercase tracking-[0.4em] text-white/40">
-                Protocolo de leitura {VENUS_STYLIST_NAME}
+                Leitura assinada por {VENUS_STYLIST_NAME}
               </Text>
             </div>
 
@@ -73,7 +73,7 @@ export const SaveResultsModal = ({ isOpen, onClose, onGoToLooks, surface }: Save
               {!isSaved ? (
                 <form onSubmit={handleSave} className="space-y-6">
                   <p className="px-4 text-center font-serif text-xs italic leading-relaxed text-white/60">
-                    "Guarde sua leitura para recuperar depois e continuar sua curadoria por WhatsApp."
+                    Guarde sua leitura para recuperar depois e continuar sua curadoria no WhatsApp.
                   </p>
 
                   <div className="space-y-4">
@@ -123,7 +123,7 @@ export const SaveResultsModal = ({ isOpen, onClose, onGoToLooks, surface }: Save
 
                   <div className="flex items-center justify-center gap-2 pt-2 opacity-40 grayscale">
                     <ShieldCheck size={12} className="text-[#D4AF37]" />
-                    <span className="text-[8px] font-bold uppercase tracking-widest">Proteção de dados • Consentimento explícito</span>
+                    <span className="text-[8px] font-bold uppercase tracking-widest">Você decide o que deseja guardar.</span>
                   </div>
                 </form>
               ) : (

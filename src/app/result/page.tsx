@@ -390,7 +390,7 @@ function ResultDashboardContent() {
       <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a]">
         <div className="flex flex-col items-center gap-4 text-center">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#C9A84C] border-t-transparent" />
-          <p className="font-mono text-[9px] tracking-[0.2em] text-[#C9A84C]">ALINHANDO SUA REVELAÇÃO...</p>
+          <p className="font-mono text-[9px] tracking-[0.2em] text-[#C9A84C]">AJUSTANDO SUA LEITURA...</p>
         </div>
       </div>
     );
@@ -401,7 +401,7 @@ function ResultDashboardContent() {
       <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a]">
         <div className="flex flex-col items-center gap-4">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#C9A84C] border-t-transparent" />
-          <p className="font-mono text-[9px] tracking-[0.2em] text-[#C9A84C]">PREPARANDO SUA REVELAÇÃO...</p>
+          <p className="font-mono text-[9px] tracking-[0.2em] text-[#C9A84C]">A VENUS ESTÁ PREPARANDO SUA LEITURA...</p>
         </div>
       </div>
     );
@@ -418,16 +418,16 @@ function ResultDashboardContent() {
             </div>
           </div>
           <div className="space-y-2">
-            <p className="font-serif text-xl text-white">Sua revelação está a caminho...</p>
+            <p className="font-serif text-xl text-white">Sua leitura está a caminho...</p>
             <p className="max-w-xs text-sm text-white/40 leading-relaxed">
-              Estamos finalizando sua leitura premium. Se demorar um instante, a Venus está ajustando os últimos detalhes.
+              Estamos finalizando sua leitura premium. Se demorar um instante, a Venus está lapidando os últimos detalhes.
             </p>
           </div>
           <button
             onClick={() => window.location.reload()}
             className="mt-4 rounded-full border border-white/10 bg-white/5 px-8 py-3 text-[10px] font-bold uppercase tracking-widest text-[#C9A84C] transition-colors hover:bg-white/10"
           >
-            Continuar revelação
+            Continuar a leitura
           </button>
           <Link href="/" className="text-[10px] font-bold uppercase tracking-widest text-white/20 hover:text-white transition-colors">Nova leitura</Link>
         </div>
@@ -450,7 +450,7 @@ function ResultDashboardContent() {
                 </div>
                 <div>
                   <p className="text-[9px] font-bold uppercase tracking-[0.32em] text-[#C9A84C]">{VENUS_STYLIST_NAME}</p>
-                  <p className="text-[10px] text-white/45">Revelação premium do seu resultado</p>
+                  <p className="text-[10px] text-white/45">Revelação premium da sua leitura</p>
                 </div>
               </div>
               <div className="rounded-full border border-white/10 bg-black/40 px-3 py-1 text-[8px] font-bold uppercase tracking-[0.28em] text-white/60">
@@ -506,8 +506,8 @@ function ResultDashboardContent() {
                 </div>
                 <p className="text-balance text-[15px] font-medium leading-relaxed text-white/80">
                   {shouldShowRetryCopy
-                    ? "Essa leitura ainda não atingiu o padrão premium. Vamos refazer com uma foto melhor."
-                    : "A Venus está pronta para projetar seu primeiro look."}
+                    ? "Essa leitura ainda não chegou no ponto ideal. Vamos refazer com uma foto melhor."
+                    : "A Venus está pronta para revelar seu primeiro look."}
                 </p>
                 <VenusButton
                   onClick={() => {
@@ -524,11 +524,11 @@ function ResultDashboardContent() {
                   disabled={!tryOnAvailable}
                   className="mt-8"
                 >
-                  {tryOnAvailable ? mainCtaLabel : "Try-on indisponível"}
+                  {tryOnAvailable ? mainCtaLabel : "Leitura indisponível"}
                 </VenusButton>
                 {!tryOnAvailable && (
                   <p className="mt-3 text-[11px] leading-relaxed text-white/40">
-                    Esse resultado veio de um legado salvo antes do Venus registrar o UUID real do produto.
+                    Esse resultado veio de uma leitura antiga. Faça uma nova foto para liberar a versão premium.
                   </p>
                 )}
               </div>
@@ -541,12 +541,12 @@ function ResultDashboardContent() {
                 {isPreviousLook && (
                   <div className="flex items-center gap-2 rounded-full border border-[#C9A84C]/20 bg-black/60 px-4 py-2 backdrop-blur-md">
                     <div className="h-1.5 w-1.5 rounded-full bg-[#C9A84C]" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-[#C9A84C]">Memória Venus</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-[#C9A84C]">Memória da Venus</span>
                   </div>
                 )}
                 <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/40 px-4 py-2 backdrop-blur-md">
                   <div className="h-1.5 w-1.5 rounded-full bg-[#C9A84C] animate-pulse" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#C9A84C]">Venus Verified Look</span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#C9A84C]">Look validado</span>
                 </div>
               </div>
             )}
@@ -621,8 +621,8 @@ function ResultDashboardContent() {
 
               {decision?.chosenAction === "OFFER_DISCOUNT" && (
                 <div className="rounded-2xl border border-[#C9A84C]/20 bg-[#C9A84C]/5 p-4 text-center animate-in fade-in zoom-in-95">
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-[#C9A84C]">Oportunidade Única</p>
-                  <p className="mt-1 text-xs text-white/70">Use **VENUSPRO** para 10% OFF agora.</p>
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-[#C9A84C]">Condição reservada</p>
+                  <p className="mt-1 text-xs text-white/70">A Venus separou um cuidado especial para este momento.</p>
                 </div>
               )}
 
@@ -630,7 +630,7 @@ function ResultDashboardContent() {
                 onClick={() => router.push('/')}
                 className="flex h-14 items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-6 text-[11px] font-bold uppercase tracking-widest text-white/90 transition-colors hover:bg-white/10"
               >
-                Novo Perfil
+                Nova leitura
               </button>
             </div>
           </div>
@@ -642,7 +642,7 @@ function ResultDashboardContent() {
           <div>
             <p className="mb-3 font-mono text-[9px] uppercase tracking-[0.3em] text-[#C9A84C]">Leitura de cor • {paletteFamily}</p>
             <p className="mb-6 text-[13px] leading-relaxed text-white/55">
-              A Venus usa essa paleta para manter a transformação coerente do corpo ao WhatsApp.
+              A Venus leva essa paleta da imagem ao WhatsApp para manter a mesma assinatura.
             </p>
             <div className="flex gap-2">
               {paletteColors.slice(0, 5).map((cor: any, i: number) => (
@@ -693,7 +693,7 @@ function ResultDashboardContent() {
           }}
           className="rounded-lg bg-black px-4 py-2 text-[10px] font-black uppercase tracking-widest text-[#C9A84C] transition-transform active:scale-95"
         >
-          Falar com a Venus Stylist
+          Continuar no WhatsApp
         </Link>
       </div>
 

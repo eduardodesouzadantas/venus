@@ -66,7 +66,7 @@ export function BodyPhotoUpload({ onPhotoSelected, onUseCamera }: BodyPhotoUploa
 
         <div className="relative z-20 flex min-h-[7.75rem] flex-col items-center justify-between border-t border-white/5 bg-[#121212] px-4 py-4 sm:h-32 sm:px-6">
           <p className="mb-3 text-center text-[13px] leading-relaxed text-white/70 sm:mb-2 sm:text-sm">
-            Essa foto está boa? Confirme para continuar.
+            Essa foto está no ponto? Confirme para seguir.
           </p>
 
           <div className="flex w-full items-center justify-between px-2 sm:px-4">
@@ -127,7 +127,7 @@ export function BodyPhotoUpload({ onPhotoSelected, onUseCamera }: BodyPhotoUploa
           >
             <span className="flex items-center gap-2">
               <Upload className="h-4 w-4" />
-              Selecionar foto
+              Escolher foto
             </span>
           </VenusButton>
 
@@ -142,14 +142,14 @@ export function BodyPhotoUpload({ onPhotoSelected, onUseCamera }: BodyPhotoUploa
             className="flex items-center gap-2 text-sm text-white/60 transition-colors hover:text-white"
           >
             <Camera className="h-4 w-4" />
-            Usar câmera
+            Abrir câmera
           </button>
         </div>
       </div>
 
       <div className="relative z-20 flex min-h-[4rem] items-center justify-center border-t border-white/5 bg-[#121212] px-4 py-3 sm:px-6">
         <p className="text-[11px] text-white/40">
-          Formatos aceitos: JPG, PNG, WebP
+          JPG, PNG ou WebP funcionam bem.
         </p>
       </div>
     </div>

@@ -13,11 +13,11 @@ type VenusResultNarrativeInput = {
 };
 
 export function buildVenusStylistIntro() {
-  return "Oi. Eu sou a Venus Stylist. Vou ler sua presença como consultora, cruzar sua foto com colorimetria e devolver uma curadoria elegante.";
+  return "Oi. Eu sou a Venus Stylist. Vou ler sua presença com precisão, cruzar sua foto com colorimetria e devolver uma curadoria elegante.";
 }
 
 export function buildVenusBodyScannerIntro() {
-  return "Agora a Venus fecha a leitura do corpo com precisão";
+  return "Agora a Venus completa a leitura do corpo com precisão.";
 }
 
 export function buildVenusResultNarrative(input: VenusResultNarrativeInput) {
@@ -26,7 +26,7 @@ export function buildVenusResultNarrative(input: VenusResultNarrativeInput) {
       eyebrow: "Revelação final",
       title: "Sua essência virou imagem.",
       subtitle:
-        "A curadoria fechou com produto real, foto consistente e leitura premium. O resultado já está pronto para virar conversa.",
+        "A curadoria fechou com produto real, foto consistente e leitura premium. O resultado já está pronto para seguir para o WhatsApp.",
       primaryCta: "Quero esse look no WhatsApp",
       secondaryCta: "Continuar a conversa",
       helper:
@@ -38,9 +38,9 @@ export function buildVenusResultNarrative(input: VenusResultNarrativeInput) {
   if (input.state === "preview") {
     return {
       eyebrow: "Prévia curada",
-      title: "A leitura está muito perto do premium.",
+      title: "A leitura está muito perto do ponto ideal.",
       subtitle:
-        "A imagem existe, está elegante e já comunica direção. Falta só um ajuste fino antes de subir como vitrine final.",
+        "A imagem existe, está elegante e já comunica direção. Falta só um ajuste fino antes de virar vitrine final.",
       primaryCta: "Refazer foto",
       secondaryCta: "Continuar no WhatsApp",
       helper:
@@ -53,7 +53,7 @@ export function buildVenusResultNarrative(input: VenusResultNarrativeInput) {
     eyebrow: input.hasLegacy ? "Leitura antiga" : "Nova tentativa",
     title: "Essa leitura pede uma nova foto.",
     subtitle: input.hasLegacy
-      ? "O resultado veio de um legado sem produto validado para try-on. Vamos refazer com uma foto melhor para liberar a versão premium."
+      ? "O resultado veio de uma leitura antiga, sem peça validada para try-on. Vamos refazer com uma foto melhor para liberar a versão premium."
       : "A imagem ainda não atingiu integridade suficiente para virar hero. Com uma nova foto, a revelação fica mais precisa.",
     primaryCta: "Tirar nova foto",
     secondaryCta: input.hasArtifact ? "Nova leitura" : "Refazer leitura",
@@ -71,10 +71,10 @@ export function buildVenusWhatsAppLeadIn(input: {
   const greet = input.contactName ? `Oi, ${input.contactName}!` : "Oi!";
   const base =
     input.state === "hero"
-      ? "A Venus Stylist já fechou sua leitura e o resultado ficou impressionante."
+      ? "A Venus Stylist já fechou sua leitura e o resultado ganhou presença."
       : input.state === "preview"
-        ? "A Venus Stylist já chegou muito perto da leitura ideal."
-        : "A Venus Stylist quer refinar sua leitura com você.";
+        ? "A Venus Stylist já chegou muito perto do ponto ideal."
+        : "A Venus Stylist quer refinar a leitura com você.";
 
   const lookLine = input.lookName ? `O look que mais faz sentido agora é ${input.lookName}.` : "O look mais coerente já está mapeado.";
 

@@ -61,12 +61,12 @@ export default function BodyScannerPage() {
     <div className="flex min-h-screen flex-col items-center bg-black px-4 pb-6 pt-12 sm:px-6 sm:pt-24">
       <div className="w-full max-w-[520px]">
         <div className="mb-4 space-y-2 text-center sm:mb-6">
-          <span className="text-[9px] font-bold uppercase tracking-[0.34em] text-[#C9A84C]">Leitura 04 de 04</span>
+          <span className="text-[9px] font-bold uppercase tracking-[0.34em] text-[#C9A84C]">Leitura final</span>
           <Heading as="h3" className="font-serif text-2xl text-white/90 sm:text-3xl">
             {buildVenusBodyScannerIntro()}
           </Heading>
           <Text className="mx-auto max-w-[26ch] text-sm text-white/55">
-            Posicione a silhueta com luz frontal para calibrar proporção, caimento e presença final.
+            Posicione a silhueta com luz frontal para a Venus calibrar proporção, caimento e presença.
           </Text>
         </div>
 
@@ -77,7 +77,7 @@ export default function BodyScannerPage() {
           />
         ) : (
           <RealCamera
-            instruction="Posicione o topo da cabeça e os pés nas guias pontilhadas."
+            instruction="Alinhe cabeça e pés nas guias pontilhadas."
             overlayType="body"
             showTimerOptions={true}
             onCaptured={handleBodyCaptured}

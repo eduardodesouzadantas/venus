@@ -57,8 +57,8 @@ const CHAT_STEPS: ChatStep[] = [
   {
     key: "line",
     kind: "single",
-    prompt: "Antes de tudo - qual linha sustenta sua imagem?",
-    placeholder: "Digite ou toque numa opcao.",
+    prompt: "Antes de tudo, qual linha sustenta sua imagem?",
+    placeholder: "Digite ou toque em uma opção.",
     options: [
       { label: "Feminina", value: "Feminina", conversationValue: "feminina" },
       { label: "Masculina", value: "Masculina", conversationValue: "masculina" },
@@ -68,8 +68,8 @@ const CHAT_STEPS: ChatStep[] = [
   {
     key: "imageGoal",
     kind: "single",
-    prompt: "Que leitura voce quer que a roupa entregue?",
-    placeholder: "Digite ou toque numa opcao.",
+    prompt: "Que presença você quer que a roupa entregue?",
+    placeholder: "Digite ou toque em uma opção.",
     options: [
       { label: "Autoridade", value: "Autoridade", conversationValue: "autoridade" },
       { label: "Elegancia", value: "Elegancia", conversationValue: "elegancia" },
@@ -81,7 +81,7 @@ const CHAT_STEPS: ChatStep[] = [
   {
     key: "styleDirection",
     kind: "text",
-    prompt: "Me conta uma coisa - quando voce se olha no espelho e pensa 'hoje ta certo', o que voce esta vestindo?",
+    prompt: "Me conta uma coisa: quando você se olha no espelho e pensa 'hoje está certo', o que você está vestindo?",
     placeholder: "Escreva sua resposta livre.",
   },
 ];
@@ -127,15 +127,15 @@ function buildStepPrompt(stepKey: ChatStep["key"], data: OnboardingData) {
     case "line":
       return safeData.colorimetry?.justification
         ? `Pelo que eu já leio em você, ${visionCue}. Você quer que essa imagem imponha autoridade, entregue elegância ou fique mais neutra?`
-        : "Antes de tudo - qual linha sustenta sua imagem?";
+        : "Antes de tudo, qual linha sustenta sua imagem?";
     case "imageGoal":
       return safeData.colorimetry?.justification
         ? "Agora eu quero afinar a intenção: o que a roupa precisa fazer pela sua presença quando alguém te vê?"
-        : "Que leitura você quer que a roupa entregue?";
+        : "Que presença você quer que a roupa entregue?";
     case "styleDirection":
       return safeData.colorimetry?.justification
         ? "Me conta um exemplo real: quando você olha no espelho e pensa 'hoje está certo', o que você está vestindo?"
-        : "Me conta uma coisa - quando voce se olha no espelho e pensa 'hoje ta certo', o que voce esta vestindo?";
+        : "Me conta uma coisa: quando você se olha no espelho e pensa 'hoje está certo', o que você está vestindo?";
     case "avoidColorNote":
       return "Existe alguma cor que você evita por motivo pessoal ou por memória afetiva?";
   }

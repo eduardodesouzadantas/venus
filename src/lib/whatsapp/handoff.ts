@@ -78,16 +78,16 @@ export function buildWhatsAppHandoffMessage(input: WhatsAppHandoffInput) {
   const lines = [
     leadIntro,
     isAggressive
-      ? `Esse resultado ficou impressionante e já abriu caminho para a próxima peça certa.`
+      ? `Esse resultado ganhou presença e já abriu caminho para a próxima peça certa.`
       : `Quero continuar por aqui com a mesma leitura consultiva.`,
-    `Meu perfil ficou mais alinhado com ${style}, com foco em ${goal}.`,
+    `Minha presença ficou mais alinhada com ${style}, com foco em ${goal}.`,
     `O efeito que eu busco é ${outcome}.`,
     lastTryOn?.image_url
-      ? `Acabei de fazer o try-on do look ${lastTryOn.product_name || "personalizado"} e quero entender como ter essas peças.`
+      ? `Acabei de experimentar o look ${lastTryOn.product_name || "personalizado"} e quero entender como levar isso para as peças certas.`
       : topLook
         ? `O look que mais fez sentido foi ${topLook.name}${topLook.explanation ? `, porque ${trimSentence(topLook.explanation)}` : ""}${intelligence ? ` • ${trimSentence(intelligence)}` : ""}.`
         : `Quero entender a próxima opção mais coerente com o meu perfil.`,
-    isAggressive ? `Esse visual me transmite muita confiança, vamos fechar?` : null,
+    isAggressive ? `Esse visual me transmite confiança para seguir.` : null,
     secondLook && !isAggressive ? `Se fizer sentido, me mostra outra opção no mesmo clima.` : null,
     `Pode me orientar com a próxima etapa?`,
   ].filter(Boolean) as string[];
