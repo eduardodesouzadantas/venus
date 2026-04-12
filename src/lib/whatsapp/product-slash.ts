@@ -71,13 +71,13 @@ export function parseLookCommand(rawValue: string) {
   };
 }
 
-export async function fetchMerchantProducts(merchantId: string): Promise<SlashProduct[]> {
-  if (!merchantId) return [];
+export async function fetchMerchantProducts(orgId: string): Promise<SlashProduct[]> {
+  if (!orgId) return [];
 
   const { data, error } = await supabase
     .from("products")
     .select("id,name,category,primary_color,style,type,price_range,image_url,external_url,created_at")
-    .eq("b2b_user_id", merchantId)
+    .eq("org_id", orgId)
     .order("created_at", { ascending: false });
 
   if (error) {

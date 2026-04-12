@@ -52,6 +52,7 @@ export async function POST(req: NextRequest) {
   const category = normalizeText(body.category) || "tops";
 
   if (!personImageUrl || !garmentImageUrl) {
+    console.error("[tryon/auto] Missing images:", { personImageUrl: !!personImageUrl, garmentImageUrl: !!garmentImageUrl });
     return NextResponse.json({ error: "Missing required fields: person_image_url, garment_image_url" }, { status: 400 });
   }
 
@@ -85,6 +86,12 @@ export async function POST(req: NextRequest) {
       const generatedImageUrl = Array.isArray((result as { images?: Array<{ url?: string }> }).images)
         ? (result as { images: Array<{ url?: string }> }).images[0]?.url || ""
         : "";
+
+      console.log("[tryon/auto] Result received:", {
+        hasImages: !!generatedImageUrl,
+        requestId: requestId || null,
+        resultKeys: result ? Object.keys(result) : [],
+      });
 
       if (generatedImageUrl) {
         return NextResponse.json({
