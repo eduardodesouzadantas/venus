@@ -35,6 +35,12 @@ const {
   hasLegacyTryOnProducts,
 } = require("../src/lib/result/surface.ts");
 const {
+  buildVenusStylistAudit,
+} = require("../src/lib/venus/stylist-audit.ts");
+const {
+  buildWhatsAppStylistCommercePlan,
+} = require("../src/lib/whatsapp/stylist-engine.ts");
+const {
   ensureTryOnProductId,
   isValidTryOnProductId,
 } = require("../src/lib/tryon/product-id.ts");
@@ -43,6 +49,9 @@ const {
   evaluateTryOnStructural,
   evaluateTryOnVisual,
 } = require("../src/lib/tryon/result-quality.ts");
+const {
+  buildWhatsAppHandoffMessage,
+} = require("../src/lib/whatsapp/handoff.ts");
 const {
   buildCatalogEnrichmentSignals,
   deriveVisualSignalsFromMetrics,
@@ -148,6 +157,30 @@ function loadFresh(modulePath) {
   const resolved = require.resolve(modulePath);
   delete require.cache[resolved];
   return require(modulePath);
+}
+
+async function withTempEnv(values, fn) {
+  const previous = {};
+  for (const [key, value] of Object.entries(values)) {
+    previous[key] = process.env[key];
+    if (value === undefined || value === null) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+
+  try {
+    return await fn();
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
 }
 
 run("lead statuses include closing and keep counters aligned", () => {
@@ -511,6 +544,92 @@ run("result surface preserves UUID product ids and keeps UI ids separate", () =>
   assert.equal(surface.looks[0].items[0].product_id, uuid);
   assert.notEqual(surface.looks[0].product_id, surface.looks[0].id);
   assert.equal(hasLegacyTryOnProducts(surface.looks), false);
+});
+
+run("venus stylist audit keeps buy-now scoped to real product ids", () => {
+  const uuid = "11111111-1111-4111-8111-111111111111";
+  const surface = buildResultSurface(sampleOnboarding, null, {
+    looks: [
+      {
+        id: "surface-look-1-1",
+        product_id: uuid,
+        name: "Look 1",
+        intention: "Entrada limpa",
+        type: "Híbrido Seguro",
+        items: [
+          {
+            id: "surface-look-1-1",
+            product_id: uuid,
+            photoUrl: "https://example.com/item.jpg",
+            brand: "Acervo real",
+            name: "Blazer estruturado",
+          },
+        ],
+        accessories: [],
+        explanation: "Entrada limpa",
+        whenToWear: "Rotina",
+      },
+      {
+        id: "surface-look-2-1",
+        name: "Look legado",
+        intention: "Fallback",
+        type: "Híbrido Seguro",
+        items: [
+          {
+            id: "surface-look-2-1",
+            photoUrl: "https://example.com/item-2.jpg",
+            brand: "Acervo legado",
+            name: "Peça sintética",
+          },
+        ],
+        accessories: [],
+        explanation: "Fallback",
+        whenToWear: "Rotina",
+      },
+    ],
+  });
+
+  const heroQuality = classifyTryOnQuality({
+    hasGeneratedImage: true,
+    hasPersonImage: true,
+    hasRealProduct: true,
+    isLegacyLook: false,
+    isPreviousLook: false,
+    hasTryOnError: false,
+    primaryLookItemCount: 2,
+    hasBeforeAfter: true,
+    hasHeroFrame: true,
+    hasNarrative: true,
+    hasContextualCTA: true,
+    hasPremiumBadge: true,
+  });
+
+  const audit = buildVenusStylistAudit({
+    surface,
+    tryOnQuality: heroQuality,
+    onboardingData: sampleOnboarding,
+    contactName: "Ana",
+    resultId: "550e8400-e29b-41d4-a716-446655440000",
+    orgName: "Maison Elite",
+  });
+
+  assert.equal(audit.buyNow.looks.length, 1);
+  assert.equal(audit.buyNow.looks[0].productId, uuid);
+  assert.ok(audit.whatsapp.leadIn.includes("Ana"));
+  assert.ok(audit.whatsapp.leadIn.includes("Resultado"));
+  assert.ok(audit.social.prompt.includes("Maison Elite"));
+
+  const message = buildWhatsAppHandoffMessage({
+    contactName: "Ana",
+    resultState: "hero",
+    styleIdentity: surface.essence.label,
+    imageGoal: sampleOnboarding.intent.imageGoal,
+    lookSummary: surface.looks,
+    audit,
+  });
+
+  assert.ok(message.includes("Continuar com minha stylist") || message.includes("Continuar com Venus Stylist"));
+  assert.ok(message.includes("Blazer estruturado"));
 });
 
 run("synthetic result surface does not invent product ids", () => {
@@ -1374,6 +1493,346 @@ const FRONTEND_ORG_ID = "frontend-org";
     assert.ok(!resultSource.includes("Finalizando sintonização"));
     assert.ok(recoverySource.includes("resolvedOrgId"));
     assert.ok(!recoverySource.includes("org_id=${encodeURIComponent(orgId || \"\")}"));
+  });
+
+  await runAsync("whatsapp stylist commerce plan stays store scoped and composes bundles", async () => {
+    const plan = await buildWhatsAppStylistCommercePlan({
+      orgId: "org-123",
+      contactName: "Ana",
+      styleIdentity: "Autoridade limpa",
+      imageGoal: "Autoridade",
+      paletteFamily: "Neutros Refinados",
+      fit: "Slim",
+      metal: "Prateado",
+      intentScore: 82,
+      resultState: "hero",
+      catalog: [
+        {
+          id: "prod-anchor",
+          org_id: "org-123",
+          name: "Blazer estruturado",
+          category: "Blazer",
+          primary_color: "Marinho",
+          style: "Alfaiataria",
+          type: "top",
+          price_range: "R$ 480-620",
+          image_url: "https://example.com/blazer.jpg",
+          external_url: null,
+          created_at: new Date().toISOString(),
+          style_direction: "Feminina",
+          style_tags: ["Autoridade"],
+          category_tags: ["Base forte"],
+          fit_tags: ["Estrutura"],
+          color_tags: ["Marinho"],
+          target_profile: ["Executiva"],
+          use_cases: ["Trabalho"],
+          occasion_tags: ["Trabalho"],
+          season_tags: ["Ano todo"],
+          body_effect: "Estrutura e organiza a silhueta",
+          face_effect: "Mantém a leitura limpa",
+          visual_weight: "Alta",
+          formality: "Alta",
+          catalog_notes: "Estrutura para autoridade",
+        },
+        {
+          id: "prod-support",
+          org_id: "org-123",
+          name: "Blusa de seda",
+          category: "Blusa",
+          primary_color: "Off white",
+          style: "Elegante",
+          type: "top",
+          price_range: "R$ 220-280",
+          image_url: "https://example.com/blusa.jpg",
+          external_url: null,
+          created_at: new Date().toISOString(),
+          style_direction: "Feminina",
+          style_tags: ["Minimalismo"],
+          category_tags: ["Base"],
+          fit_tags: ["Conforto"],
+          color_tags: ["Off white"],
+          target_profile: ["Executiva"],
+          use_cases: ["Trabalho"],
+          occasion_tags: ["Trabalho"],
+          season_tags: ["Ano todo"],
+          body_effect: "Sustenta a leitura com conforto",
+          face_effect: "Mantém a leitura limpa",
+          visual_weight: "Media",
+          formality: "Media alta",
+          catalog_notes: "Acabamento refinado",
+        },
+      ],
+    });
+
+    assert.equal(plan.available, true);
+    assert.equal(plan.orgId, "org-123");
+    assert.equal(plan.completeLooks[0].items.length >= 1, true);
+    assert.ok(plan.openingLine.includes("Ana"));
+    assert.ok(plan.summaryLine.includes("Look montado"));
+    assert.ok(plan.upsellLine.length > 0);
+    assert.ok(plan.crossSellLine.length > 0);
+    assert.ok(plan.alternativeLine.length > 0);
+
+    const message = buildWhatsAppHandoffMessage({
+      contactName: "Ana",
+      resultState: "hero",
+      styleIdentity: "Autoridade limpa",
+      imageGoal: "Autoridade",
+      lookSummary: [
+        {
+          id: "look-1",
+          name: "Look assinatura",
+          intention: "Autoridade",
+          type: "Hero",
+          explanation: "Peça que sustenta presença.",
+          whenToWear: "Trabalho",
+          items: [],
+        },
+      ],
+      audit: null,
+      commerce: plan,
+    });
+
+    assert.ok(message.includes("Blazer estruturado"));
+    assert.ok(message.includes("levar isso para as peças certas") || message.includes("conjunto"));
+  });
+
+  await runAsync("whatsapp stylist commerce plan fails safely without org scope", async () => {
+    const plan = await buildWhatsAppStylistCommercePlan({ orgId: "" });
+    assert.equal(plan.available, false);
+    assert.equal(plan.fallbackReason, "missing_org_id");
+    assert.equal(plan.completeLooks.length, 0);
+  });
+
+  await runAsync("stripe helpers resolve prices, statuses and subscription blocking", async () => {
+    await withTempEnv(
+      {
+        STRIPE_SECRET_KEY: "sk_test_venus",
+        STRIPE_PRICE_ID_STARTER: "price_starter",
+        STRIPE_PRICE_ID_GROWTH: "price_growth",
+      },
+      async () => {
+        const stripeBilling = loadFresh("../src/lib/billing/stripe.ts");
+
+        assert.equal(stripeBilling.normalizeStripeBillingStatus("active"), "active");
+        assert.equal(stripeBilling.normalizeStripeBillingStatus("past_due"), "past_due");
+        assert.equal(stripeBilling.isStripeBillingStatusBlocking("past_due"), true);
+        assert.equal(stripeBilling.isStripeBillingStatusBlocking("active"), false);
+        assert.equal(stripeBilling.resolveStripePriceId("starter"), "price_starter");
+        assert.equal(stripeBilling.resolvePlanIdFromStripePriceId("price_growth"), "growth");
+
+        const checkoutParams = stripeBilling.buildStripeCheckoutSessionParams({
+          orgId: "org-1",
+          orgSlug: "maison-elite",
+          planId: "starter",
+          customerEmail: "cliente@exemplo.com",
+          successUrl: "https://venus.example/success",
+          cancelUrl: "https://venus.example/cancel",
+        });
+
+        assert.equal(checkoutParams.mode, "subscription");
+        assert.equal(checkoutParams.client_reference_id, "org-1");
+        assert.equal(checkoutParams.line_items?.[0]?.price, "price_starter");
+        assert.equal(checkoutParams.metadata?.org_id, "org-1");
+        assert.equal(checkoutParams.subscription_data?.metadata?.plan_id, "starter");
+        assert.equal(checkoutParams.customer_email, "cliente@exemplo.com");
+      }
+    );
+  });
+
+  await runAsync("billing enforcement falls back safely and blocks Stripe past_due", async () => {
+    const billingSummary = {
+      plan_id: "starter",
+      plan_soft_caps: {
+        saved_results: 40,
+        leads: 20,
+        products: 100,
+        whatsapp_messages: 250,
+        estimated_cost_today_cents: 300,
+        estimated_cost_total_cents: 9_000,
+      },
+      total_saved_results: 0,
+      total_leads: 0,
+      total_products: 0,
+      total_whatsapp_messages: 0,
+      estimated_cost_today_cents: 0,
+      estimated_cost_total_cents: 0,
+      billing_status: null,
+    };
+
+    const fallbackModule = await withMockedModules(
+      {
+        "@/lib/billing": {
+          getOrgBillingSummary: async () => null,
+        },
+        "@/lib/supabase/admin": {
+          createAdminClient: () => ({
+            from: () => ({
+              insert: async () => ({ error: null }),
+            }),
+          }),
+        },
+        "@/lib/reliability/observability": {
+          createOperationalEventDedupeKey: () => "dedupe",
+          formatOperationalReason: () => "reason",
+          recordOperationalTenantEvent: async () => null,
+        },
+      },
+      async () => loadFresh("../src/lib/billing/enforcement.ts")
+    );
+
+    const fallbackDecision = await fallbackModule.enforceOrgHardCap({
+      orgId: "org-1",
+      operation: "saved_result_generation",
+    });
+    assert.equal(fallbackDecision.allowed, true);
+
+    const blockedModule = await withMockedModules(
+      {
+        "@/lib/billing": {
+          getOrgBillingSummary: async () => ({
+            ...billingSummary,
+            billing_status: "past_due",
+          }),
+        },
+        "@/lib/supabase/admin": {
+          createAdminClient: () => ({
+            from: () => ({
+              insert: async () => ({ error: null }),
+            }),
+          }),
+        },
+        "@/lib/reliability/observability": {
+          createOperationalEventDedupeKey: () => "dedupe",
+          formatOperationalReason: () => "reason",
+          recordOperationalTenantEvent: async () => null,
+        },
+      },
+      async () => loadFresh("../src/lib/billing/enforcement.ts")
+    );
+
+    const blockedDecision = await blockedModule.enforceOrgHardCap({
+      orgId: "org-1",
+      operation: "saved_result_generation",
+    });
+    assert.equal(blockedDecision.allowed, false);
+    assert.equal(blockedDecision.metric, "billing_status");
+  });
+
+  run("tenant scope guard rejects empty org_id", () => {
+    const scopedGuards = loadFresh("../src/lib/catalog/scoped-guards.ts");
+    const assertScope = loadFresh("../src/lib/tenant/assert-scope.ts");
+
+    assert.equal(scopedGuards.hasValidTenantScope(null, "catalog_read"), false);
+    assert.equal(scopedGuards.hasValidTenantScope("", "catalog_read"), false);
+    assert.equal(scopedGuards.hasValidTenantScope("org-123", "recommendation"), true);
+
+    const emptyResult = assertScope.validateTenantContext(null, true);
+    assert.equal(emptyResult.allowed, false);
+    assert.ok(emptyResult.reason.includes("ausente"));
+
+    const validResult = assertScope.validateTenantContext("org-123", true);
+    assert.equal(validResult.allowed, true);
+  });
+
+  run("catalog scoped guards filter products by org_id", () => {
+    const scopedGuards = loadFresh("../src/lib/catalog/scoped-guards.ts");
+
+    const products = [
+      { id: "p1", org_id: "org-a", name: "Produto A", category: "Blazer", primary_color: "Preto", style: "Alfaiataria", type: "roupa", price_range: "R$ 500", image_url: null, external_url: null, created_at: "2026-04-01" },
+      { id: "p2", org_id: "org-a", name: "Produto B", category: "Camisa", primary_color: "Branco", style: "Clássico", type: "roupa", price_range: "R$ 200", image_url: null, external_url: null, created_at: "2026-04-01" },
+      { id: "p3", org_id: "org-b", name: "Produto C", category: "Blazer", primary_color: "Preto", style: "Alfaiataria", type: "roupa", price_range: "R$ 500", image_url: null, external_url: null, created_at: "2026-04-01" },
+    ];
+
+    const sameOrgResult = scopedGuards.filterProductsByScope(products, "org-a");
+    assert.equal(sameOrgResult.valid, true);
+    assert.equal(sameOrgResult.scopedProducts.length, 2);
+    assert.equal(sameOrgResult.rejectedCount, 1);
+
+    const crossStoreResult = scopedGuards.filterProductsByScope(products, "org-b");
+    assert.equal(crossStoreResult.valid, true);
+    assert.equal(crossStoreResult.scopedProducts.length, 1);
+    assert.equal(crossStoreResult.rejectedCount, 2);
+  });
+
+  run("catalog scope fails safely without org_id", () => {
+    const scopedGuards = loadFresh("../src/lib/catalog/scoped-guards.ts");
+
+    const products = [
+      { id: "p1", org_id: "org-a", name: "Produto A", category: "Blazer", primary_color: "Preto", style: "Alfaiataria", type: "roupa", price_range: "", image_url: null, external_url: null, created_at: "2026-04-01" },
+    ];
+
+    const noOrgResult = scopedGuards.filterProductsByScope(products, "");
+    assert.equal(noOrgResult.valid, false);
+    assert.ok(noOrgResult.reason.includes("ausente"));
+    assert.equal(noOrgResult.scopedProducts.length, 0);
+  });
+
+  run("collection targeting generates segments per profile", () => {
+    const targeting = loadFresh("../src/lib/campaigns/collection-targeting.ts");
+
+    const products = [
+      { id: "prod-1", org_id: "org-1", name: "Blazer Exec", category: "Blazer", primary_color: "Preto", style: "Alfaiataria", type: "roupa", price_range: "", image_url: null, external_url: null, created_at: "2026-04-01", target_profile: ["executiva"] },
+      { id: "prod-2", org_id: "org-1", name: "Camisa Minimal", category: "Camisa", primary_color: "Branco", style: "Minimalista", type: "roupa", price_range: "", image_url: null, external_url: null, created_at: "2026-04-01", target_profile: ["minimalista"] },
+      { id: "prod-3", org_id: "org-1", name: "Blazer Classic", category: "Blazer", primary_color: "Preto", style: "Clássico", type: "roupa", price_range: "", image_url: null, external_url: null, created_at: "2026-04-01", target_profile: ["clássica"] },
+      { id: "prod-4", org_id: "org-1", name: "Acessorio", category: "Acessório", primary_color: "Preto", style: "Neutro", type: "acessorio", price_range: "", image_url: null, external_url: null, created_at: "2026-04-01", target_profile: [] },
+    ];
+
+    const result = targeting.generateCollectionTargeting({
+      orgId: "org-1",
+      collection: products,
+      profileSignals: { imageGoal: "Autoridade" },
+    });
+
+    assert.equal(result.orgId, "org-1");
+    assert.ok(result.collectionId.startsWith("col-org-1-"));
+    assert.ok(result.segments.length >= 2);
+    assert.ok(result.criteriaApplied.some((c) => c.includes("org_id validado")));
+  });
+
+  run("collection targeting fails without org_id", () => {
+    const targeting = loadFresh("../src/lib/campaigns/collection-targeting.ts");
+
+    const result = targeting.generateCollectionTargeting({
+      orgId: "",
+      collection: [],
+    });
+
+    assert.equal(result.orgId, "");
+    assert.equal(result.segments.length, 0);
+    assert.ok(result.criteriaApplied.includes("org_id ausente"));
+  });
+
+  run("collection targeting uses only same org products", () => {
+    const targeting = loadFresh("../src/lib/campaigns/collection-targeting.ts");
+
+    const products = [
+      { id: "prod-1", org_id: "org-1", name: "Produto", category: "Blazer", primary_color: "Preto", style: "Alfaiataria", type: "roupa", price_range: "", image_url: null, external_url: null, created_at: "2026-04-01", target_profile: ["executiva"] },
+      { id: "prod-2", org_id: "org-2", name: "Produto Outro", category: "Blazer", primary_color: "Preto", style: "Alfaiataria", type: "roupa", price_range: "", image_url: null, external_url: null, created_at: "2026-04-01", target_profile: ["executiva"] },
+    ];
+
+    const result = targeting.generateCollectionTargeting({
+      orgId: "org-1",
+      collection: products,
+    });
+
+    const allProductIds = result.segments.flatMap((s) => s.productIds);
+    assert.ok(allProductIds.includes("prod-1"));
+    assert.ok(!allProductIds.includes("prod-2"));
+  });
+
+  run("flow events log with correlation", () => {
+    const events = loadFresh("../src/lib/reliability/events.ts");
+
+    const correlation = events.createFlowCorrelation({
+      orgId: "org-test",
+      leadId: "lead-1",
+      sessionId: "session-1",
+    });
+
+    assert.equal(correlation.orgId, "org-test");
+    assert.equal(correlation.leadId, "lead-1");
+    assert.equal(events.isCorrelationComplete(correlation), true);
   });
 
   process.stdout.write("all reliability checks passed\n");
