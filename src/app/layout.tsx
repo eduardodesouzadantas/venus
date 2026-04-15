@@ -1,10 +1,14 @@
 import type { Metadata } from "next";
-import { Inter, Playfair_Display } from "next/font/google";
+import type { CSSProperties } from "react";
 import { OnboardingProvider } from "@/lib/onboarding/OnboardingContext";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
-const playfair = Playfair_Display({ subsets: ["latin"], variable: "--font-playfair" });
+const inter = { variable: "--font-inter" };
+const playfair = { variable: "--font-playfair" };
+const fontVars: CSSProperties & Record<string, string> = {
+  ["--font-inter"]: "Inter, ui-sans-serif, system-ui, sans-serif",
+  ["--font-playfair"]: '"Playfair Display", ui-serif, Georgia, serif',
+};
 
 export const metadata: Metadata = {
   title: "Venus Engine",
@@ -24,20 +28,22 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-BR" className={`${inter.variable} ${playfair.variable} dark`} suppressHydrationWarning>
-      <body className="min-h-screen bg-black text-white antialiased relative isolate" suppressHydrationWarning>
+    <html lang="pt-BR" className={`${inter.variable} ${playfair.variable} dark`} style={fontVars} suppressHydrationWarning>
+      <body className="min-h-screen bg-black text-white antialiased relative isolate font-sans" suppressHydrationWarning>
         <UserImageProvider>
           <AuthProvider>
-            <OnboardingProvider>
-              <WhatsAppProvider>
-                <main className="min-h-screen bg-black relative z-10 overflow-x-hidden antialiased">
-                  {children}
-                  <Suspense fallback={null}>
-                    <DemoTour />
-                  </Suspense>
-                </main>
-              </WhatsAppProvider>
-            </OnboardingProvider>
+            <Suspense fallback={null}>
+              <OnboardingProvider>
+                <WhatsAppProvider>
+                  <main className="min-h-screen bg-black relative z-10 overflow-x-hidden antialiased">
+                    {children}
+                    <Suspense fallback={null}>
+                      <DemoTour />
+                    </Suspense>
+                  </main>
+                </WhatsAppProvider>
+              </OnboardingProvider>
+            </Suspense>
           </AuthProvider>
         </UserImageProvider>
       </body>

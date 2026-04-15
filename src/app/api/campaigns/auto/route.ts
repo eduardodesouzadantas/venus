@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { resolveProductStockSnapshot } from "@/lib/catalog/stock";
 import { decryptStoredMetaIntegrationToken, loadMetaIntegrationByOrgId, sendMetaWhatsAppTextMessage } from "@/lib/whatsapp/meta";
 import { generateReply } from "@/lib/venus/VenusStylist";
 import { loadContext } from "@/lib/venus/ConversationContext";
@@ -44,6 +45,9 @@ type ProductRow = {
   primary_color: string | null;
   style: string | null;
   image_url: string | null;
+  stock_qty: number | null;
+  reserved_qty: number | null;
+  stock_status: string | null;
   stock: number | null;
   style_direction?: string | null;
   color_tags?: string[] | null;
@@ -133,6 +137,11 @@ function paletteMatchScore(favorites: string[], avoid: string[], productTokens: 
   return { matches: matches.length, conflicts: conflicts.length };
 }
 
+function tokenOverlapScore(values: string[], productTokens: string[]) {
+  const tokens = values.flatMap((value) => tokenize(value));
+  return tokens.filter((token) => productTokens.some((productToken) => productToken.includes(token) || token.includes(productToken))).length;
+}
+
 async function buildReplyForLead(
   orgId: string,
   lead: LeadRow,
@@ -174,7 +183,7 @@ async function buildReplyForLead(
     productStyle: normalize(payload.productStyle) || product?.style || context.productStyle,
     productColor: normalize(payload.productColor) || product?.primary_color || context.productColor,
     look: normalize(payload.lookName) || context.look,
-    stockSummary: product ? `Estoque atual: ${product.stock ?? 0}` : context.stockSummary,
+    stockSummary: product ? `Estoque atual: ${resolveProductStockSnapshot(product).availableQty}` : context.stockSummary,
   };
 
   const reply = await generateReply(enhancedContext, triggerText).catch(() => "");
@@ -214,7 +223,7 @@ async function loadEligibleData(admin: ReturnType<typeof createAdminClient>, org
       .limit(200),
     admin
       .from("products")
-      .select("id, name, category, primary_color, style, image_url, stock, style_direction, color_tags")
+      .select("id, name, category, primary_color, style, image_url, stock_qty, reserved_qty, stock_status, stock, style_direction, color_tags")
       .eq("org_id", orgId)
       .order("created_at", { ascending: false })
       .limit(100),
@@ -234,10 +243,17 @@ async function loadEligibleData(admin: ReturnType<typeof createAdminClient>, org
 function leadSignalsFromPayload(payload: Record<string, unknown> | null) {
   const onboarding = asRecord(payload?.onboardingContext);
   const contact = asRecord(onboarding?.contact);
+  const finalResult = asRecord(payload?.finalResult);
   return {
     name: normalize(readNestedString(onboarding, ["contact", "name"])) || normalize(contact?.name),
     favoriteColors: readFavoriteColors(payload),
     avoidColors: readAvoidColors(payload),
+    styleIdentity: normalize(readNestedString(onboarding, ["intent", "styleDirection"])) || normalize(readNestedString(finalResult, ["essence", "label"])),
+    styleDirection: normalize(readNestedString(onboarding, ["intent", "styleDirection"])),
+    bodyFit: normalize(readNestedString(onboarding, ["body", "fit"])) || normalize(readNestedString(finalResult, ["bodyVisagism", "generalFit"])),
+    lookNames: Array.isArray(finalResult?.looks)
+      ? (finalResult.looks as Array<Record<string, unknown>>).map((look) => normalize((look.name as string | undefined) || (look.explanation as string | undefined)))
+      : [],
   };
 }
 
@@ -302,10 +318,12 @@ function selectCandidates(
 
     if (campaignType === "new_collection" || campaignType === "dead_stock") {
       const { matches, conflicts } = paletteMatchScore(signals.favoriteColors, signals.avoidColors, productTokens);
+      const styleMatches = tokenOverlapScore([signals.styleIdentity, signals.styleDirection, signals.bodyFit, ...signals.lookNames], productTokens);
+      const styleIntent = tokenOverlapScore([normalize(payload.productStyle), normalize(payload.productCategory), normalize(payload.lookName)], productTokens);
       if (campaignType === "dead_stock") {
-        return matches > 0 || conflicts === 0 || (lead.intent_score ?? 0) >= 60;
+        return matches > 0 || conflicts === 0 || styleMatches > 0 || styleIntent > 0 || (lead.intent_score ?? 0) >= 60;
       }
-      return matches > 0 || (signals.favoriteColors.length === 0 && (lead.intent_score ?? 0) >= 60);
+      return matches > 0 || styleMatches > 0 || styleIntent > 0 || (signals.favoriteColors.length === 0 && (lead.intent_score ?? 0) >= 60);
     }
 
     return false;

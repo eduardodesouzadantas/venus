@@ -1,27 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Play, TrendingUp, Users, Target, Zap, LayoutGrid, PackageCheck, AlertCircle, CheckCircle2, ChevronRight, BarChart3, PieChart, ShoppingBag, ArrowUpRight, ArrowDownRight, RefreshCw, Sparkles } from "lucide-react";
+import { useState } from "react";
+import { Play, TrendingUp, Users, Target, RefreshCw, Sparkles, ArrowUpRight, ShoppingBag } from "lucide-react";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { VenusButton } from "@/components/ui/VenusButton";
 import { runBatchSimulation } from "@/lib/simulation/simulation-engine";
-import { getStatsSummary } from "@/lib/analytics/tracker";
 
 export default function AdminTestingDashboard() {
   const [isRunning, setIsRunning] = useState(false);
-  const [report, setReport] = useState<any>(null);
-  const [stats, setStats] = useState<any>({ looks: {}, products: {} });
-
-  useEffect(() => {
-    setStats(getStatsSummary());
-  }, []);
+  const [report, setReport] = useState<Awaited<ReturnType<typeof runBatchSimulation>> | null>(null);
 
   const handleRunSimulation = async () => {
     setIsRunning(true);
     const results = await runBatchSimulation(100);
     setReport(results);
-    setStats(getStatsSummary());
     setIsRunning(false);
   };
 
@@ -181,9 +174,9 @@ export default function AdminTestingDashboard() {
               </div>
 
               <div className="space-y-3">
-                 <Text className="text-[10px] uppercase tracking-[0.4em] text-white/40 font-bold">Vetor de Conversão Dominante</     Text>
+                 <Text className="text-[10px] uppercase tracking-[0.4em] text-white/40 font-bold">Vetor de Conversão Dominante</Text>
                  <Text className="text-sm leading-relaxed text-white/80">
-                   O **"Ver em mim"** não é apenas uma feature social, é o maior gatilho de decisão (45% dos usuários que convertem passaram pelo Try-on). O bundle completo aumenta o AOV em 3.2x vs compras individuais.
+                   O &quot;Ver em mim&quot; não é apenas uma feature social, é o maior gatilho de decisão (45% dos usuários que convertem passaram pelo Try-on). O bundle completo aumenta o AOV em 3.2x vs compras individuais.
                  </Text>
               </div>
 

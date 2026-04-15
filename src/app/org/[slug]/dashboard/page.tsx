@@ -1,42 +1,28 @@
-import type { ReactNode } from "react";
+import { Suspense } from "react";
 import {
   Activity,
   AlertCircle,
+  ArrowRight,
   ArrowUpRight,
   ArrowDownRight,
-  BrainCircuit,
-  ChevronRight,
-  DollarSign,
-  Eye,
   Image as ImageIcon,
   LayoutGrid,
-  Layers,
-  PieChart,
-  Plus,
   Settings,
   Share2,
   Sparkles,
   ShoppingBag,
-  TrendingUp,
   Target,
   Users,
-  Zap,
-  Star,
-  AlertTriangle,
 } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { MerchantActionPanel } from "@/components/dashboard/MerchantActionPanel";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
+import { loadMerchantRoiMetrics, type MerchantRoiMetrics } from "@/lib/merchant/roi";
 import { createClient } from "@/lib/supabase/server";
+import { buildInventoryAlerts, formatStockStatusLabel, resolveProductStockSnapshot, sumVariantQuantity, type InventoryAlert, type ProductStockSnapshot } from "@/lib/catalog/stock";
 import { isAgencyRole, isTenantActive, fetchTenantBySlug } from "@/lib/tenant/core";
-
-type NavItemProps = {
-  href: string;
-  icon: ReactNode;
-  label: string;
-  active?: boolean;
-};
 
 interface DashboardStats {
   leadsAtivos: number;
@@ -46,8 +32,9 @@ interface DashboardStats {
   referralsWeek: number;
   urgentLead: { name: string } | null;
   leadsByStatus: { new: number; engaged: number; qualified: number; offer: number; won: number };
-  productsWithTryons: Array<{ id: string; name: string; image_url: string | null; stock: number; tryon_count: number }>;
-  inventoryInsights: Array<{ id: string; severity: "critical" | "alert" | "info"; title: string; description: string }>;
+  productsWithTryons: Array<{ id: string; name: string; image_url: string | null; stockSnapshot: ProductStockSnapshot; tryon_count: number }>;
+  inventoryInsights: InventoryAlert[];
+  roi: MerchantRoiMetrics;
 }
 
 async function getDashboardData(orgId: string): Promise<DashboardStats> {
@@ -56,7 +43,7 @@ async function getDashboardData(orgId: string): Promise<DashboardStats> {
   const startOfWeek = new Date(now);
   startOfWeek.setDate(now.getDate() - 7);
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const today = now.toISOString().split("T")[0];
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
   const [
     leadsAtivosResult,
@@ -67,7 +54,9 @@ async function getDashboardData(orgId: string): Promise<DashboardStats> {
     urgentLeadResult,
     leadsByStatusResult,
     productsResult,
+    productTryonsResult,
     variantsResult,
+    roiResult,
   ] = await Promise.all([
     supabase.from("crm_leads").select("*", { count: "exact", head: true }).eq("org_id", orgId).in("status", ["new", "engaged", "qualified"]),
     supabase.from("crm_leads").select("*", { count: "exact", head: true }).eq("org_id", orgId).eq("status", "won").gte("updated_at", startOfMonth.toISOString()),
@@ -75,7 +64,6 @@ async function getDashboardData(orgId: string): Promise<DashboardStats> {
     supabase.from("share_events").select("*", { count: "exact", head: true }).eq("org_id", orgId).not("confirmed_at", "is", null).gte("created_at", startOfWeek.toISOString()),
     supabase.from("referral_conversions").select("*", { count: "exact", head: true }).eq("org_id", orgId).gte("converted_at", startOfWeek.toISOString()),
     supabase.from("crm_leads").select("name").eq("org_id", orgId).eq("status", "qualified").order("updated_at", { ascending: true }).limit(1).maybeSingle<{ name: string }>(),
-
     supabase.from("crm_leads").select("status").eq("org_id", orgId).then(({ data }) => {
       const counts = { new: 0, engaged: 0, qualified: 0, offer: 0, won: 0 };
       data?.forEach((lead) => {
@@ -83,66 +71,73 @@ async function getDashboardData(orgId: string): Promise<DashboardStats> {
       });
       return counts;
     }),
-
-    supabase.from("products").select("id, name, image_url, stock").eq("org_id", orgId).then(async ({ data: products }) => {
-      if (!products) return [];
-      const productIds = products.map((p) => p.id);
-      const { data: tryons } = await supabase.from("tryon_events").select("product_id").eq("org_id", orgId).in("product_id", productIds).eq("status", "completed");
-      const tryonCounts: Record<string, number> = {};
-      tryons?.forEach((t) => {
-        tryonCounts[t.product_id] = (tryonCounts[t.product_id] || 0) + 1;
-      });
-      return products.map((p) => ({
-        ...p,
-        tryon_count: tryonCounts[p.id] || 0,
-      }));
-    }),
-    supabase.from("product_variants").select("product_id, size, quantity, active").eq("org_id", orgId).limit(2000),
+    supabase.from("products").select("id, name, image_url, stock_qty, reserved_qty, stock_status, stock").eq("org_id", orgId).order("created_at", { ascending: false }).limit(200),
+    supabase.from("tryon_events").select("product_id, created_at, status").eq("org_id", orgId).eq("status", "completed").gte("created_at", thirtyDaysAgo).limit(2000),
+    supabase.from("product_variants").select("product_id, quantity, active").eq("org_id", orgId).limit(2000),
+    loadMerchantRoiMetrics(supabase, orgId).catch(() => ({
+      leadsGenerated: 0,
+      leadsConverted: 0,
+      campaignsExecuted: 0,
+      estimatedSalesImpact: null,
+      estimatedRevenueRange: { low: null, high: null },
+      dataConfidence: "low" as const,
+      notes: ["Métricas de ROI indisponíveis no momento."],
+    })),
   ]);
 
-  const variants = (variantsResult.data || []) as Array<{ product_id: string | null; size: string | null; quantity: number | null; active: boolean | null }>;
-  const variantsByProduct = variants.reduce<Record<string, Array<{ product_id: string | null; size: string | null; quantity: number | null; active: boolean | null }>>>((acc, row) => {
+  if (productsResult.error) {
+    throw productsResult.error;
+  }
+  if (productTryonsResult.error) {
+    throw productTryonsResult.error;
+  }
+  if (variantsResult.error) {
+    throw variantsResult.error;
+  }
+
+  const products = (productsResult.data || []) as Array<{ id: string; name: string; image_url: string | null; stock_qty: number | null; reserved_qty: number | null; stock_status: string | null; stock: number | null }>;
+  const tryons30d = (productTryonsResult.data || []) as Array<{ product_id: string | null; created_at: string | null; status: string | null }>;
+  const variants = (variantsResult.data || []) as Array<{ product_id: string | null; quantity: number | null; active: boolean | null }>;
+
+  const tryonsByProduct = new Map<string, number>();
+  const tryons7dByProduct = new Map<string, number>();
+  for (const row of tryons30d) {
+    if (!row.product_id) continue;
+    tryonsByProduct.set(row.product_id, (tryonsByProduct.get(row.product_id) || 0) + 1);
+    const createdAt = row.created_at ? new Date(row.created_at).getTime() : 0;
+    if (createdAt >= startOfWeek.getTime()) {
+      tryons7dByProduct.set(row.product_id, (tryons7dByProduct.get(row.product_id) || 0) + 1);
+    }
+  }
+
+  const variantsByProduct = variants.reduce<Record<string, Array<{ quantity: number | null; active: boolean | null }>>>((acc, row) => {
     if (!row.product_id) return acc;
     const current = acc[row.product_id] || [];
-    current.push(row);
+    current.push({ quantity: row.quantity, active: row.active });
     acc[row.product_id] = current;
     return acc;
   }, {});
-  const inventoryInsights = (productsResult as DashboardStats["productsWithTryons"]).flatMap((product) => {
-    const productVariants = variantsByProduct[product.id] || [];
-    const zeroSizes = productVariants.filter((variant) => variant.active !== false && Number(variant.quantity || 0) <= 0);
-    const demandGap = product.tryon_count > product.stock ? product.tryon_count - product.stock : 0;
-    const insights: DashboardStats["inventoryInsights"] = [];
 
-    if (demandGap > 0) {
-      insights.push({
-        id: `demand-${product.id}`,
-        severity: demandGap > 3 ? "critical" : "alert",
-        title: "Demanda reprimida",
-        description: `${product.name} recebeu ${product.tryon_count} try-ons com apenas ${product.stock} em estoque.`,
-      });
-    }
+  const productsWithTryons = products.map((product) => {
+    const stockSnapshot = resolveProductStockSnapshot(product, sumVariantQuantity(variantsByProduct[product.id] || []));
+    return {
+      id: product.id,
+      name: product.name,
+      image_url: product.image_url,
+      stockSnapshot,
+      tryon_count: tryonsByProduct.get(product.id) || 0,
+    };
+  });
 
-    if (product.tryon_count === 0 && product.stock > 0) {
-      insights.push({
-        id: `dead-${product.id}`,
-        severity: product.stock > 5 ? "alert" : "info",
-        title: "Dead stock",
-        description: `${product.name} ficou 30 dias sem try-on e ainda tem ${product.stock} unidades.`,
-      });
-    }
-
-    if (zeroSizes.length > 0) {
-      insights.push({
-        id: `size-${product.id}`,
-        severity: "critical",
-        title: "Ruptura por tamanho",
-        description: `${product.name} está zerado em ${zeroSizes.map((variant) => variant.size || "tamanho").join(", ")}.`,
-      });
-    }
-
-    return insights;
-  }).slice(0, 6);
+  const inventoryInsights = productsWithTryons.flatMap((product) =>
+    buildInventoryAlerts({
+      productId: product.id,
+      productName: product.name,
+      stockSnapshot: product.stockSnapshot,
+      tryons7d: tryons7dByProduct.get(product.id) || 0,
+      tryons30d: tryonsByProduct.get(product.id) || 0,
+    })
+  ).slice(0, 6);
 
   return {
     leadsAtivos: leadsAtivosResult.count ?? 0,
@@ -152,8 +147,9 @@ async function getDashboardData(orgId: string): Promise<DashboardStats> {
     referralsWeek: referralsResult.count ?? 0,
     urgentLead: urgentLeadResult.data ?? null,
     leadsByStatus: typeof leadsByStatusResult === "object" ? leadsByStatusResult : { new: 0, engaged: 0, qualified: 0, offer: 0, won: 0 },
-    productsWithTryons: productsResult as DashboardStats["productsWithTryons"],
+    productsWithTryons,
     inventoryInsights,
+    roi: roiResult,
   };
 }
 
@@ -207,8 +203,8 @@ function PipelineColumn({ label, count, max, color }: { label: string; count: nu
   );
 }
 
-function ProductCard({ product }: { product: { id: string; name: string; image_url: string | null; stock: number; tryon_count: number } }) {
-  const stockStatus = product.stock > 5 ? "green" : product.stock > 0 ? "yellow" : "red";
+function ProductCard({ product }: { product: { id: string; name: string; image_url: string | null; stockSnapshot: ProductStockSnapshot; tryon_count: number } }) {
+  const stockStatus = product.stockSnapshot.stockStatus === "in_stock" ? "green" : product.stockSnapshot.stockStatus === "low_stock" ? "yellow" : "red";
   const stockColor = stockStatus === "green" ? "bg-green-500" : stockStatus === "yellow" ? "bg-yellow-500" : "bg-red-500";
 
   return (
@@ -225,7 +221,7 @@ function ProductCard({ product }: { product: { id: string; name: string; image_u
         <div className="flex items-center gap-3 mt-1">
           <div className="flex items-center gap-1.5">
             <div className={`w-2 h-2 rounded-full ${stockColor}`} />
-            <span className="text-[8px] text-white/40">{product.stock} un</span>
+            <span className="text-[8px] text-white/40">{formatStockStatusLabel(product.stockSnapshot.stockStatus)} · {product.stockSnapshot.availableQty} un</span>
           </div>
           <span className="text-[8px] text-white/20">{product.tryon_count} try-ons</span>
         </div>
@@ -234,26 +230,39 @@ function ProductCard({ product }: { product: { id: string; name: string; image_u
   );
 }
 
-function AdvisorCard({ icon, iconColor, title, text, action, actionHref }: { icon: "alert" | "star" | "trend"; iconColor: string; title: string; text: string; action: string; actionHref: string }) {
-  const icons = { alert: <AlertTriangle size={14} />, star: <Star size={14} />, trend: <TrendingUp size={14} /> };
-  return (
-    <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 space-y-3">
-      <div className="flex items-center gap-2">
-        <div className={`p-1.5 rounded-lg ${iconColor} bg-opacity-10`}>
-          {icons[icon]}
-        </div>
-        <span className="text-[10px] font-bold uppercase tracking-wider">{title}</span>
-      </div>
-      <p className="text-[10px] text-white/50 leading-relaxed line-clamp-1">{text}</p>
-      <Link href={actionHref} className="text-[9px] font-bold uppercase tracking-wider text-white/60 hover:text-white">
-        {action} →
-      </Link>
-    </div>
-  );
+function formatMoney(value: number | null) {
+  if (value === null) return "Sem dados";
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 }
 
-export default async function MerchantDashboard({ params }: { params: Promise<{ slug: string }> }) {
+function formatConfidenceLabel(value: MerchantRoiMetrics["dataConfidence"]) {
+  switch (value) {
+    case "high":
+      return "Alta";
+    case "medium":
+      return "Média";
+    default:
+      return "Baixa";
+  }
+}
+
+function firstQueryValue(value: string | string[] | undefined) {
+  if (Array.isArray(value)) {
+    return value[0] || "";
+  }
+
+  return value || "";
+}
+
+export default async function MerchantDashboard({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const { slug } = await params;
+  const resolvedSearchParams = await searchParams;
   const supabase = await createClient();
 
   const { data: { user } } = await supabase.auth.getUser();
@@ -271,6 +280,7 @@ export default async function MerchantDashboard({ params }: { params: Promise<{ 
     redirect("/merchant");
   }
 
+  const actionError = firstQueryValue(resolvedSearchParams.action_error);
   const stats = await getDashboardData(org.id);
   const orgBase = `/org/${slug}`;
   const displayName = org.name || slug;
@@ -291,6 +301,7 @@ export default async function MerchantDashboard({ params }: { params: Promise<{ 
     { href: `${orgBase}/performance`, icon: <Activity size={16} />, label: "Performance" },
     { href: `${orgBase}/audience`, icon: <Users size={16} />, label: "Audiência" },
     { href: `${orgBase}/rewards`, icon: <Share2 size={16} />, label: "Recompensas" },
+    { href: `${orgBase}/gamification`, icon: <Sparkles size={16} />, label: "Gamificação" },
     { href: `${orgBase}/suggestions`, icon: <Sparkles size={16} />, label: "Sugestões IA" },
     { href: `${orgBase}/settings`, icon: <Settings size={16} />, label: "Configurações" },
   ];
@@ -381,6 +392,87 @@ export default async function MerchantDashboard({ params }: { params: Promise<{ 
           </div>
         </div>
 
+        <section className="grid gap-4 mb-6 md:grid-cols-2 xl:grid-cols-4">
+          <KpiCard
+            label="Leads gerados"
+            value={stats.roi.leadsGenerated.toString()}
+            sub="Leads reais do tenant"
+            delta={stats.roi.dataConfidence === "low" ? "Dado conservador" : "Fonte operacional"}
+            status={stats.roi.leadsGenerated > 0 ? "green" : "yellow"}
+            sparkline={stats.roi.leadsGenerated > 0 ? "up" : "flat"}
+          />
+          <KpiCard
+            label="Leads convertidos"
+            value={stats.roi.leadsConverted.toString()}
+            sub="Conversões em ganho"
+            delta={stats.roi.leadsConverted > 0 ? "Conversão real" : "Sem conversão ainda"}
+            status={stats.roi.leadsConverted > 0 ? "green" : "yellow"}
+            sparkline={stats.roi.leadsConverted > 0 ? "up" : "flat"}
+          />
+          <KpiCard
+            label="Campanhas executadas"
+            value={stats.roi.campaignsExecuted.toString()}
+            sub="Campanhas registradas"
+            delta={stats.roi.campaignsExecuted > 0 ? "Atividade real" : "Sem campanhas"}
+            status={stats.roi.campaignsExecuted > 0 ? "green" : "yellow"}
+            sparkline={stats.roi.campaignsExecuted > 0 ? "up" : "flat"}
+          />
+          <KpiCard
+            label="Impacto estimado"
+            value={formatMoney(stats.roi.estimatedSalesImpact)}
+            sub={`Confiança ${formatConfidenceLabel(stats.roi.dataConfidence)}`}
+            delta={
+              stats.roi.estimatedRevenueRange.low && stats.roi.estimatedRevenueRange.high
+                ? `${formatMoney(stats.roi.estimatedRevenueRange.low)} - ${formatMoney(stats.roi.estimatedRevenueRange.high)}`
+                : "Faixa insuficiente"
+            }
+            status={stats.roi.estimatedSalesImpact ? "green" : "yellow"}
+            sparkline={stats.roi.estimatedSalesImpact ? "up" : "flat"}
+          />
+        </section>
+
+        <section className="mb-6 rounded-[28px] border border-white/5 bg-white/[0.02] p-5">
+          <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+            <div>
+              <Text className="text-[9px] font-bold uppercase tracking-[0.35em] text-[#C9A84C]">ROI operacional</Text>
+              <Heading as="h3" className="text-lg uppercase tracking-tight">
+                Valor claro por tenant
+              </Heading>
+            </div>
+            <span className="text-[9px] font-bold uppercase tracking-[0.28em] text-white/40">
+              {stats.roi.dataConfidence === "low" ? "Fallback conservador aplicado" : "Métrica calculada server-side"}
+            </span>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {stats.roi.notes.map((note) => (
+              <div key={note} className="rounded-2xl border border-white/5 bg-black/30 px-4 py-3 text-sm text-white/55">
+                {note}
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <Suspense
+          fallback={
+            <section className="mb-6 space-y-4 rounded-[32px] border border-white/5 bg-white/[0.03] p-5">
+              <div className="space-y-2">
+                <div className="h-3 w-28 rounded-full bg-white/10" />
+                <div className="h-6 w-96 max-w-full rounded-full bg-white/10" />
+                <div className="h-4 w-[28rem] max-w-full rounded-full bg-white/10" />
+              </div>
+              <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+                <div className="space-y-3">
+                  <div className="h-36 rounded-[28px] bg-white/5" />
+                  <div className="h-36 rounded-[28px] bg-white/5" />
+                </div>
+                <div className="h-[20rem] rounded-[28px] bg-white/5" />
+              </div>
+            </section>
+          }
+        >
+          <MerchantActionPanel orgId={org.id} orgSlug={slug} orgBase={orgBase} actionError={actionError || null} />
+        </Suspense>
+
         <div className="grid grid-cols-3 gap-4 mb-6">
           <section className="col-span-2">
             <div className="flex items-center justify-between mb-3">
@@ -403,12 +495,25 @@ export default async function MerchantDashboard({ params }: { params: Promise<{ 
             </div>
           </section>
 
-          <section>
-            <span className="text-[9px] font-bold uppercase tracking-wider text-white/40 mb-3 block">STRATEGIC ADVISOR</span>
+          <section className="rounded-[28px] border border-white/5 bg-white/[0.02] p-5">
+            <span className="text-[9px] font-bold uppercase tracking-wider text-white/40 mb-3 block">ROTAS RÁPIDAS</span>
             <div className="space-y-2">
-              <AdvisorCard icon="alert" iconColor="text-red-400" title="Urgente" text="Lead qualificado há 5 dias sem contato" action="Ver inbox" actionHref={`${orgBase}/whatsapp/inbox`} />
-              <AdvisorCard icon="star" iconColor="text-yellow-400" title="Oportunidade" text="Pico de interesse em try-ons essa semana" action="Criar campanha" actionHref={`${orgBase}/whatsapp/campaigns`} />
-              <AdvisorCard icon="trend" iconColor="text-green-400" title="Viral" text={`${stats.postagensWeek} posts compartilhados`} action="Ver recompensas" actionHref={`${orgBase}/rewards`} />
+              <Link href={orgBase + "/whatsapp/inbox"} className="flex items-center justify-between rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[10px] font-bold uppercase tracking-[0.24em] text-white/70 hover:bg-white/[0.06]">
+                Abrir inbox operacional
+                <ArrowRight size={12} />
+              </Link>
+              <Link href={orgBase + "/crm"} className="flex items-center justify-between rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[10px] font-bold uppercase tracking-[0.24em] text-white/70 hover:bg-white/[0.06]">
+                Revisar leads do CRM
+                <ArrowRight size={12} />
+              </Link>
+              <Link href={orgBase + "/rewards"} className="flex items-center justify-between rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[10px] font-bold uppercase tracking-[0.24em] text-white/70 hover:bg-white/[0.06]">
+                Ver recompensa e viral
+                <ArrowRight size={12} />
+              </Link>
+              <Link href={orgBase + "/gamification"} className="flex items-center justify-between rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-[10px] font-bold uppercase tracking-[0.24em] text-white/70 hover:bg-white/[0.06]">
+                Abrir gamificação
+                <ArrowRight size={12} />
+              </Link>
             </div>
           </section>
         </div>

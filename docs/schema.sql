@@ -9,6 +9,12 @@ CREATE TABLE IF NOT EXISTS products (
   price_range TEXT,
   image_url TEXT,
   external_url TEXT,
+  stock INTEGER,
+  stock_qty INTEGER,
+  reserved_qty INTEGER DEFAULT 0,
+  stock_status TEXT,
+  description TEXT,
+  persuasive_description TEXT,
   b2b_user_id UUID REFERENCES auth.users(id)
 );
 

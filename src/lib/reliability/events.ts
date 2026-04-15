@@ -1,3 +1,5 @@
+import { sanitizePrivacyLogEntry } from "@/lib/privacy/logging";
+
 export interface VenusEventMetadata {
   org_id: string;
   lead_id?: string | null;
@@ -88,37 +90,8 @@ export function logVenusFlowEvent(
   console.log(`[VENUS_FLOW] ${eventType}`, {
     ...safeCorrelation,
     timestamp: new Date().toISOString(),
-    payload: sanitizePayload(payload),
+    payload: payload ? sanitizePrivacyLogEntry(payload) : undefined,
   });
-}
-
-function sanitizePayload(payload?: Record<string, unknown>): Record<string, unknown> | undefined {
-  if (!payload) return undefined;
-
-  const sensitiveKeys = [
-    "password",
-    "token",
-    "secret",
-    "api_key",
-    "apikey",
-    "access_token",
-    "refresh_token",
-  ];
-
-  const sanitized: Record<string, unknown> = {};
-
-  for (const [key, value] of Object.entries(payload)) {
-    const lowerKey = key.toLowerCase();
-    if (sensitiveKeys.some((sk) => lowerKey.includes(sk))) {
-      sanitized[key] = "[REDACTED]";
-    } else if (typeof value === "object" && value !== null) {
-      sanitized[key] = "[OBJECT]";
-    } else {
-      sanitized[key] = value;
-    }
-  }
-
-  return sanitized;
 }
 
 export function logResultViewed(

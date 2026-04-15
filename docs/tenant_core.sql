@@ -50,6 +50,29 @@ CREATE TABLE IF NOT EXISTS org_usage_daily (
   PRIMARY KEY (org_id, usage_date)
 );
 
+CREATE TABLE IF NOT EXISTS org_invites (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN (
+    'agency_owner',
+    'agency_admin',
+    'agency_ops',
+    'agency_support',
+    'merchant_owner',
+    'merchant_manager',
+    'merchant_editor',
+    'merchant_viewer'
+  )),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'expired', 'revoked')),
+  invited_by_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '7 days'),
+  accepted_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (org_id, email)
+);
+
 CREATE TABLE IF NOT EXISTS tenant_events (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
@@ -66,6 +89,8 @@ CREATE INDEX IF NOT EXISTS idx_org_members_user_id ON org_members (user_id);
 CREATE INDEX IF NOT EXISTS idx_org_members_org_id ON org_members (org_id);
 CREATE INDEX IF NOT EXISTS idx_org_usage_daily_org_id_date ON org_usage_daily (org_id, usage_date DESC);
 CREATE INDEX IF NOT EXISTS idx_tenant_events_org_id_created_at ON tenant_events (org_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_org_invites_org_id ON org_invites (org_id);
+CREATE INDEX IF NOT EXISTS idx_org_invites_email ON org_invites (email) WHERE status = 'pending';
 
 CREATE OR REPLACE FUNCTION tenant.current_org_slug()
 RETURNS TEXT
@@ -113,14 +138,38 @@ AS $$
   SELECT COALESCE(tenant.current_role() LIKE 'merchant_%', FALSE);
 $$;
 
+CREATE OR REPLACE FUNCTION tenant.current_org_id()
+RETURNS UUID
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT NULLIF(
+    COALESCE(
+      auth.jwt() -> 'app_metadata' ->> 'org_id',
+      auth.jwt() -> 'user_metadata' ->> 'org_id'
+    ),
+    ''
+  )::UUID;
+$$;
+
+CREATE OR REPLACE FUNCTION tenant.org_id_from_slug(slug TEXT)
+RETURNS UUID
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT id FROM orgs WHERE slug = $1 LIMIT 1;
+$$;
+
 ALTER TABLE orgs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE org_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE org_usage_daily ENABLE ROW LEVEL SECURITY;
+ALTER TABLE org_invites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenant_events ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE orgs FORCE ROW LEVEL SECURITY;
 ALTER TABLE org_members FORCE ROW LEVEL SECURITY;
 ALTER TABLE org_usage_daily FORCE ROW LEVEL SECURITY;
+ALTER TABLE org_invites FORCE ROW LEVEL SECURITY;
 ALTER TABLE tenant_events FORCE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Org members can read own org or agency" ON orgs;
@@ -199,12 +248,35 @@ CREATE POLICY "Agency can manage tenant events"
   USING (tenant.is_agency_user())
   WITH CHECK (tenant.is_agency_user());
 
+DROP POLICY IF EXISTS "Members can read invites or agency" ON org_invites;
+CREATE POLICY "Members can read invites or agency"
+  ON org_invites
+  FOR SELECT
+  USING (
+    tenant.is_agency_user()
+    OR org_id IN (
+      SELECT id
+      FROM orgs
+      WHERE slug = tenant.current_org_slug()
+    )
+  );
+
+DROP POLICY IF EXISTS "Agency can manage invites" ON org_invites;
+CREATE POLICY "Agency can manage invites"
+  ON org_invites
+  FOR ALL
+  USING (tenant.is_agency_user())
+  WITH CHECK (tenant.is_agency_user());
+
 GRANT USAGE ON SCHEMA tenant TO authenticated;
 GRANT EXECUTE ON FUNCTION tenant.current_org_slug() TO authenticated;
 GRANT EXECUTE ON FUNCTION tenant.current_role() TO authenticated;
+GRANT EXECUTE ON FUNCTION tenant.current_org_id() TO authenticated;
 GRANT EXECUTE ON FUNCTION tenant.is_agency_user() TO authenticated;
 GRANT EXECUTE ON FUNCTION tenant.is_merchant_user() TO authenticated;
+GRANT EXECUTE ON FUNCTION tenant.org_id_from_slug(TEXT) TO authenticated;
 GRANT SELECT ON orgs TO authenticated;
 GRANT SELECT ON org_members TO authenticated;
 GRANT SELECT ON org_usage_daily TO authenticated;
+GRANT SELECT ON org_invites TO authenticated;
 GRANT SELECT ON tenant_events TO authenticated;

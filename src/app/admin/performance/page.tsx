@@ -1,23 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { TrendingUp, ShoppingBag, Eye, Share2, PackageCheck, Star, AlertCircle, CheckCircle2, ChevronRight, LayoutGrid, Zap, Filter, ArrowUpRight, ArrowDownRight, MoreHorizontal } from "lucide-react";
+import { TrendingUp, ShoppingBag, Star, AlertCircle, ChevronRight, LayoutGrid, Zap, Filter, ArrowUpRight, MoreHorizontal } from "lucide-react";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { VenusButton } from "@/components/ui/VenusButton";
-import { getStatsSummary } from "@/lib/analytics/tracker";
-import { getMerchantOptimization } from "@/lib/ai/orchestrator";
 
 export default function AdminPerformancePage() {
-  const [stats, setStats] = useState<any>({ looks: {}, products: {} });
-
-  useEffect(() => {
-    setStats(getStatsSummary());
-  }, []);
-
-  const aiSuggestions = getMerchantOptimization(stats);
-
-
   // Mock Performance Data (Aggregate & Actionable)
   const performanceHighlights = [
     {

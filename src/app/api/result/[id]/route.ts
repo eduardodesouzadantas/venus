@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hasLegacyTryOnProducts } from "@/lib/result/surface";
+import { getCatalogLink } from "@/lib/catalog-query/engine";
+import { buildAssistedRecommendationSurface } from "@/lib/catalog-query/presentation";
+import { getTenantConfigSummary } from "@/lib/tenant-config";
+import type { LookData } from "@/types/result";
 
 type RouteContext = {
   params: Promise<{ id: string }> | { id: string };
@@ -29,8 +33,6 @@ export async function GET(_: Request, context: RouteContext) {
         error: {
           code: error.code,
           message: error.message,
-          details: error.details,
-          hint: error.hint,
         },
       });
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -43,8 +45,18 @@ export async function GET(_: Request, context: RouteContext) {
 
     const payload = (data.payload ?? {}) as Record<string, unknown>;
     const finalResult = (payload.finalResult ?? null) as Record<string, unknown> | null;
-    const finalLooks = Array.isArray(finalResult?.looks) ? (finalResult?.looks as Array<Record<string, unknown>>) : [];
-    if (hasLegacyTryOnProducts(finalLooks as any)) {
+    const finalLooks = Array.isArray(finalResult?.looks) ? (finalResult?.looks as LookData[]) : [];
+    const tenant = (payload.tenant ?? null) as Record<string, unknown> | null;
+    const tenantOrgId = typeof tenant?.orgId === "string" ? tenant.orgId : "";
+
+    const [catalogLink, tenantSummary] = tenantOrgId
+      ? await Promise.all([
+        getCatalogLink(tenantOrgId).catch(() => "/catalog"),
+        getTenantConfigSummary(tenantOrgId).catch(() => null),
+      ])
+      : ["/catalog", null];
+
+    if (hasLegacyTryOnProducts(finalLooks)) {
       console.warn("[RESULT_API] legacy try-on looks detected", {
         resultId: id,
         orgId: (payload.tenant as Record<string, unknown> | null)?.orgId || null,
@@ -52,12 +64,21 @@ export async function GET(_: Request, context: RouteContext) {
       });
     }
 
+    const assistedRecommendations = buildAssistedRecommendationSurface(finalLooks, {
+      limit: 3,
+      sourceLabel: tenantSummary?.active_catalog_source || null,
+      explicit: false,
+    });
+
     const response = {
       id: data.id,
       analysis: payload.visualAnalysis ?? null,
       finalResult: payload.finalResult ?? null,
       tenant: payload.tenant ?? null,
       lastTryOn: payload.last_tryon ?? null,
+      catalogLink,
+      catalogSourceLabel: tenantSummary?.active_catalog_source || null,
+      assistedRecommendations,
       createdAt: data.created_at,
     };
     console.info("[RESULT_API] lookup success", {
@@ -69,7 +90,7 @@ export async function GET(_: Request, context: RouteContext) {
   } catch (error) {
     console.error("[RESULT_API] lookup fail", {
       resultId: id,
-      error,
+      error: error instanceof Error ? error.message : "unknown_error",
     });
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to load result" },

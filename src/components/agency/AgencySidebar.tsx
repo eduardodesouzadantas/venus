@@ -6,9 +6,10 @@ import { usePathname } from "next/navigation";
 const navItems = [
   { label: "Overview", href: "/agency", code: "OVR" },
   { label: "Lojas", href: "/agency/merchants", code: "ORG" },
+  { label: "Controle", href: "/agency/resource-control", code: "RSC" },
   { label: "Nova loja", href: "/agency/merchants/new", code: "NEW" },
   { label: "Financeiro", href: "/agency/billing", code: "FIN" },
-  { label: "Configurações", href: "/agency/settings", code: "CFG" },
+  { label: "Configuracoes", href: "/agency/settings", code: "CFG" },
 ];
 
 function isActive(pathname: string, href: string) {
@@ -80,7 +81,7 @@ export function AgencySidebar() {
             SISTEMA ONLINE
           </div>
           <p className="mt-3 text-xs leading-5 text-[var(--muted)]">
-            Painel operacional da agência para lojas, cobrança e configurações.
+            Painel operacional da agencia para lojas, cobranca e configuracoes.
           </p>
         </div>
       </div>

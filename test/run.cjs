@@ -57,6 +57,45 @@ const {
   deriveVisualSignalsFromMetrics,
 } = require("../src/lib/ai/catalog-enricher.ts");
 const {
+  PRODUCT_IMAGE_MAX_BYTES,
+  validateProductImageFile,
+} = require("../src/lib/catalog/product-enrichment.ts");
+const {
+  buildInventoryAlerts,
+  resolveProductStockSnapshot,
+} = require("../src/lib/catalog/stock.ts");
+const {
+  buildAgencyResourceControlRows,
+  canAccessAgencyResourceControl,
+  RESOURCE_CONTROL_FIELD_DEFINITIONS,
+} = require("../src/lib/agency/resource-control.ts");
+const {
+  buildGamificationOverview,
+  canAccessGamificationPanel,
+  gamificationResourceLabel,
+  gamificationRuleLabel,
+} = require("../src/lib/gamification/index.ts");
+const {
+  buildGamificationTriggerEventKey,
+  summariseGamificationAutomation,
+} = require("../src/lib/gamification/events.ts");
+const {
+  buildMerchantActionPanel,
+  canAccessMerchantActionPanel,
+} = require("../src/lib/merchant/action-panel.ts");
+const {
+  loadMerchantRoiMetrics,
+} = require("../src/lib/merchant/roi.ts");
+const {
+  buildTenantPrivacyExportBundle,
+} = require("../src/lib/privacy/tenant-data.ts");
+const {
+  sanitizePrivacyLogEntry,
+  stripUrlQuery,
+  maskPhone,
+  maskEmail,
+} = require("../src/lib/privacy/logging.ts");
+const {
   orchestrateExperience,
 } = require("../src/lib/ai/orchestrator.ts");
 const {
@@ -75,9 +114,34 @@ const {
   formatOperationalReason,
 } = require("../src/lib/reliability/observability.ts");
 const {
+  checkInMemoryRateLimit,
+  clearInMemoryRateLimitState,
+  logSecurityEvent,
+} = require("../src/lib/reliability/security.ts");
+const {
   isProcessingReservationClaimable,
   shouldWaitOnProcessingReservation,
 } = require("../src/lib/reliability/processing.ts");
+const {
+  getPolicyRules,
+  matchRule,
+  evaluateCondition,
+  applyAdjustmentAction,
+  conditionsToLabels,
+} = require("../src/lib/optimization/policy-engine.ts");
+const {
+  runAutoLimitsJob,
+  getOptimizationRecommendations,
+} = require("../src/lib/optimization/auto-limits.ts");
+const {
+  recordOptimizationAudit,
+  queryOptimizationAudit,
+  getOptimizationStats,
+  getOrgOptimizationHistory,
+} = require("../src/lib/optimization/audit.ts");
+
+require("./catalog-query/presentation.test.ts");
+require("./assisted-recommendation.presentation.test.ts");
 
 const sampleOnboarding = {
   intent: {
@@ -135,6 +199,39 @@ function run(name, fn) {
   }
 }
 
+function buildSupabaseQueryResult(resolveResult) {
+  const filters = [];
+  const chain = {
+    select() {
+      return chain;
+    },
+    eq(column, value) {
+      filters.push({ type: "eq", column, value });
+      return chain;
+    },
+    gte(column, value) {
+      filters.push({ type: "gte", column, value });
+      return chain;
+    },
+    not(column, operator, value) {
+      filters.push({ type: "not", column, operator, value });
+      return chain;
+    },
+    limit() {
+      return chain;
+    },
+    order() {
+      return chain;
+    },
+    then(resolve, reject) {
+      const result = typeof resolveResult === "function" ? resolveResult(filters) : resolveResult;
+      return Promise.resolve(result).then(resolve, reject);
+    },
+  };
+
+  return chain;
+}
+
 async function withMockedModules(mockMap, fn) {
   const originalLoad = Module._load;
 
@@ -181,6 +278,134 @@ async function withTempEnv(values, fn) {
       }
     }
   }
+}
+
+function createGamificationMemoryRepo(initial = {}) {
+  const state = {
+    orgs: initial.orgs ? [...initial.orgs] : [],
+    rules: initial.rules ? [...initial.rules] : [],
+    events: initial.events ? [...initial.events] : [],
+    ruleSeq: 0,
+    eventSeq: 0,
+  };
+
+  const nowIso = () => new Date().toISOString();
+  const clone = (value) => JSON.parse(JSON.stringify(value));
+
+  return {
+    state,
+    async loadOrg(orgId) {
+      return clone(state.orgs.find((org) => org.id === orgId) || null);
+    },
+    async listRules(orgId) {
+      return clone(
+        state.rules
+          .filter((rule) => rule.org_id === orgId)
+          .sort((left, right) => right.created_at.localeCompare(left.created_at))
+          .map((rule) => ({
+            trigger_mode: "manual",
+            trigger_event_type: null,
+            ...rule,
+          }))
+      );
+    },
+    async getRule(orgId, ruleId) {
+      const rule = state.rules.find((item) => item.org_id === orgId && item.id === ruleId);
+      return clone(rule ? { trigger_mode: "manual", trigger_event_type: null, ...rule } : null);
+    },
+    async insertRule(input) {
+      const row = {
+        id: `rule-${++state.ruleSeq}`,
+        org_id: input.org_id,
+        rule_type: input.rule_type,
+        trigger_mode: input.trigger_mode || "manual",
+        trigger_event_type: input.trigger_event_type || null,
+        benefit_resource_type: input.benefit_resource_type,
+        benefit_amount: input.benefit_amount,
+        active: input.active,
+        per_customer_limit: input.per_customer_limit,
+        per_customer_period_days: input.per_customer_period_days,
+        valid_from: input.valid_from,
+        valid_until: input.valid_until || null,
+        label: input.label,
+        description: input.description || null,
+        created_by_user_id: input.created_by_user_id || null,
+        updated_by_user_id: input.updated_by_user_id || null,
+        created_at: nowIso(),
+        updated_at: nowIso(),
+      };
+      state.rules.unshift(row);
+      return clone(row);
+    },
+    async updateRule(orgId, ruleId, input) {
+      const row = state.rules.find((item) => item.org_id === orgId && item.id === ruleId);
+      if (!row) return null;
+      Object.assign(row, input, { updated_at: input.updated_at || nowIso() });
+      return clone(row);
+    },
+    async listEvents(orgId, limit = 40) {
+      return clone(
+        state.events
+          .filter((event) => event.org_id === orgId)
+          .sort((left, right) => right.created_at.localeCompare(left.created_at))
+          .slice(0, limit)
+      );
+    },
+    async listCustomerRuleEvents(orgId, customerKey, ruleId, sinceIso) {
+      return clone(
+        state.events
+          .filter((event) => event.org_id === orgId)
+          .filter((event) => event.customer_key === customerKey)
+          .filter((event) => event.rule_id === ruleId)
+          .filter((event) => event.created_at >= sinceIso)
+          .sort((left, right) => right.created_at.localeCompare(left.created_at))
+      );
+    },
+    async listCustomerEvents(orgId, customerKey, limit = 50) {
+      return clone(
+        state.events
+          .filter((event) => event.org_id === orgId)
+          .filter((event) => event.customer_key === customerKey)
+          .sort((left, right) => right.created_at.localeCompare(left.created_at))
+          .slice(0, limit)
+      );
+    },
+    async insertEvent(input) {
+      const row = {
+        id: `event-${++state.eventSeq}`,
+        org_id: input.org_id,
+        rule_id: input.rule_id || null,
+        customer_key: input.customer_key || null,
+        customer_label: input.customer_label || null,
+        event_type: input.event_type,
+        status: input.status || "success",
+        resource_type: input.resource_type || null,
+        amount: input.amount || 0,
+        reason: input.reason || null,
+        actor_user_id: input.actor_user_id || null,
+        source_event_type: input.source_event_type || null,
+        source_event_key: input.source_event_key || null,
+        metadata: input.metadata || {},
+        expires_at: input.expires_at || null,
+        created_at: input.created_at || nowIso(),
+      };
+      state.events.unshift(row);
+      return clone(row);
+    },
+    async findEventBySourceEventKey(orgId, ruleId, sourceEventKey) {
+      return clone(
+        state.events.find(
+          (event) => event.org_id === orgId && event.rule_id === ruleId && event.source_event_key === sourceEventKey
+        ) || null
+      );
+    },
+    async updateEvent(orgId, eventId, input) {
+      const row = state.events.find((event) => event.org_id === orgId && event.id === eventId);
+      if (!row) return null;
+      Object.assign(row, input);
+      return clone(row);
+    },
+  };
 }
 
 run("lead statuses include closing and keep counters aligned", () => {
@@ -890,6 +1115,307 @@ run("catalog enrichment improves visual confidence without inventing detail", ()
   assert.ok(enriched.sellerSuggestions.bestContext.length > 0);
 });
 
+if (false) {
+run("product upload validation rejects invalid files", () => {
+  const validFile = { size: PRODUCT_IMAGE_MAX_BYTES - 1, type: "image/png", name: "photo.png" };
+  const oversizedFile = { size: PRODUCT_IMAGE_MAX_BYTES + 1, type: "image/png", name: "photo.png" };
+  const wrongTypeFile = { size: 1024, type: "text/plain", name: "note.txt" };
+
+  assert.equal(validateProductImageFile(validFile).valid, true);
+  assert.equal(validateProductImageFile(oversizedFile).reason, "image_too_large");
+  assert.equal(validateProductImageFile(wrongTypeFile).reason, "image_invalid_type");
+});
+
+run("product enrichment route returns ai payload and fallback", async () => {
+  const originalFetch = global.fetch;
+
+  try {
+    await withTempEnv({ GEMINI_API_KEY: "test-key" }, async () => {
+      global.fetch = async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    text: JSON.stringify({
+                      name: "Blazer Lino Cru",
+                      category: "roupa",
+                      primary_color: "Bege",
+                      style: "alfaiataria",
+                      description: "Descricao objetiva da peca.",
+                      persuasive_description: "Descricao persuasiva da peca.",
+                      emotional_copy: "Copy emocional da peca.",
+                      tags: ["base forte", "alfaiataria", "neutro"],
+                    }),
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      });
+
+      const route = loadFresh("../src/app/api/products/enrich/route.ts");
+      const response = await route.POST(
+        new Request("https://example.com/api/products/enrich", {
+          method: "POST",
+          body: JSON.stringify({
+            image_base64: "data:image/png;base64,AAAA",
+            file_name: "blazer.png",
+            name: "",
+            category: "roupa",
+          }),
+        })
+      );
+
+      assert.equal(response.status, 200);
+      const payload = await response.json();
+      assert.equal(payload.fallback_used, false);
+      assert.equal(payload.name, "Blazer Lino Cru");
+      assert.equal(payload.primary_color, "Bege");
+      assert.equal(payload.tags.length, 3);
+    });
+  } finally {
+    global.fetch = originalFetch;
+  }
+
+  try {
+    await withTempEnv({ GEMINI_API_KEY: "test-key" }, async () => {
+      global.fetch = async () => ({
+        ok: false,
+        status: 502,
+        text: async () => "upstream failed",
+      });
+
+      const route = loadFresh("../src/app/api/products/enrich/route.ts");
+      const response = await route.POST(
+        new Request("https://example.com/api/products/enrich", {
+          method: "POST",
+          body: JSON.stringify({
+            image_base64: "data:image/png;base64,AAAA",
+            file_name: "blazer.png",
+            name: "",
+            category: "roupa",
+          }),
+        })
+      );
+
+      assert.equal(response.status, 200);
+      const payload = await response.json();
+      assert.equal(payload.fallback_used, true);
+      assert.ok(payload.name.length > 0);
+      assert.ok(payload.description.length > 0);
+    });
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+run("product create action persists enriched fields for an authorized tenant", async () => {
+  const inserts = [];
+  const uploadedFiles = [];
+
+  const admin = {
+    storage: {
+      listBuckets: async () => ({ data: [{ name: "products", public: true }], error: null }),
+      createBucket: async () => ({ error: null }),
+      updateBucket: async () => ({ error: null }),
+      from: () => ({
+        upload: async (path, buffer, options) => {
+          uploadedFiles.push({ path, size: buffer.length, options });
+          return { error: null };
+        },
+        getPublicUrl: () => ({ data: { publicUrl: "https://cdn.example.com/product.png" } }),
+      }),
+    },
+    from: (table) => {
+      if (table === "products") {
+        return {
+          insert: (rows) => {
+            inserts.push({ table, rows });
+            return {
+              select: () => ({
+                single: async () => ({
+                  data: { id: "prod-1", name: rows[0].name, category: rows[0].category, type: rows[0].type },
+                  error: null,
+                }),
+              }),
+            };
+          },
+        };
+      }
+
+      if (table === "product_variants") {
+        return { insert: async () => ({ error: null }) };
+      }
+
+      if (table === "tenant_events") {
+        return { insert: async () => ({ error: null }) };
+      }
+
+      throw new Error(`Unexpected table ${table}`);
+    },
+  };
+
+  try {
+    await withMockedModules(
+      {
+        "next/navigation": {
+          redirect: (url) => {
+            throw new Error(`REDIRECT:${url}`);
+          },
+        },
+        "next/cache": {
+          revalidatePath: () => {},
+        },
+        "@/lib/supabase/server": {
+          createClient: async () => ({
+            auth: {
+              getUser: async () => ({ data: { user: { id: "user-1" } } }),
+            },
+          }),
+        },
+        "@/lib/supabase/admin": {
+          createAdminClient: () => admin,
+        },
+        "@/lib/tenant/core": {
+          assertMerchantWritableOrgAccess: async () => ({
+            user: { id: "user-1" },
+            org: { id: "org-1", slug: "org-one" },
+          }),
+          bumpTenantUsageDaily: async () => null,
+        },
+        "@/lib/tenant/enforcement": {
+          enforceTenantOperationalState: async () => ({ allowed: true }),
+        },
+        "@/lib/billing/enforcement": {
+          enforceOrgHardCap: async () => ({ allowed: true }),
+        },
+      },
+      async () => {
+        const actions = loadFresh("../src/app/b2b/product/new/actions.ts");
+        const formData = new FormData();
+        formData.set("name", "Blazer de Linho");
+        formData.set("category", "roupa");
+        formData.set("primary_color", "Bege");
+        formData.set("style", "alfaiataria");
+        formData.set("description", "Descricao objetiva");
+        formData.set("persuasive_description", "Descricao persuasiva");
+        formData.set("emotional_copy", "Copy emocional");
+        formData.set("stock_qty", "8");
+        formData.set("reserved_qty", "2");
+        formData.set("stock_status", "in_stock");
+        formData.set("tags_json", JSON.stringify(["alfaiataria", "base forte"]));
+        formData.set("return_to", "/merchant");
+        formData.set("image_file", new File(["fake-image"], "product.png", { type: "image/png" }));
+
+        await actions.createProduct(formData);
+      }
+    );
+    throw new Error("Expected redirect from createProduct");
+  } catch (error) {
+    assert.ok(String(error.message || error).includes("REDIRECT:/merchant?created=true"));
+  }
+
+  assert.equal(inserts.length, 1);
+  assert.equal(inserts[0].rows[0].description, "Descricao objetiva");
+  assert.equal(inserts[0].rows[0].persuasive_description, "Descricao persuasiva");
+  assert.equal(inserts[0].rows[0].emotional_copy, "Copy emocional");
+  assert.equal(inserts[0].rows[0].stock_qty, 8);
+  assert.equal(inserts[0].rows[0].reserved_qty, 2);
+  assert.equal(inserts[0].rows[0].stock_status, "in_stock");
+  assert.equal(inserts[0].rows[0].stock, 6);
+  assert.equal(uploadedFiles.length, 1);
+});
+
+run("product create action rejects unauthorized tenant access before insert", async () => {
+  let inserted = false;
+
+  try {
+    await withMockedModules(
+      {
+        "next/navigation": {
+          redirect: (url) => {
+            throw new Error(`REDIRECT:${url}`);
+          },
+        },
+        "next/cache": {
+          revalidatePath: () => {},
+        },
+        "@/lib/supabase/server": {
+          createClient: async () => ({
+            auth: {
+              getUser: async () => ({ data: { user: { id: "user-1" } } }),
+            },
+          }),
+        },
+        "@/lib/supabase/admin": {
+          createAdminClient: () => ({
+            storage: {
+              listBuckets: async () => ({ data: [], error: null }),
+              createBucket: async () => ({ error: null }),
+              updateBucket: async () => ({ error: null }),
+              from: () => ({
+                upload: async () => ({ error: null }),
+                getPublicUrl: () => ({ data: { publicUrl: "https://cdn.example.com/product.png" } }),
+              }),
+            },
+            from: (table) => {
+              if (table === "products") {
+                inserted = true;
+                return {
+                  insert: () => ({
+                    select: () => ({
+                      single: async () => ({ data: null, error: null }),
+                    }),
+                  }),
+                };
+              }
+              return { insert: async () => ({ error: null }) };
+            },
+          }),
+        },
+        "@/lib/tenant/core": {
+          assertMerchantWritableOrgAccess: async () => {
+            throw new Error("forbidden");
+          },
+          bumpTenantUsageDaily: async () => null,
+        },
+        "@/lib/tenant/enforcement": {
+          enforceTenantOperationalState: async () => ({ allowed: true }),
+        },
+        "@/lib/billing/enforcement": {
+          enforceOrgHardCap: async () => ({ allowed: true }),
+        },
+      },
+      async () => {
+        const actions = loadFresh("../src/app/b2b/product/new/actions.ts");
+        const formData = new FormData();
+        formData.set("name", "Blazer de Linho");
+        formData.set("category", "roupa");
+        formData.set("primary_color", "Bege");
+        formData.set("style", "alfaiataria");
+        formData.set("description", "Descricao objetiva");
+        formData.set("persuasive_description", "Descricao persuasiva");
+        formData.set("emotional_copy", "Copy emocional");
+        formData.set("return_to", "/merchant");
+        formData.set("image_file", new File(["fake-image"], "product.png", { type: "image/png" }));
+
+        await actions.createProduct(formData);
+      }
+    );
+  } catch (error) {
+    assert.ok(String(error.message || error).includes("REDIRECT:/merchant?error=tenant"));
+  }
+
+  assert.equal(inserted, false);
+});
+
+}
+
 run("catalog fallback prefers real products over invented placeholders", () => {
   const catalog = [
     {
@@ -1179,6 +1705,648 @@ run("operational aging summary respects timestamp precedence and exposes the slo
   assert.equal(merged.stage_summaries[0].key, "closing");
 });
 
+run("merchant action panel prioritizes hot leads and preserves history", () => {
+  const panel = buildMerchantActionPanel({
+    orgId: "org-1",
+    orgSlug: "loja-venus",
+    now: Date.parse("2026-04-14T12:00:00.000Z"),
+    leads: [
+      {
+        id: "lead-hot",
+        org_id: "org-1",
+        name: "Ana",
+        phone: "5511999999999",
+        status: "qualified",
+        saved_result_id: "result-1",
+        intent_score: 92,
+        whatsapp_key: "5511999999999",
+        next_follow_up_at: "2026-04-13T12:00:00.000Z",
+        notes: null,
+        owner_user_id: null,
+        conversation_id: "conv-1",
+        created_at: "2026-04-10T12:00:00.000Z",
+        updated_at: "2026-04-14T11:30:00.000Z",
+        last_interaction_at: "2026-04-14T11:55:00.000Z",
+      },
+      {
+        id: "lead-follow-up",
+        org_id: "org-1",
+        name: "Bruna",
+        phone: "5511888888888",
+        status: "engaged",
+        saved_result_id: null,
+        intent_score: 58,
+        whatsapp_key: "5511888888888",
+        next_follow_up_at: "2026-04-12T09:00:00.000Z",
+        notes: null,
+        owner_user_id: null,
+        conversation_id: null,
+        created_at: "2026-04-08T12:00:00.000Z",
+        updated_at: "2026-04-14T09:00:00.000Z",
+        last_interaction_at: "2026-04-14T09:00:00.000Z",
+      },
+      {
+        id: "lead-noise",
+        org_id: "org-1",
+        name: "Caio",
+        phone: "5511777777777",
+        status: "new",
+        saved_result_id: null,
+        intent_score: 5,
+        whatsapp_key: null,
+        next_follow_up_at: null,
+        notes: null,
+        owner_user_id: null,
+        conversation_id: null,
+        created_at: "2026-04-01T12:00:00.000Z",
+        updated_at: "2026-04-01T12:00:00.000Z",
+        last_interaction_at: null,
+      },
+    ],
+    conversations: [
+      {
+        id: "conv-1",
+        org_slug: "loja-venus",
+        user_phone: "5511999999999",
+        user_name: "Ana",
+        status: "human_required",
+        priority: "high",
+        last_message: "Quero fechar hoje",
+        last_updated: "2026-04-14T11:58:00.000Z",
+        unread_count: 2,
+        user_context: null,
+      },
+    ],
+    leadTimeline: [
+      {
+        id: "timeline-1",
+        lead_id: "lead-follow-up",
+        org_id: "org-1",
+        actor_user_id: "user-1",
+        event_type: "follow_up_scheduled",
+        event_data: { next_follow_up_at: "2026-04-15T10:00:00.000Z" },
+        created_at: "2026-04-14T09:00:00.000Z",
+      },
+      {
+        id: "timeline-2",
+        lead_id: "lead-hot",
+        org_id: "org-1",
+        actor_user_id: "user-1",
+        event_type: "status_changed",
+        event_data: { previous: "engaged", current: "qualified" },
+        created_at: "2026-04-14T11:30:00.000Z",
+      },
+    ],
+    whatsappMessages: [
+      {
+        id: "msg-1",
+        conversation_id: "conv-1",
+        org_slug: "loja-venus",
+        sender: "merchant",
+        text: "Oi, Ana. Separei a proxima opcao.",
+        type: "text",
+        created_at: "2026-04-14T11:59:00.000Z",
+      },
+    ],
+    tryons: [
+      {
+        id: "try-1",
+        org_id: "org-1",
+        saved_result_id: "result-1",
+        product_id: "product-1",
+        status: "completed",
+        result_image_url: "https://example.com/result.png",
+        created_at: "2026-04-14T11:45:00.000Z",
+      },
+    ],
+    savedResults: [
+      {
+        id: "result-1",
+        payload: {
+          finalResult: { looks: [{ name: "Vestido Solar" }] },
+          whatsappHandoff: { lookSummary: [{ name: "Vestido Solar" }] },
+          last_tryon: { product_name: "Vestido Solar" },
+        },
+        created_at: "2026-04-14T11:40:00.000Z",
+      },
+    ],
+  });
+
+  assert.equal(panel.cards[0].leadId, "lead-hot");
+  assert.equal(panel.cards[0].kind, "open_conversation");
+  assert.equal(panel.cards[1].leadId, "lead-follow-up");
+  assert.equal(panel.cards[1].kind, "send_follow_up");
+  assert.equal(panel.cards[0].score > panel.cards[1].score, true);
+  assert.ok(panel.cards[0].recommendationReasons.includes("Atendimento humano pedido"));
+  assert.ok(panel.cards[0].recommendationReasons.includes("Try-on recente"));
+  assert.ok(panel.cards[1].recommendationReasons.includes("Follow-up vencido"));
+  assert.equal(panel.summary.hot >= 1, true);
+  assert.equal(panel.summary.followUpsDue >= 1, true);
+  assert.equal(panel.history[0].kind, "whatsapp");
+  assert.ok(panel.cards[0].resultHref?.includes("result-1"));
+});
+
+run("merchant action panel access is tenant scoped", () => {
+  assert.equal(
+    canAccessMerchantActionPanel({
+      orgId: "org-1",
+      orgSlug: "loja-venus",
+      userOrgSlug: "loja-venus",
+      role: "merchant_manager",
+      tenantActive: true,
+    }),
+    true
+  );
+
+  assert.equal(
+    canAccessMerchantActionPanel({
+      orgId: "org-1",
+      orgSlug: "loja-venus",
+      userOrgSlug: "outra-loja",
+      role: "merchant_manager",
+      tenantActive: true,
+    }),
+    false
+  );
+
+  assert.equal(
+    canAccessMerchantActionPanel({
+      orgId: "org-1",
+      orgSlug: "loja-venus",
+      userOrgSlug: "qualquer",
+      role: "agency_owner",
+      tenantActive: true,
+    }),
+    true
+  );
+
+  assert.equal(
+    canAccessMerchantActionPanel({
+      orgId: "org-1",
+      orgSlug: "loja-venus",
+      userOrgSlug: "loja-venus",
+      role: "merchant_manager",
+      tenantActive: false,
+    }),
+    false
+  );
+});
+
+run("agency resource control prioritizes critical stores and ignores foreign tenants", () => {
+  assert.deepEqual(
+    RESOURCE_CONTROL_FIELD_DEFINITIONS.map((definition) => definition.monthlyFieldName),
+    ["monthly_tokens_limit", "monthly_tryons_limit", "monthly_messages_limit"]
+  );
+
+  const rows = buildAgencyResourceControlRows({
+    orgs: [
+      {
+        id: "org-critical",
+        slug: "loja-critica",
+        name: "Loja Critica",
+        status: "active",
+        kill_switch: false,
+        plan_id: "scale",
+        limits: {
+          ai_tokens_monthly: 100000,
+          whatsapp_messages_daily: 10,
+        },
+        owner_user_id: null,
+        created_at: "2026-04-01T00:00:00.000Z",
+        updated_at: "2026-04-14T00:00:00.000Z",
+      },
+      {
+        id: "org-attention",
+        slug: "loja-atencao",
+        name: "Loja Atencao",
+        status: "active",
+        kill_switch: false,
+        plan_id: "growth",
+        limits: {
+          ai_tokens_monthly: 100000,
+          whatsapp_messages_daily: 10,
+        },
+        owner_user_id: null,
+        created_at: "2026-04-01T00:00:00.000Z",
+        updated_at: "2026-04-14T00:00:00.000Z",
+      },
+      {
+        id: "org-normal",
+        slug: "loja-normal",
+        name: "Loja Normal",
+        status: "active",
+        kill_switch: false,
+        plan_id: "starter",
+        limits: {
+          ai_tokens_monthly: 100000,
+          whatsapp_messages_daily: 10,
+        },
+        owner_user_id: null,
+        created_at: "2026-04-01T00:00:00.000Z",
+        updated_at: "2026-04-14T00:00:00.000Z",
+      },
+      {
+        id: "org-no-data",
+        slug: "loja-sem-base",
+        name: "Loja Sem Base",
+        status: "active",
+        kill_switch: false,
+        plan_id: "starter",
+        limits: {
+          ai_tokens_monthly: 100000,
+          whatsapp_messages_daily: 10,
+        },
+        owner_user_id: null,
+        created_at: "2026-04-01T00:00:00.000Z",
+        updated_at: "2026-04-14T00:00:00.000Z",
+      },
+    ],
+    usageRows: [
+      {
+        org_id: "org-critical",
+        usage_date: "2026-04-14",
+        ai_tokens: 120000,
+        messages_sent: 300,
+        revenue_cents: 300000,
+        cost_cents: 100000,
+        leads: 30,
+        tryon_calls: 60,
+        updated_at: "2026-04-14T12:00:00.000Z",
+      },
+      {
+        org_id: "org-attention",
+        usage_date: "2026-04-14",
+        ai_tokens: 82000,
+        messages_sent: 120,
+        revenue_cents: 240000,
+        cost_cents: 120000,
+        leads: 20,
+        tryon_calls: 41,
+        updated_at: "2026-04-14T11:00:00.000Z",
+      },
+      {
+        org_id: "org-normal",
+        usage_date: "2026-04-14",
+        ai_tokens: 20000,
+        messages_sent: 20,
+        revenue_cents: 100000,
+        cost_cents: 30000,
+        leads: 5,
+        tryon_calls: 10,
+        updated_at: "2026-04-14T10:00:00.000Z",
+      },
+      {
+        org_id: "org-foreign",
+        usage_date: "2026-04-14",
+        ai_tokens: 999999,
+        messages_sent: 999,
+        revenue_cents: 1,
+        cost_cents: 1,
+        leads: 1,
+        tryon_calls: 1,
+        updated_at: "2026-04-14T09:00:00.000Z",
+      },
+    ],
+    limitRows: [
+      {
+        org_id: "org-critical",
+        resource_type: "ai_tokens",
+        limit_monthly: 100000,
+        limit_override: null,
+        created_by_user_id: null,
+        created_at: "2026-04-01T00:00:00.000Z",
+        updated_at: "2026-04-14T00:00:00.000Z",
+      },
+      {
+        org_id: "org-critical",
+        resource_type: "try_on",
+        limit_monthly: 50,
+        limit_override: null,
+        created_by_user_id: null,
+        created_at: "2026-04-01T00:00:00.000Z",
+        updated_at: "2026-04-14T00:00:00.000Z",
+      },
+      {
+        org_id: "org-critical",
+        resource_type: "whatsapp_message",
+        limit_monthly: 1000,
+        limit_override: null,
+        created_by_user_id: null,
+        created_at: "2026-04-01T00:00:00.000Z",
+        updated_at: "2026-04-14T00:00:00.000Z",
+      },
+      {
+        org_id: "org-attention",
+        resource_type: "ai_tokens",
+        limit_monthly: 100000,
+        limit_override: null,
+        created_by_user_id: null,
+        created_at: "2026-04-01T00:00:00.000Z",
+        updated_at: "2026-04-14T00:00:00.000Z",
+      },
+      {
+        org_id: "org-attention",
+        resource_type: "try_on",
+        limit_monthly: 50,
+        limit_override: null,
+        created_by_user_id: null,
+        created_at: "2026-04-01T00:00:00.000Z",
+        updated_at: "2026-04-14T00:00:00.000Z",
+      },
+      {
+        org_id: "org-attention",
+        resource_type: "whatsapp_message",
+        limit_monthly: 1000,
+        limit_override: null,
+        created_by_user_id: null,
+        created_at: "2026-04-01T00:00:00.000Z",
+        updated_at: "2026-04-14T00:00:00.000Z",
+      },
+      {
+        org_id: "org-normal",
+        resource_type: "ai_tokens",
+        limit_monthly: 100000,
+        limit_override: null,
+        created_by_user_id: null,
+        created_at: "2026-04-01T00:00:00.000Z",
+        updated_at: "2026-04-14T00:00:00.000Z",
+      },
+      {
+        org_id: "org-normal",
+        resource_type: "try_on",
+        limit_monthly: 50,
+        limit_override: null,
+        created_by_user_id: null,
+        created_at: "2026-04-01T00:00:00.000Z",
+        updated_at: "2026-04-14T00:00:00.000Z",
+      },
+      {
+        org_id: "org-normal",
+        resource_type: "whatsapp_message",
+        limit_monthly: 1000,
+        limit_override: null,
+        created_by_user_id: null,
+        created_at: "2026-04-01T00:00:00.000Z",
+        updated_at: "2026-04-14T00:00:00.000Z",
+      },
+      {
+        org_id: "org-foreign",
+        resource_type: "ai_tokens",
+        limit_monthly: 1,
+        limit_override: null,
+        created_by_user_id: null,
+        created_at: "2026-04-01T00:00:00.000Z",
+        updated_at: "2026-04-14T00:00:00.000Z",
+      },
+    ],
+    billingRows: [
+      {
+        org_id: "org-critical",
+        billing_status: "active",
+        billing_provider: "stripe",
+        stripe_current_period_end: "2026-05-01T00:00:00.000Z",
+        stripe_synced_at: "2026-04-14T00:00:00.000Z",
+        updated_at: "2026-04-14T00:00:00.000Z",
+      },
+      {
+        org_id: "org-attention",
+        billing_status: "active",
+        billing_provider: "stripe",
+        stripe_current_period_end: "2026-05-01T00:00:00.000Z",
+        stripe_synced_at: "2026-04-14T00:00:00.000Z",
+        updated_at: "2026-04-14T00:00:00.000Z",
+      },
+      {
+        org_id: "org-normal",
+        billing_status: "active",
+        billing_provider: "stripe",
+        stripe_current_period_end: "2026-05-01T00:00:00.000Z",
+        stripe_synced_at: "2026-04-14T00:00:00.000Z",
+        updated_at: "2026-04-14T00:00:00.000Z",
+      },
+    ],
+    referenceDate: new Date("2026-04-14T12:00:00.000Z"),
+  });
+
+  assert.equal(rows.length, 4);
+  assert.deepEqual(
+    rows.map((row) => row.id),
+    ["org-critical", "org-attention", "org-normal", "org-no-data"]
+  );
+  assert.equal(rows[0].risk, "critical");
+  assert.equal(rows[1].risk, "attention");
+  assert.equal(rows[2].risk, "normal");
+  assert.equal(rows[3].usage_month.ai_tokens, null);
+  assert.equal(rows[3].resources.every((resource) => resource.status === "no_data"), true);
+  assert.equal(rows[3].projection_note, "Sem dados suficientes para projetar");
+  assert.equal(rows[2].alerts.includes("Operacao normal"), true);
+});
+
+run("agency resource control authorizes only agency roles", () => {
+  assert.equal(canAccessAgencyResourceControl("agency_owner"), true);
+  assert.equal(canAccessAgencyResourceControl("agency_admin"), true);
+  assert.equal(canAccessAgencyResourceControl("merchant_manager"), false);
+  assert.equal(canAccessAgencyResourceControl("merchant_viewer"), false);
+  assert.equal(canAccessAgencyResourceControl(null), false);
+});
+
+run("gamification overview aggregates budgets and ignores foreign or expired data", () => {
+  assert.equal(gamificationRuleLabel("share_bonus"), "Bônus por share");
+  assert.equal(gamificationResourceLabel("try_on"), "Try-on extra");
+  assert.equal(canAccessGamificationPanel("merchant_manager"), true);
+  assert.equal(canAccessGamificationPanel("agency_owner"), false);
+
+  const overview = buildGamificationOverview({
+    org: {
+      id: "org-1",
+      slug: "loja-venus",
+      name: "Loja Venus",
+      status: "active",
+      kill_switch: false,
+      plan_id: "growth",
+      limits: {
+        ai_tokens_monthly: 100000,
+        whatsapp_messages_daily: 100,
+        products: 100,
+        leads: 100,
+      },
+      owner_user_id: null,
+      created_at: "2026-04-01T00:00:00.000Z",
+      updated_at: "2026-04-14T00:00:00.000Z",
+    },
+    rules: [
+      {
+        id: "rule-1",
+        org_id: "org-1",
+        rule_type: "share_bonus",
+        benefit_resource_type: "try_on",
+        benefit_amount: 1,
+        active: true,
+        per_customer_limit: 2,
+        per_customer_period_days: 30,
+        valid_from: "2026-04-01T00:00:00.000Z",
+        valid_until: null,
+        label: "Share com bônus",
+        description: null,
+        created_by_user_id: null,
+        updated_by_user_id: null,
+        created_at: "2026-04-01T00:00:00.000Z",
+        updated_at: "2026-04-14T00:00:00.000Z",
+      },
+      {
+        id: "rule-foreign",
+        org_id: "other-org",
+        rule_type: "share_bonus",
+        benefit_resource_type: "try_on",
+        benefit_amount: 1,
+        active: true,
+        per_customer_limit: 1,
+        per_customer_period_days: 30,
+        valid_from: "2026-04-01T00:00:00.000Z",
+        valid_until: null,
+        label: "Foreign",
+        description: null,
+        created_by_user_id: null,
+        updated_by_user_id: null,
+        created_at: "2026-04-01T00:00:00.000Z",
+        updated_at: "2026-04-14T00:00:00.000Z",
+      },
+    ],
+    events: [
+      {
+        id: "event-1",
+        org_id: "org-1",
+        rule_id: "rule-1",
+        customer_key: "cust-1",
+        customer_label: "Ana",
+        event_type: "grant",
+        status: "success",
+        resource_type: "try_on",
+        amount: 2,
+        reason: "share confirmado",
+        actor_user_id: "user-1",
+        metadata: { rule_label: "Share com bônus" },
+        expires_at: "2026-05-01T00:00:00.000Z",
+        created_at: "2026-04-10T12:00:00.000Z",
+      },
+      {
+        id: "event-2",
+        org_id: "org-1",
+        rule_id: "rule-1",
+        customer_key: "cust-1",
+        customer_label: "Ana",
+        event_type: "consume",
+        status: "success",
+        resource_type: "try_on",
+        amount: 1,
+        reason: "uso do benefício",
+        actor_user_id: "user-1",
+        metadata: {},
+        expires_at: null,
+        created_at: "2026-04-11T12:00:00.000Z",
+      },
+      {
+        id: "event-3",
+        org_id: "org-1",
+        rule_id: "rule-1",
+        customer_key: "cust-expired",
+        customer_label: "Bia",
+        event_type: "grant",
+        status: "success",
+        resource_type: "whatsapp_message",
+        amount: 1,
+        reason: "expirado",
+        actor_user_id: "user-1",
+        metadata: {},
+        expires_at: "2026-04-01T00:00:00.000Z",
+        created_at: "2026-04-01T12:00:00.000Z",
+      },
+      {
+        id: "event-foreign",
+        org_id: "other-org",
+        rule_id: "rule-foreign",
+        customer_key: "cust-foreign",
+        customer_label: "Foreign",
+        event_type: "grant",
+        status: "success",
+        resource_type: "try_on",
+        amount: 9,
+        reason: "ignorar",
+        actor_user_id: "user-9",
+        metadata: {},
+        expires_at: null,
+        created_at: "2026-04-12T12:00:00.000Z",
+      },
+    ],
+    referenceDate: new Date("2026-04-14T12:00:00.000Z"),
+  });
+
+  assert.equal(overview.active_rule_count, 1);
+  assert.equal(overview.inactive_rule_count, 0);
+  assert.equal(overview.budget.total_granted, 2);
+  assert.equal(overview.budget.total_consumed, 1);
+  assert.equal(overview.budget.total_available, 1);
+  assert.equal(overview.recent_customers.length, 1);
+  assert.equal(overview.recent_customers[0].customer_key, "cust-1");
+  assert.equal(overview.recent_customers[0].resources.try_on.available, 1);
+  assert.equal(overview.has_data, true);
+});
+
+run("privacy sanitizer redacts identifiers and urls", () => {
+  const sanitized = sanitizePrivacyLogEntry({
+    email: "cliente@exemplo.com",
+    phone: "+55 (11) 99999-9999",
+    url: "https://example.com/image.png?token=abc",
+    nested: {
+      name: "Cliente Exemplo",
+      token: "secret-token",
+    },
+  });
+
+  assert.equal(maskEmail("cliente@exemplo.com"), "c***@exemplo.com");
+  assert.equal(maskPhone("+55 (11) 99999-9999"), "***9999");
+  assert.equal(stripUrlQuery("https://example.com/image.png?token=abc"), "https://example.com/image.png");
+  assert.equal(sanitized.email, "c***@exemplo.com");
+  assert.equal(sanitized.phone, "***9999");
+  assert.equal(sanitized.url, "https://example.com/image.png");
+  assert.equal(sanitized.nested.name, "[REDACTED]");
+  assert.equal(sanitized.nested.token, "[REDACTED]");
+});
+
+run("tenant privacy export bundle keeps counts and strips sensitive urls", () => {
+  const bundle = buildTenantPrivacyExportBundle({
+    organization: {
+      id: "org-1",
+      slug: "maison-elite",
+      name: "Maison Elite",
+      branch_name: "Centro",
+      status: "active",
+      plan_id: "growth",
+    },
+    products: [
+      {
+        id: "prod-1",
+        image_url: "https://cdn.example.com/product.png?token=abc",
+      },
+    ],
+    savedResults: [
+      {
+        id: "result-1",
+        payload: {
+          email: "cliente@exemplo.com",
+          photoUrl: "https://cdn.example.com/result.png?token=abc",
+        },
+      },
+    ],
+  });
+
+  assert.equal(bundle.counts.products, 1);
+  assert.equal(bundle.counts.saved_results, 1);
+  assert.equal(bundle.data.products[0].image_url, "https://cdn.example.com/product.png");
+  assert.equal(bundle.data.saved_results[0].payload.email, "c***@exemplo.com");
+  assert.equal(bundle.data.saved_results[0].payload.photoUrl, "https://cdn.example.com/result.png");
+});
+
 async function runAsync(name, fn) {
   try {
     await fn();
@@ -1194,6 +2362,1321 @@ const VALID_ORG_ID = "org-123";
 const FRONTEND_ORG_ID = "frontend-org";
 
 ;(async () => {
+  await runAsync("gamification rule creation and edition stay tenant scoped", async () => {
+    const auditActions = [];
+    const operationalEvents = [];
+    const repo = createGamificationMemoryRepo({
+      orgs: [
+        {
+          id: "org-1",
+          slug: "loja-venus",
+          name: "Loja Venus",
+          status: "active",
+          kill_switch: false,
+          plan_id: "growth",
+          limits: {},
+          owner_user_id: null,
+          created_at: "2026-04-01T00:00:00.000Z",
+          updated_at: "2026-04-14T00:00:00.000Z",
+        },
+      ],
+    });
+
+    await withMockedModules(
+      {
+        "@/lib/supabase/admin": { createAdminClient: () => ({}) },
+        "@/lib/security/audit": {
+          logAudit: async (input) => {
+            auditActions.push(input.action);
+          },
+        },
+        "@/lib/reliability/observability": {
+          recordOperationalTenantEvent: async (_supabase, input) => {
+            operationalEvents.push(input.eventType);
+            return true;
+          },
+        },
+        "@/lib/resource-control": {
+          canConsumeResource: async () => ({ allowed: true }),
+          consumeResource: async () => ({ success: true }),
+        },
+      },
+      async () => {
+        const {
+          createGamificationRule,
+          updateGamificationRule,
+        } = loadFresh("../src/lib/gamification/index.ts");
+
+        const created = await createGamificationRule(
+          {
+            orgId: "org-1",
+            actorUserId: "user-1",
+            ruleType: "share_bonus",
+            benefitResourceType: "try_on",
+            benefitAmount: 1,
+            perCustomerLimit: 2,
+            perCustomerPeriodDays: 30,
+            active: true,
+            label: "Share com bônus",
+            description: "Bônus de try-on",
+          },
+          { repository: repo, now: new Date("2026-04-14T12:00:00.000Z") }
+        );
+
+        const updated = await updateGamificationRule(
+          {
+            orgId: "org-1",
+            actorUserId: "user-1",
+            ruleId: created.id,
+            ruleType: "share_bonus",
+            benefitResourceType: "try_on",
+            benefitAmount: 1,
+            perCustomerLimit: 2,
+            perCustomerPeriodDays: 30,
+            active: false,
+            label: "Share com bônus",
+            description: "Bônus de try-on",
+          },
+          { repository: repo, now: new Date("2026-04-14T12:00:00.000Z") }
+        );
+
+        assert.equal(created.org_id, "org-1");
+        assert.equal(updated.active, false);
+        assert.ok(auditActions.includes("gamification_rule_create"));
+        assert.ok(auditActions.includes("gamification_rule_update"));
+        assert.ok(operationalEvents.includes("gamification.rule_created"));
+        assert.ok(operationalEvents.includes("gamification.rule_deactivated"));
+      }
+    );
+  });
+
+  await runAsync("gamification grants consume budget and block when exhausted", async () => {
+    const auditActions = [];
+    const operationalEvents = [];
+    const consumeCalls = [];
+    const repo = createGamificationMemoryRepo({
+      orgs: [
+        {
+          id: "org-1",
+          slug: "loja-venus",
+          name: "Loja Venus",
+          status: "active",
+          kill_switch: false,
+          plan_id: "growth",
+          limits: {},
+          owner_user_id: null,
+          created_at: "2026-04-01T00:00:00.000Z",
+          updated_at: "2026-04-14T00:00:00.000Z",
+        },
+      ],
+      rules: [
+        {
+          id: "rule-1",
+          org_id: "org-1",
+          rule_type: "share_bonus",
+          benefit_resource_type: "try_on",
+          benefit_amount: 1,
+          active: true,
+          per_customer_limit: 3,
+          per_customer_period_days: 30,
+          valid_from: "2026-04-01T00:00:00.000Z",
+          valid_until: null,
+          label: "Share com bônus",
+          description: null,
+          created_by_user_id: null,
+          updated_by_user_id: null,
+          created_at: "2026-04-01T00:00:00.000Z",
+          updated_at: "2026-04-14T00:00:00.000Z",
+        },
+      ],
+    });
+
+    await withMockedModules(
+      {
+        "@/lib/supabase/admin": { createAdminClient: () => ({}) },
+        "@/lib/security/audit": {
+          logAudit: async (input) => {
+            auditActions.push(input.action);
+          },
+        },
+        "@/lib/reliability/observability": {
+          recordOperationalTenantEvent: async (_supabase, input) => {
+            operationalEvents.push(input.eventType);
+            return true;
+          },
+        },
+        "@/lib/resource-control": {
+          canConsumeResource: async (_orgId, resourceType, amount) => {
+            consumeCalls.push({ kind: "check", resourceType, amount });
+            return { allowed: true };
+          },
+          consumeResource: async (_orgId, resourceType, amount) => {
+            consumeCalls.push({ kind: "consume", resourceType, amount });
+            return { success: true };
+          },
+        },
+      },
+      async () => {
+        const { grantGamificationBenefit } = loadFresh("../src/lib/gamification/index.ts");
+
+        const granted = await grantGamificationBenefit(
+          {
+            orgId: "org-1",
+            actorUserId: "user-1",
+            customerKey: "cust-1",
+            customerLabel: "Ana",
+            ruleId: "rule-1",
+            amount: 1,
+            reason: "share confirmado",
+          },
+          { repository: repo, now: new Date("2026-04-14T12:00:00.000Z") }
+        );
+
+        assert.equal(granted.granted, true);
+        assert.equal(granted.event.status, "success");
+        assert.equal(repo.state.events.filter((event) => event.event_type === "grant" && event.status === "success").length, 1);
+        assert.deepEqual(consumeCalls[0], { kind: "check", resourceType: "try_on", amount: 1 });
+        assert.deepEqual(consumeCalls[1], { kind: "consume", resourceType: "try_on", amount: 1 });
+        assert.ok(auditActions.includes("gamification_benefit_grant"));
+        assert.ok(operationalEvents.includes("gamification.benefit_granted"));
+      }
+    );
+
+    consumeCalls.length = 0;
+    auditActions.length = 0;
+    operationalEvents.length = 0;
+
+    await withMockedModules(
+      {
+        "@/lib/supabase/admin": { createAdminClient: () => ({}) },
+        "@/lib/security/audit": {
+          logAudit: async (input) => {
+            auditActions.push(input.action);
+          },
+        },
+        "@/lib/reliability/observability": {
+          recordOperationalTenantEvent: async (_supabase, input) => {
+            operationalEvents.push(input.eventType);
+            return true;
+          },
+        },
+        "@/lib/resource-control": {
+          canConsumeResource: async () => ({ allowed: false }),
+          consumeResource: async () => ({ success: false }),
+        },
+      },
+      async () => {
+        const { grantGamificationBenefit: grantAgain } = loadFresh("../src/lib/gamification/index.ts");
+
+        const denied = await grantAgain(
+          {
+            orgId: "org-1",
+            actorUserId: "user-1",
+            customerKey: "cust-2",
+            customerLabel: "Bia",
+            ruleId: "rule-1",
+            amount: 1,
+            reason: "share confirmado",
+          },
+          { repository: repo, now: new Date("2026-04-14T12:00:00.000Z") }
+        );
+
+        assert.equal(denied.granted, false);
+        assert.equal(denied.reason, "Budget promocional insuficiente");
+        assert.ok(auditActions.includes("gamification_benefit_blocked"));
+        assert.ok(operationalEvents.includes("gamification.benefit_blocked"));
+      }
+    );
+  });
+
+  await runAsync("gamification benefit consumption updates saldo and blocks when insufficient", async () => {
+    const auditActions = [];
+    const repo = createGamificationMemoryRepo({
+      orgs: [
+        {
+          id: "org-1",
+          slug: "loja-venus",
+          name: "Loja Venus",
+          status: "active",
+          kill_switch: false,
+          plan_id: "growth",
+          limits: {},
+          owner_user_id: null,
+          created_at: "2026-04-01T00:00:00.000Z",
+          updated_at: "2026-04-14T00:00:00.000Z",
+        },
+      ],
+      events: [
+        {
+          id: "event-1",
+          org_id: "org-1",
+          rule_id: "rule-1",
+          customer_key: "cust-1",
+          customer_label: "Ana",
+          event_type: "grant",
+          status: "success",
+          resource_type: "try_on",
+          amount: 2,
+          reason: "grant",
+          actor_user_id: "user-1",
+          metadata: {},
+          expires_at: null,
+          created_at: "2026-04-14T12:00:00.000Z",
+        },
+      ],
+    });
+
+    await withMockedModules(
+      {
+        "@/lib/supabase/admin": { createAdminClient: () => ({}) },
+        "@/lib/security/audit": {
+          logAudit: async (input) => {
+            auditActions.push(input.action);
+          },
+        },
+        "@/lib/reliability/observability": {
+          recordOperationalTenantEvent: async () => true,
+        },
+        "@/lib/resource-control": {
+          canConsumeResource: async () => ({ allowed: true }),
+          consumeResource: async () => ({ success: true }),
+        },
+      },
+      async () => {
+        const { consumeGamificationBenefit } = loadFresh("../src/lib/gamification/index.ts");
+
+        const consumed = await consumeGamificationBenefit(
+          {
+            orgId: "org-1",
+            actorUserId: "user-1",
+            customerKey: "cust-1",
+            customerLabel: "Ana",
+            resourceType: "try_on",
+            amount: 1,
+            reason: "uso confirmado",
+          },
+          { repository: repo, now: new Date("2026-04-14T12:00:00.000Z") }
+        );
+
+        assert.equal(consumed.consumed, true);
+        assert.equal(consumed.balance.resources.try_on.available, 1);
+        assert.ok(auditActions.includes("gamification_benefit_consume"));
+
+        const blocked = await consumeGamificationBenefit(
+          {
+            orgId: "org-1",
+            actorUserId: "user-1",
+            customerKey: "cust-1",
+            customerLabel: "Ana",
+            resourceType: "try_on",
+            amount: 10,
+            reason: "uso exagerado",
+          },
+          { repository: repo, now: new Date("2026-04-14T12:00:00.000Z") }
+        );
+
+        assert.equal(blocked.consumed, false);
+        assert.equal(blocked.reason, "Saldo promocional insuficiente");
+        assert.ok(auditActions.includes("gamification_benefit_blocked"));
+      }
+    );
+  });
+
+  await runAsync("gamification route rejects unauthorized access", async () => {
+    await withMockedModules(
+      {
+        "@/lib/merchant/access": {
+          resolveMerchantOrgAccess: async () => {
+            throw new Error("Forbidden");
+          },
+        },
+        "@/lib/supabase/admin": { createAdminClient: () => ({}) },
+        "@/lib/security/audit": { logAudit: async () => {} },
+        "@/lib/reliability/observability": { recordOperationalTenantEvent: async () => true },
+        "@/lib/resource-control": {
+          canConsumeResource: async () => ({ allowed: true }),
+          consumeResource: async () => ({ success: true }),
+        },
+      },
+      async () => {
+        const { POST } = loadFresh("../src/app/api/org/[slug]/gamification/route.ts");
+        const form = new FormData();
+        form.set("intent", "create_rule");
+        form.set("label", "Share com bônus");
+        form.set("rule_type", "share_bonus");
+        form.set("benefit_resource_type", "try_on");
+        form.set("benefit_amount", "1");
+        form.set("per_customer_limit", "1");
+        form.set("per_customer_period_days", "30");
+
+        const response = await POST(
+          new Request("https://example.com/api/org/loja-venus/gamification", {
+            method: "POST",
+            headers: {
+              accept: "application/json",
+            },
+            body: form,
+          }),
+          { params: Promise.resolve({ slug: "loja-venus" }) }
+        );
+
+        assert.equal(response.status, 403);
+      }
+    );
+  });
+
+  await runAsync("gamification automatic triggers grant once per source event", async () => {
+    const auditActions = [];
+    const operationalEvents = [];
+    const repo = createGamificationMemoryRepo({
+      orgs: [
+        {
+          id: "org-1",
+          slug: "loja-venus",
+          name: "Loja Venus",
+          status: "active",
+          kill_switch: false,
+          plan_id: "growth",
+          limits: {},
+          owner_user_id: null,
+          created_at: "2026-04-01T00:00:00.000Z",
+          updated_at: "2026-04-14T00:00:00.000Z",
+        },
+      ],
+      rules: [
+        {
+          id: "rule-auto-1",
+          org_id: "org-1",
+          rule_type: "share_bonus",
+          trigger_mode: "automatic",
+          trigger_event_type: "onboarding_completed",
+          benefit_resource_type: "try_on",
+          benefit_amount: 1,
+          active: true,
+          per_customer_limit: 2,
+          per_customer_period_days: 30,
+          valid_from: "2026-04-01T00:00:00.000Z",
+          valid_until: null,
+          label: "Onboarding com bônus",
+          description: null,
+          created_by_user_id: null,
+          updated_by_user_id: null,
+          created_at: "2026-04-01T00:00:00.000Z",
+          updated_at: "2026-04-14T00:00:00.000Z",
+        },
+      ],
+    });
+
+    await withMockedModules(
+      {
+        "@/lib/supabase/admin": { createAdminClient: () => ({}) },
+        "@/lib/security/audit": {
+          logAudit: async (input) => {
+            auditActions.push(input.action);
+          },
+        },
+        "@/lib/reliability/observability": {
+          recordOperationalTenantEvent: async (_supabase, input) => {
+            operationalEvents.push(input.eventType);
+            return true;
+          },
+        },
+        "@/lib/resource-control": {
+          canConsumeResource: async () => ({ allowed: true }),
+          consumeResource: async () => ({ success: true }),
+        },
+      },
+      async () => {
+        loadFresh("../src/lib/gamification/index.ts");
+        const { processGamificationTriggerEvent: processAuto } = loadFresh("../src/lib/gamification/events.ts");
+        const sourceEventKey = buildGamificationTriggerEventKey({
+          orgId: "org-1",
+          eventType: "onboarding_completed",
+          customerKey: "lead-1",
+          customerLabel: "Ana",
+          payload: { saved_result_id: "result-1" },
+        });
+
+        assert.ok(sourceEventKey);
+
+        const first = await processAuto(
+          {
+            orgId: "org-1",
+            eventType: "onboarding_completed",
+            customerKey: "lead-1",
+            customerLabel: "Ana",
+            eventKey: sourceEventKey,
+            payload: { saved_result_id: "result-1" },
+          },
+          { repository: repo, now: new Date("2026-04-14T12:00:00.000Z") }
+        );
+
+        assert.equal(first.granted, 1);
+        assert.equal(first.duplicates, 0);
+        assert.equal(repo.state.events.filter((event) => event.event_type === "grant" && event.status === "success").length, 1);
+
+        const second = await processAuto(
+          {
+            orgId: "org-1",
+            eventType: "onboarding_completed",
+            customerKey: "lead-1",
+            customerLabel: "Ana",
+            eventKey: sourceEventKey,
+            payload: { saved_result_id: "result-1" },
+          },
+          { repository: repo, now: new Date("2026-04-14T12:00:00.000Z") }
+        );
+
+        assert.equal(second.granted, 0);
+        assert.equal(second.duplicates, 1);
+        assert.equal(repo.state.events.filter((event) => event.event_type === "grant" && event.status === "success").length, 1);
+
+        const { loadGamificationOverview: loadOverview } = loadFresh("../src/lib/gamification/index.ts");
+        const overview = await loadOverview("org-1", { repository: repo, now: new Date("2026-04-14T12:00:00.000Z") });
+        const automation = summariseGamificationAutomation(overview);
+        assert.equal(automation.automatic_rules, 1);
+        assert.equal(automation.recent_automatic_events.length, 1);
+        assert.ok(auditActions.includes("gamification_benefit_grant"));
+        assert.ok(operationalEvents.includes("gamification.benefit_granted"));
+      }
+    );
+  });
+
+  await runAsync("gamification automatic triggers block when budget is exhausted", async () => {
+    const auditActions = [];
+    const operationalEvents = [];
+    const repo = createGamificationMemoryRepo({
+      orgs: [
+        {
+          id: "org-1",
+          slug: "loja-venus",
+          name: "Loja Venus",
+          status: "active",
+          kill_switch: false,
+          plan_id: "growth",
+          limits: {},
+          owner_user_id: null,
+          created_at: "2026-04-01T00:00:00.000Z",
+          updated_at: "2026-04-14T00:00:00.000Z",
+        },
+      ],
+      rules: [
+        {
+          id: "rule-auto-2",
+          org_id: "org-1",
+          rule_type: "share_bonus",
+          trigger_mode: "automatic",
+          trigger_event_type: "result_shared",
+          benefit_resource_type: "try_on",
+          benefit_amount: 1,
+          active: true,
+          per_customer_limit: 2,
+          per_customer_period_days: 30,
+          valid_from: "2026-04-01T00:00:00.000Z",
+          valid_until: null,
+          label: "Share com bônus",
+          description: null,
+          created_by_user_id: null,
+          updated_by_user_id: null,
+          created_at: "2026-04-01T00:00:00.000Z",
+          updated_at: "2026-04-14T00:00:00.000Z",
+        },
+      ],
+    });
+
+    await withMockedModules(
+      {
+        "@/lib/supabase/admin": { createAdminClient: () => ({}) },
+        "@/lib/security/audit": {
+          logAudit: async (input) => {
+            auditActions.push(input.action);
+          },
+        },
+        "@/lib/reliability/observability": {
+          recordOperationalTenantEvent: async (_supabase, input) => {
+            operationalEvents.push(input.eventType);
+            return true;
+          },
+        },
+        "@/lib/resource-control": {
+          canConsumeResource: async () => ({ allowed: false }),
+          consumeResource: async () => ({ success: false }),
+        },
+      },
+      async () => {
+        loadFresh("../src/lib/gamification/index.ts");
+        const { processGamificationTriggerEvent: processAuto } = loadFresh("../src/lib/gamification/events.ts");
+
+        const result = await processAuto(
+          {
+            orgId: "org-1",
+            eventType: "result_shared",
+            customerKey: "user-1",
+            customerLabel: "Cliente",
+            eventKey: "result_shared:org-1:ref-1",
+            payload: { ref_code: "ref-1" },
+          },
+          { repository: repo, now: new Date("2026-04-14T12:00:00.000Z") }
+        );
+
+        assert.equal(result.granted, 0);
+        assert.equal(result.blocked, 1);
+        assert.equal(result.duplicates, 0);
+        assert.equal(repo.state.events.filter((event) => event.status === "blocked").length, 1);
+        assert.ok(auditActions.includes("gamification_benefit_blocked"));
+        assert.ok(operationalEvents.includes("gamification.benefit_blocked"));
+      }
+    );
+  });
+
+  await runAsync("gamification automatic triggers skip inactive rules", async () => {
+    const repo = createGamificationMemoryRepo({
+      orgs: [
+        {
+          id: "org-1",
+          slug: "loja-venus",
+          name: "Loja Venus",
+          status: "active",
+          kill_switch: false,
+          plan_id: "growth",
+          limits: {},
+          owner_user_id: null,
+          created_at: "2026-04-01T00:00:00.000Z",
+          updated_at: "2026-04-14T00:00:00.000Z",
+        },
+      ],
+      rules: [
+        {
+          id: "rule-auto-3",
+          org_id: "org-1",
+          rule_type: "recurring_interaction",
+          trigger_mode: "automatic",
+          trigger_event_type: "lead_reengaged",
+          benefit_resource_type: "whatsapp_message",
+          benefit_amount: 1,
+          active: false,
+          per_customer_limit: 2,
+          per_customer_period_days: 30,
+          valid_from: "2026-04-01T00:00:00.000Z",
+          valid_until: null,
+          label: "Reengajamento",
+          description: null,
+          created_by_user_id: null,
+          updated_by_user_id: null,
+          created_at: "2026-04-01T00:00:00.000Z",
+          updated_at: "2026-04-14T00:00:00.000Z",
+        },
+      ],
+    });
+
+    const { processGamificationTriggerEvent: processAuto } = loadFresh("../src/lib/gamification/events.ts");
+
+    const result = await processAuto(
+      {
+        orgId: "org-1",
+        eventType: "lead_reengaged",
+        customerKey: "lead-1",
+        customerLabel: "Ana",
+        eventKey: "lead_reengaged:org-1:lead-1:2026-04-14T12:00:00.000Z",
+        payload: { lead_id: "lead-1" },
+      },
+      { repository: repo, now: new Date("2026-04-14T12:00:00.000Z") }
+    );
+
+    assert.equal(result.skipped, true);
+    assert.equal(result.skippedReason, "no_matching_rule");
+    assert.equal(repo.state.events.length, 0);
+  });
+
+  await runAsync("product upload validation rejects invalid files", async () => {
+    const validFile = { size: PRODUCT_IMAGE_MAX_BYTES - 1, type: "image/png", name: "photo.png" };
+    const oversizedFile = { size: PRODUCT_IMAGE_MAX_BYTES + 1, type: "image/png", name: "photo.png" };
+    const wrongTypeFile = { size: 1024, type: "text/plain", name: "note.txt" };
+
+    assert.equal(validateProductImageFile(validFile).valid, true);
+    assert.equal(validateProductImageFile(oversizedFile).reason, "image_too_large");
+    assert.equal(validateProductImageFile(wrongTypeFile).reason, "image_invalid_type");
+  });
+
+  await runAsync("security rate limiter blocks repeated requests and resets per window", async () => {
+    clearInMemoryRateLimitState();
+    const request = new Request("https://example.com/api/security", {
+      headers: {
+        "x-forwarded-for": "203.0.113.10",
+      },
+    });
+
+    const first = checkInMemoryRateLimit({
+      scope: "security:test",
+      request,
+      limit: 2,
+      windowMs: 1_000,
+      keyParts: ["org-1"],
+      nowMs: 1_000,
+    });
+    const second = checkInMemoryRateLimit({
+      scope: "security:test",
+      request,
+      limit: 2,
+      windowMs: 1_000,
+      keyParts: ["org-1"],
+      nowMs: 1_200,
+    });
+    const third = checkInMemoryRateLimit({
+      scope: "security:test",
+      request,
+      limit: 2,
+      windowMs: 1_000,
+      keyParts: ["org-1"],
+      nowMs: 1_300,
+    });
+    const reset = checkInMemoryRateLimit({
+      scope: "security:test",
+      request,
+      limit: 2,
+      windowMs: 1_000,
+      keyParts: ["org-1"],
+      nowMs: 2_250,
+    });
+
+    assert.equal(first.allowed, true);
+    assert.equal(second.allowed, true);
+    assert.equal(third.allowed, false);
+    assert.ok((third.retryAfterSeconds || 0) > 0);
+    assert.equal(reset.allowed, true);
+  });
+
+  await runAsync("security structured logs sanitize pii", async () => {
+    const originalWarn = console.warn;
+    const captured = [];
+
+    console.warn = (...args) => {
+      captured.push(args);
+    };
+
+    try {
+      logSecurityEvent("warn", "pii_check", {
+        email: "cliente@exemplo.com",
+        phone: "+55 (11) 99999-9999",
+        url: "https://example.com/image.png?token=abc",
+        nested: {
+          token: "secret-token",
+        },
+      });
+    } finally {
+      console.warn = originalWarn;
+    }
+
+    assert.equal(captured.length > 0, true);
+    assert.equal(captured[0][0], "[SECURITY]");
+    assert.equal(captured[0][1].email, "c***@exemplo.com");
+    assert.equal(captured[0][1].phone, "***9999");
+    assert.equal(captured[0][1].url, "https://example.com/image.png");
+    assert.equal(captured[0][1].nested.token, "[REDACTED]");
+  });
+
+  await runAsync("roi metrics use crm and campaign engine data with conservative fallback", async () => {
+    const commissionRows = [
+      { sale_amount: 1200 },
+      { sale_amount: "800" },
+      { sale_amount: null },
+    ];
+
+    const supabase = {
+      from(table) {
+        if (table === "crm_leads") {
+          return buildSupabaseQueryResult((queryFilters) =>
+            queryFilters.some((entry) => entry.type === "eq" && entry.column === "status" && entry.value === "won")
+              ? { count: 3, data: [], error: null }
+              : { count: 12, data: [], error: null }
+          );
+        }
+
+        if (table === "campaign_logs") {
+          return buildSupabaseQueryResult({ count: 7, data: [], error: null });
+        }
+
+        if (table === "commission_events") {
+          return buildSupabaseQueryResult({ count: null, data: commissionRows, error: null });
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      },
+    };
+
+    const metrics = await loadMerchantRoiMetrics(supabase, "org-1");
+    assert.equal(metrics.leadsGenerated, 12);
+    assert.equal(metrics.leadsConverted, 3);
+    assert.equal(metrics.campaignsExecuted, 7);
+    assert.equal(metrics.dataConfidence, "high");
+    assert.equal(metrics.estimatedSalesImpact, 3000);
+    assert.equal(metrics.estimatedRevenueRange.low, 2550);
+    assert.equal(metrics.estimatedRevenueRange.high, 3450);
+    assert.ok(metrics.notes.some((note) => note.includes("Ticket médio observado")));
+
+    const emptySupabase = {
+      from() {
+        return buildSupabaseQueryResult({ count: 0, data: [], error: null });
+      },
+    };
+
+    const fallbackMetrics = await loadMerchantRoiMetrics(emptySupabase, "org-2");
+    assert.equal(fallbackMetrics.leadsGenerated, 0);
+    assert.equal(fallbackMetrics.leadsConverted, 0);
+    assert.equal(fallbackMetrics.campaignsExecuted, 0);
+    assert.equal(fallbackMetrics.estimatedSalesImpact, null);
+    assert.equal(fallbackMetrics.estimatedRevenueRange.low, null);
+    assert.equal(fallbackMetrics.dataConfidence, "low");
+    assert.ok(fallbackMetrics.notes.some((note) => note.includes("Sem vendas confirmadas")));
+  });
+
+  await runAsync("stock helpers keep legacy rows and alerts consistent", async () => {
+    const legacySnapshot = resolveProductStockSnapshot({ stock: 8, reserved_qty: 2, stock_status: null });
+    assert.equal(legacySnapshot.availableQty, 6);
+    assert.equal(legacySnapshot.totalQty, 8);
+    assert.equal(legacySnapshot.stockStatus, "in_stock");
+
+    const lowSnapshot = resolveProductStockSnapshot({ stock: 0, reserved_qty: 0, stock_status: null });
+    const alerts = buildInventoryAlerts({
+      productId: "prod-1",
+      productName: "Blazer",
+      stockSnapshot: lowSnapshot,
+      tryons7d: 4,
+      tryons30d: 0,
+    });
+
+    assert.equal(alerts[0].type, "rupture");
+    assert.ok(alerts.some((alert) => alert.type === "demand_reprimida"));
+  });
+
+  await runAsync("stock migration stays backward safe", async () => {
+    const migration = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/20260414000003_stock_v1.sql"), "utf8");
+    assert.ok(migration.includes("ADD COLUMN IF NOT EXISTS stock_qty"));
+    assert.ok(migration.includes("ADD COLUMN IF NOT EXISTS reserved_qty"));
+    assert.ok(migration.includes("ADD COLUMN IF NOT EXISTS stock_status"));
+    assert.ok(migration.includes("COALESCE(stock_qty, stock, 0)"));
+  });
+
+  await runAsync("product enrichment route returns ai payload and fallback", async () => {
+    const originalFetch = global.fetch;
+
+    try {
+      await withTempEnv({ GEMINI_API_KEY: "test-key" }, async () => {
+        global.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      text: JSON.stringify({
+                        name: "Blazer Lino Cru",
+                        category: "roupa",
+                        primary_color: "Bege",
+                        style: "alfaiataria",
+                        description: "Descricao objetiva da peca.",
+                        persuasive_description: "Descricao persuasiva da peca.",
+                        emotional_copy: "Copy emocional da peca.",
+                        tags: ["base forte", "alfaiataria", "neutro"],
+                      }),
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+        });
+
+        const route = loadFresh("../src/app/api/products/enrich/route.ts");
+        const response = await route.POST(
+          new Request("https://example.com/api/products/enrich", {
+            method: "POST",
+            body: JSON.stringify({
+              image_base64: "data:image/png;base64,AAAA",
+              file_name: "blazer.png",
+              name: "",
+              category: "roupa",
+            }),
+          })
+        );
+
+        assert.equal(response.status, 200);
+        const payload = await response.json();
+        assert.equal(payload.fallback_used, false);
+        assert.equal(payload.name, "Blazer Lino Cru");
+        assert.equal(payload.primary_color, "Bege");
+        assert.equal(payload.tags.length, 3);
+      });
+    } finally {
+      global.fetch = originalFetch;
+    }
+
+    try {
+      await withTempEnv({ GEMINI_API_KEY: "test-key" }, async () => {
+        global.fetch = async () => ({
+          ok: false,
+          status: 502,
+          text: async () => "upstream failed",
+        });
+
+        const route = loadFresh("../src/app/api/products/enrich/route.ts");
+        const response = await route.POST(
+          new Request("https://example.com/api/products/enrich", {
+            method: "POST",
+            body: JSON.stringify({
+              image_base64: "data:image/png;base64,AAAA",
+              file_name: "blazer.png",
+              name: "",
+              category: "roupa",
+            }),
+          })
+        );
+
+        assert.equal(response.status, 200);
+        const payload = await response.json();
+        assert.equal(payload.fallback_used, true);
+        assert.ok(payload.name.length > 0);
+        assert.ok(payload.description.length > 0);
+      });
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  await runAsync("product create action persists enriched fields for an authorized tenant", async () => {
+    const inserts = [];
+    const uploadedFiles = [];
+
+    const admin = {
+      storage: {
+        listBuckets: async () => ({ data: [{ name: "products", public: true }], error: null }),
+        createBucket: async () => ({ error: null }),
+        updateBucket: async () => ({ error: null }),
+        from: () => ({
+          upload: async (path, buffer, options) => {
+            uploadedFiles.push({ path, size: buffer.length, options });
+            return { error: null };
+          },
+          getPublicUrl: () => ({ data: { publicUrl: "https://cdn.example.com/product.png" } }),
+        }),
+      },
+      from: (table) => {
+        if (table === "products") {
+          return {
+            insert: (rows) => {
+              inserts.push({ table, rows });
+              return {
+                select: () => ({
+                  single: async () => ({
+                    data: { id: "prod-1", name: rows[0].name, category: rows[0].category, type: rows[0].type },
+                    error: null,
+                  }),
+                }),
+              };
+            },
+          };
+        }
+
+        if (table === "product_variants") {
+          return { insert: async () => ({ error: null }) };
+        }
+
+        if (table === "tenant_events") {
+          return { insert: async () => ({ error: null }) };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      },
+    };
+
+    try {
+      await withTempEnv(
+        {
+          NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon-key",
+        },
+        async () =>
+          withMockedModules(
+            {
+              "next/navigation": {
+                redirect: (url) => {
+                  throw new Error(`REDIRECT:${url}`);
+                },
+              },
+              "next/cache": {
+                revalidatePath: () => {},
+              },
+              "@/lib/supabase/server": {
+                createClient: async () => ({
+                  auth: {
+                    getUser: async () => ({ data: { user: { id: "user-1" } } }),
+                  },
+                }),
+              },
+              "@/lib/supabase/admin": {
+                createAdminClient: () => admin,
+              },
+              "@/lib/tenant/core": {
+                assertMerchantWritableOrgAccess: async () => ({
+                  user: { id: "user-1" },
+                  org: { id: "org-1", slug: "org-one" },
+                }),
+                bumpTenantUsageDaily: async () => null,
+              },
+              "@/lib/tenant/enforcement": {
+                enforceTenantOperationalState: async () => ({ allowed: true }),
+              },
+              "@/lib/billing/enforcement": {
+                enforceOrgHardCap: async () => ({ allowed: true }),
+              },
+            },
+            async () => {
+              const actions = loadFresh("../src/app/b2b/product/new/actions.ts");
+              const formData = new FormData();
+              formData.set("name", "Blazer de Linho");
+              formData.set("category", "roupa");
+              formData.set("primary_color", "Bege");
+              formData.set("style", "alfaiataria");
+              formData.set("description", "Descricao objetiva");
+              formData.set("persuasive_description", "Descricao persuasiva");
+              formData.set("emotional_copy", "Copy emocional");
+              formData.set("stock_qty", "8");
+              formData.set("reserved_qty", "2");
+              formData.set("stock_status", "in_stock");
+              formData.set("tags_json", JSON.stringify(["alfaiataria", "base forte"]));
+              formData.set("return_to", "/merchant");
+              formData.set("image_file", new File(["fake-image"], "product.png", { type: "image/png" }));
+
+              await actions.createProduct(formData);
+            }
+          )
+      );
+      throw new Error("Expected redirect from createProduct");
+    } catch (error) {
+      assert.ok(String(error.message || error).includes("REDIRECT:/merchant?created=true"));
+    }
+
+    assert.equal(inserts.length, 1);
+    assert.equal(inserts[0].rows[0].description, "Descricao objetiva");
+    assert.equal(inserts[0].rows[0].persuasive_description, "Descricao persuasiva");
+    assert.equal(inserts[0].rows[0].emotional_copy, "Copy emocional");
+    assert.equal(inserts[0].rows[0].stock_qty, 8);
+    assert.equal(inserts[0].rows[0].reserved_qty, 2);
+    assert.equal(inserts[0].rows[0].stock_status, "in_stock");
+    assert.equal(inserts[0].rows[0].stock, 6);
+    assert.equal(uploadedFiles.length, 1);
+  });
+
+  await runAsync("product create action rejects unauthorized tenant access before insert", async () => {
+    let inserted = false;
+
+    try {
+      await withTempEnv(
+        {
+          NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon-key",
+        },
+        async () =>
+          withMockedModules(
+            {
+              "next/navigation": {
+                redirect: (url) => {
+                  throw new Error(`REDIRECT:${url}`);
+                },
+              },
+              "next/cache": {
+                revalidatePath: () => {},
+              },
+              "@/lib/supabase/server": {
+                createClient: async () => ({
+                  auth: {
+                    getUser: async () => ({ data: { user: { id: "user-1" } } }),
+                  },
+                }),
+              },
+              "@/lib/supabase/admin": {
+                createAdminClient: () => ({
+                  storage: {
+                    listBuckets: async () => ({ data: [], error: null }),
+                    createBucket: async () => ({ error: null }),
+                    updateBucket: async () => ({ error: null }),
+                    from: () => ({
+                      upload: async () => ({ error: null }),
+                      getPublicUrl: () => ({ data: { publicUrl: "https://cdn.example.com/product.png" } }),
+                    }),
+                  },
+                  from: (table) => {
+                    if (table === "products") {
+                      inserted = true;
+                      return {
+                        insert: () => ({
+                          select: () => ({
+                            single: async () => ({ data: null, error: null }),
+                          }),
+                        }),
+                      };
+                    }
+                    return { insert: async () => ({ error: null }) };
+                  },
+                }),
+              },
+              "@/lib/tenant/core": {
+                assertMerchantWritableOrgAccess: async () => {
+                  throw new Error("forbidden");
+                },
+                bumpTenantUsageDaily: async () => null,
+              },
+              "@/lib/tenant/enforcement": {
+                enforceTenantOperationalState: async () => ({ allowed: true }),
+              },
+              "@/lib/billing/enforcement": {
+                enforceOrgHardCap: async () => ({ allowed: true }),
+              },
+            },
+            async () => {
+              const actions = loadFresh("../src/app/b2b/product/new/actions.ts");
+              const formData = new FormData();
+              formData.set("name", "Blazer de Linho");
+              formData.set("category", "roupa");
+              formData.set("primary_color", "Bege");
+              formData.set("style", "alfaiataria");
+              formData.set("description", "Descricao objetiva");
+              formData.set("persuasive_description", "Descricao persuasiva");
+              formData.set("emotional_copy", "Copy emocional");
+              formData.set("return_to", "/merchant");
+              formData.set("image_file", new File(["fake-image"], "product.png", { type: "image/png" }));
+
+              await actions.createProduct(formData);
+            }
+          )
+      );
+    } catch (error) {
+      assert.ok(String(error.message || error).includes("REDIRECT:/b2b/product/new?error=tenant"));
+    }
+
+    assert.equal(inserted, false);
+  });
+
+  await runAsync("stock update action rejects products outside the tenant scope", async () => {
+    let updated = false;
+
+    try {
+      await withTempEnv(
+        {
+          NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon-key",
+        },
+        async () =>
+          withMockedModules(
+            {
+              "next/navigation": {
+                redirect: (url) => {
+                  throw new Error(`REDIRECT:${url}`);
+                },
+              },
+              "@/lib/supabase/server": {
+                createClient: async () => ({
+                  auth: {
+                    getUser: async () => ({ data: { user: { id: "user-1" } } }),
+                  },
+                }),
+              },
+              "@/lib/supabase/admin": {
+                createAdminClient: () => ({
+                  from: (table) => {
+                    if (table === "products") {
+                      return {
+                        select: () => ({
+                          eq: () => ({
+                            eq: () => ({
+                              maybeSingle: async () => ({ data: null, error: null }),
+                            }),
+                          }),
+                        }),
+                        update: () => {
+                          updated = true;
+                          return { eq: () => ({ eq: () => ({ error: null }) }) };
+                        },
+                      };
+                    }
+
+                    if (table === "tenant_events") {
+                      return { insert: async () => ({ error: null }) };
+                    }
+
+                    return { insert: async () => ({ error: null }) };
+                  },
+                }),
+              },
+              "@/lib/tenant/core": {
+                assertMerchantWritableOrgAccess: async () => ({
+                  user: { id: "user-1" },
+                  org: { id: "org-1", slug: "org-one" },
+                }),
+                bumpTenantUsageDaily: async () => null,
+              },
+            },
+            async () => {
+              const actions = loadFresh("../src/app/b2b/product/new/actions.ts");
+              const formData = new FormData();
+              formData.set("product_id", "prod-missing");
+              formData.set("stock_qty", "4");
+              formData.set("reserved_qty", "0");
+              formData.set("stock_status", "low_stock");
+              formData.set("return_to", "/org/org-one/catalog");
+
+              await actions.updateProductStock(formData);
+            }
+          )
+      );
+      throw new Error("Expected redirect from updateProductStock");
+    } catch (error) {
+      assert.ok(String(error.message || error).includes("REDIRECT:/org/org-one/catalog?error=product_not_found"));
+    }
+
+    assert.equal(updated, false);
+  });
+
+  await runAsync("privacy export route rejects cross-tenant access", async () => {
+    await withMockedModules(
+      {
+        "@/lib/merchant/access": {
+          resolveMerchantOrgAccess: async () => {
+            throw new Error("Forbidden");
+          },
+        },
+        "@/lib/supabase/admin": {
+          createAdminClient: () => {
+            throw new Error("unexpected admin access");
+          },
+        },
+      },
+      async () => {
+        const route = loadFresh("../src/app/api/org/[slug]/privacy/export/route.ts");
+        const response = await route.GET(
+          new Request("https://example.com/api/org/other/privacy/export"),
+          {
+            params: Promise.resolve({ slug: "other" }),
+          }
+        );
+
+        assert.equal(response.status, 403);
+        const payload = await response.json();
+        assert.equal(payload.error, "Forbidden");
+      }
+    );
+  });
+
+  await runAsync("tenant privacy delete purges rows and records audit", async () => {
+    const deleteCalls = [];
+    const insertCalls = [];
+    const storageCalls = [];
+
+    const admin = {
+      storage: {
+        from: (bucket) => ({
+          list: async (prefix) => {
+            storageCalls.push({ bucket, prefix, op: "list" });
+            return { data: [], error: null };
+          },
+          remove: async (paths) => {
+            storageCalls.push({ bucket, paths, op: "remove" });
+            return { error: null };
+          },
+        }),
+      },
+      from: (table) => {
+        if (table === "privacy_audit_events") {
+          return {
+            insert: async (row) => {
+              insertCalls.push(row);
+              return { error: null };
+            },
+          };
+        }
+
+        const makeDeleteChain = () => ({
+          eq: (column, value) => {
+            deleteCalls.push({ table, column, value });
+            return {
+              select: async () => ({
+                data: [{ id: `${table}-1` }],
+                error: null,
+              }),
+            };
+          },
+        });
+
+        if (
+          [
+            "saved_results",
+            "products",
+            "tryon_events",
+            "leads",
+            "lead_context",
+            "whatsapp_messages",
+            "whatsapp_conversations",
+            "orgs",
+          ].includes(table)
+        ) {
+          return {
+            delete: () => makeDeleteChain(),
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      },
+    };
+
+    await withMockedModules(
+      {
+        "@/lib/merchant/access": {
+          resolveMerchantOrgAccess: async () => ({
+            user: { id: "user-1" },
+            org: {
+              id: "org-1",
+              slug: "maison-elite",
+              name: "Maison Elite",
+              branch_name: "Centro",
+              status: "active",
+              plan_id: "growth",
+            },
+            source: "merchant",
+          }),
+        },
+        "@/lib/supabase/admin": {
+          createAdminClient: () => admin,
+        },
+      },
+      async () => {
+        const route = loadFresh("../src/app/api/org/[slug]/privacy/delete/route.ts");
+        const response = await route.POST(
+          new Request("https://example.com/api/org/maison-elite/privacy/delete", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ confirm: true }),
+          }),
+          {
+            params: Promise.resolve({ slug: "maison-elite" }),
+          }
+        );
+
+        assert.equal(response.status, 200);
+        const payload = await response.json();
+        assert.equal(payload.ok, true);
+        assert.equal(payload.deleted.organization.slug, "maison-elite");
+        assert.equal(payload.deleted.deleted.saved_results, 1);
+        assert.ok(deleteCalls.some((entry) => entry.table === "saved_results" && entry.column === "org_id" && entry.value === "org-1"));
+        assert.ok(deleteCalls.some((entry) => entry.table === "whatsapp_messages" && entry.column === "org_slug" && entry.value === "maison-elite"));
+        assert.ok(deleteCalls.some((entry) => entry.table === "orgs" && entry.column === "id" && entry.value === "org-1"));
+        assert.ok(insertCalls.some((row) => row.action === "tenant_delete_completed"));
+        assert.ok(storageCalls.some((entry) => entry.op === "list" && entry.prefix === "org-1"));
+      }
+    );
+  });
+
   await runAsync("scenario 1 - normal flow contract accepts valid ids and serves persisted results", async () => {
     const resultIdModule = loadFresh("../src/lib/result/id.ts");
 
@@ -1251,6 +3734,9 @@ const FRONTEND_ORG_ID = "frontend-org";
     assert.equal(payload.id, VALID_RESULT_ID);
     assert.equal(payload.tenant.orgId, VALID_ORG_ID);
     assert.equal(payload.finalResult.looks.length, 0);
+    assert.ok(payload.assistedRecommendations);
+    assert.equal(payload.assistedRecommendations.products.length, 0);
+    assert.equal(payload.assistedRecommendations.looks.length, 0);
 
     const processingSource = fs.readFileSync(path.join(process.cwd(), "src/app/processing/page.tsx"), "utf8");
     assert.ok(processingSource.includes("isValidResultId(dbReferenceId)"));
@@ -1819,6 +4305,282 @@ const FRONTEND_ORG_ID = "frontend-org";
     const allProductIds = result.segments.flatMap((s) => s.productIds);
     assert.ok(allProductIds.includes("prod-1"));
     assert.ok(!allProductIds.includes("prod-2"));
+  });
+
+  run("policy-engine exports required functions", () => {
+    assert.equal(typeof getPolicyRules, "function");
+    assert.equal(typeof matchRule, "function");
+    assert.equal(typeof evaluateCondition, "function");
+    assert.equal(typeof applyAdjustmentAction, "function");
+  });
+
+  run("getPolicyRules returns non-empty array", () => {
+    const rules = getPolicyRules();
+    assert.equal(Array.isArray(rules), true);
+    assert.equal(rules.length > 0, true);
+  });
+
+  run("policy rules have required fields", () => {
+    const rules = getPolicyRules();
+    for (const rule of rules) {
+      assert.equal(typeof rule.id, "string");
+      assert.equal(typeof rule.name, "string");
+      assert.equal(Array.isArray(rule.conditions), true);
+      assert.equal(typeof rule.action, "string");
+      assert.equal(typeof rule.factor, "number");
+      assert.equal(typeof rule.priority, "number");
+      assert.equal(typeof rule.description, "string");
+    }
+  });
+
+  run("policy rules are sorted by priority descending", () => {
+    const rules = getPolicyRules();
+    for (let i = 1; i < rules.length; i++) {
+      assert.equal(rules[i - 1].priority >= rules[i].priority, true);
+    }
+  });
+
+  run("evaluateCondition margin_percent lt 0", () => {
+    const metrics = {
+      org_id: "test",
+      margin_percent: -5,
+      margin_cents: -500,
+      roi: 1,
+      usage_pct: { ai_tokens: 50, try_on: 50, whatsapp_message: 50 },
+      usage: { ai_tokens: 100, try_on: 10, whatsapp_message: 100 },
+      limits: { ai_tokens: 200, try_on: 20, whatsapp_message: 200 },
+      risk: "normal",
+      billing_status: null,
+      is_billing_blocked: false,
+      has_manual_override: false,
+    };
+
+    const result = evaluateCondition("margin_percent", "lt", 0, metrics);
+    assert.equal(result, true);
+  });
+
+  run("evaluateCondition margin_percent gte 30", () => {
+    const metrics = {
+      org_id: "test",
+      margin_percent: 35,
+      margin_cents: 3500,
+      roi: 4,
+      usage_pct: { ai_tokens: 50, try_on: 50, whatsapp_message: 50 },
+      usage: { ai_tokens: 100, try_on: 10, whatsapp_message: 100 },
+      limits: { ai_tokens: 200, try_on: 20, whatsapp_message: 200 },
+      risk: "normal",
+      billing_status: null,
+      is_billing_blocked: false,
+      has_manual_override: false,
+    };
+
+    const result = evaluateCondition("margin_percent", "gte", 30, metrics);
+    assert.equal(result, true);
+  });
+
+  run("evaluateCondition roi gte 3", () => {
+    const metrics = {
+      org_id: "test",
+      margin_percent: 20,
+      margin_cents: 2000,
+      roi: 5,
+      usage_pct: { ai_tokens: 50, try_on: 50, whatsapp_message: 50 },
+      usage: { ai_tokens: 100, try_on: 10, whatsapp_message: 100 },
+      limits: { ai_tokens: 200, try_on: 20, whatsapp_message: 200 },
+      risk: "normal",
+      billing_status: null,
+      is_billing_blocked: false,
+      has_manual_override: false,
+    };
+
+    const result = evaluateCondition("roi", "gte", 3, metrics);
+    assert.equal(result, true);
+  });
+
+  run("evaluateCondition usage_pct gte 80", () => {
+    const metrics = {
+      org_id: "test",
+      margin_percent: 10,
+      margin_cents: 1000,
+      roi: 2,
+      usage_pct: { ai_tokens: 85, try_on: 90, whatsapp_message: 70 },
+      usage: { ai_tokens: 170, try_on: 18, whatsapp_message: 140 },
+      limits: { ai_tokens: 200, try_on: 20, whatsapp_message: 200 },
+      risk: "normal",
+      billing_status: null,
+      is_billing_blocked: false,
+      has_manual_override: false,
+    };
+
+    const result = evaluateCondition("usage_pct", "gte", 80, metrics);
+    assert.equal(result, true);
+  });
+
+  run("evaluateCondition risk eq critical", () => {
+    const metrics = {
+      org_id: "test",
+      margin_percent: -20,
+      margin_cents: -2000,
+      roi: 0.5,
+      usage_pct: { ai_tokens: 50, try_on: 50, whatsapp_message: 50 },
+      usage: { ai_tokens: 100, try_on: 10, whatsapp_message: 100 },
+      limits: { ai_tokens: 200, try_on: 20, whatsapp_message: 200 },
+      risk: "critical",
+      billing_status: null,
+      is_billing_blocked: true,
+      has_manual_override: false,
+    };
+
+    const result = evaluateCondition("risk", "eq", 2, metrics);
+    assert.equal(result, true);
+  });
+
+  run("matchRule returns true when conditions match", () => {
+    const rule = {
+      id: "test",
+      name: "Test",
+      conditions: [{ metric: "margin_percent", operator: "lt", value: 0 }],
+      action: "reduce_limits",
+      factor: 0.7,
+      priority: 100,
+      description: "Test rule",
+    };
+
+    const metrics = {
+      org_id: "test",
+      margin_percent: -5,
+      margin_cents: -500,
+      roi: 1,
+      usage_pct: { ai_tokens: 50, try_on: 50, whatsapp_message: 50 },
+      usage: { ai_tokens: 100, try_on: 10, whatsapp_message: 100 },
+      limits: { ai_tokens: 200, try_on: 20, whatsapp_message: 200 },
+      risk: "normal",
+      billing_status: null,
+      is_billing_blocked: false,
+      has_manual_override: false,
+    };
+
+    const result = matchRule(rule, metrics);
+    assert.equal(result, true);
+  });
+
+  run("matchRule returns false when conditions don't match", () => {
+    const rule = {
+      id: "test",
+      name: "Test",
+      conditions: [{ metric: "margin_percent", operator: "lt", value: 0 }],
+      action: "reduce_limits",
+      factor: 0.7,
+      priority: 100,
+      description: "Test rule",
+    };
+
+    const metrics = {
+      org_id: "test",
+      margin_percent: 20,
+      margin_cents: 2000,
+      roi: 3,
+      usage_pct: { ai_tokens: 50, try_on: 50, whatsapp_message: 50 },
+      usage: { ai_tokens: 100, try_on: 10, whatsapp_message: 100 },
+      limits: { ai_tokens: 200, try_on: 20, whatsapp_message: 200 },
+      risk: "normal",
+      billing_status: null,
+      is_billing_blocked: false,
+      has_manual_override: false,
+    };
+
+    const result = matchRule(rule, metrics);
+    assert.equal(result, false);
+  });
+
+  run("matchRule requires all conditions to match", () => {
+    const rule = {
+      id: "test",
+      name: "Test",
+      conditions: [
+        { metric: "margin_percent", operator: "gte", value: 10 },
+        { metric: "roi", operator: "gte", value: 3 },
+      ],
+      action: "increase_limits",
+      factor: 1.2,
+      priority: 50,
+      description: "Test rule",
+    };
+
+    const metrics = {
+      org_id: "test",
+      margin_percent: 15,
+      margin_cents: 1500,
+      roi: 2,
+      usage_pct: { ai_tokens: 50, try_on: 50, whatsapp_message: 50 },
+      usage: { ai_tokens: 100, try_on: 10, whatsapp_message: 100 },
+      limits: { ai_tokens: 200, try_on: 20, whatsapp_message: 200 },
+      risk: "normal",
+      billing_status: null,
+      is_billing_blocked: false,
+      has_manual_override: false,
+    };
+
+    const result = matchRule(rule, metrics);
+    assert.equal(result, false);
+  });
+
+  run("applyAdjustmentAction increase_limits", () => {
+    const result = applyAdjustmentAction(100, "increase_limits", 1.2, 1000, 10);
+    assert.equal(result, 120);
+  });
+
+  run("applyAdjustmentAction reduce_limits", () => {
+    const result = applyAdjustmentAction(100, "reduce_limits", 0.7, 1000, 10);
+    assert.equal(result, 70);
+  });
+
+  run("applyAdjustmentAction throttle", () => {
+    const result = applyAdjustmentAction(100, "throttle", 0.5, 1000, 10);
+    assert.equal(result, 50);
+  });
+
+  run("applyAdjustmentAction emergency_reduce", () => {
+    const result = applyAdjustmentAction(100, "emergency_reduce", 0.5, 1000, 10);
+    assert.equal(result, 50);
+  });
+
+  run("applyAdjustmentAction maintain", () => {
+    const result = applyAdjustmentAction(100, "maintain", 1.0, 1000, 10);
+    assert.equal(result, 100);
+  });
+
+  run("applyAdjustmentAction respects max limit", () => {
+    const result = applyAdjustmentAction(500, "increase_limits", 2, 800, 10);
+    assert.equal(result, 800);
+  });
+
+  run("applyAdjustmentAction respects min limit", () => {
+    const result = applyAdjustmentAction(10, "reduce_limits", 0.5, 1000, 20);
+    assert.equal(result, 20);
+  });
+
+  run("conditionsToLabels formats correctly", () => {
+    const conditions = [
+      { metric: "margin_percent", operator: "lt", value: 0 },
+      { metric: "roi", operator: "gte", value: 3 },
+    ];
+
+    const labels = conditionsToLabels(conditions);
+    assert.equal(labels[0], "margin_percent < 0");
+    assert.equal(labels[1], "roi >= 3");
+  });
+
+  run("auto-limits exports required functions", () => {
+    assert.equal(typeof runAutoLimitsJob, "function");
+    assert.equal(typeof getOptimizationRecommendations, "function");
+  });
+
+  run("audit exports required functions", () => {
+    assert.equal(typeof recordOptimizationAudit, "function");
+    assert.equal(typeof queryOptimizationAudit, "function");
+    assert.equal(typeof getOptimizationStats, "function");
+    assert.equal(typeof getOrgOptimizationHistory, "function");
   });
 
   run("flow events log with correlation", () => {

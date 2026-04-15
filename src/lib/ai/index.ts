@@ -7,12 +7,38 @@ import { ResultPayload } from "@/types/result";
 import type { VisualAnalysisPayload } from "@/types/visual-analysis";
 import { enforceOrgHardCap } from "@/lib/billing/enforcement";
 import { enforceTenantOperationalState, type TenantOperationalOrgSnapshot } from "@/lib/tenant/enforcement";
+import { getTenantConfig } from "@/lib/tenant-config";
+import { buildTenantBehaviorPrompt } from "@/lib/tenant-config/prompt";
 import {
   buildCatalogPromptSections,
   filterCatalogForRecommendation,
   normalizeOpenAIRecommendationPayload,
   summarizeOnboardingProfile,
 } from "./result-normalizer";
+
+export * from "./conversation-engine-types";
+export * from "./state-machine";
+export * from "./conversation-state-detector";
+export * from "./response-strategy";
+export * from "./memory-integration";
+export * from "./anti-exploration";
+export { processConversation } from "./conversation-engine";
+export type { ConversationEngineInput, ConversationEngineOutput } from "./conversation-engine";
+export { buildSalesCopilotPlan } from "../whatsapp/sales-copilot";
+export {
+  buildFashionConsultationSnapshot,
+  buildFashionConsultativeReply,
+  buildFashionSummaryLine,
+} from "../whatsapp/fashion-consultant";
+export { buildWhatsAppStylistCommercePlan } from "../whatsapp/stylist-engine";
+export type {
+  WhatsAppStylistCommercePlan,
+} from "../whatsapp/stylist-engine";
+export type {
+  FashionConsultationSnapshot,
+  FashionReplyTone,
+  FashionReplyAngle,
+} from "../whatsapp/fashion-consultant";
 
 export interface OpenAIRecommendationHardCapContext {
   orgId?: string | null;
@@ -68,6 +94,8 @@ export async function generateOpenAIRecommendation(
   const profileSummary = summarizeOnboardingProfile(userData);
   const filteredCatalog = filterCatalogForRecommendation(catalog, userData);
   const catalogSummary = buildCatalogPromptSections(filteredCatalog, userData);
+  const tenantConfig = hardCapContext?.orgId ? await getTenantConfig(hardCapContext.orgId).catch(() => null) : null;
+  const tenantBehaviorPrompt = buildTenantBehaviorPrompt(tenantConfig);
 
   const systemPrompt = `
 Você é a Venus Engine. Sua função é gerar uma leitura pessoal, precisa e comercialmente útil.
@@ -83,6 +111,8 @@ Regras:
 - Se a confiança for baixa, seja conservador e mantenha a coerência.
 - Retorne apenas JSON válido, exatamente no schema solicitado.
 - Monte 3 looks.
+
+${tenantBehaviorPrompt}
 `;
 
   const userPrompt = `

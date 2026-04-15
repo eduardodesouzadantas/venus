@@ -218,14 +218,8 @@ function ChatContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const orgSlug = searchParams.get("org") || "";
-  const { data, updateData, updateConversation } = useOnboarding();
+  const { data, updateData, updateConversation, journey, isJourneyLoaded } = useOnboarding();
   const result = data ?? defaultOnboardingData;
-
-  console.log("[CHAT_RENDER]", { result });
-
-  if (!result) {
-    return <div className="min-h-screen bg-[#0a0a0a] text-white">Carregando...</div>;
-  }
 
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -256,6 +250,23 @@ function ChatContent() {
   const nextHref = useMemo(() => {
     return orgSlug ? `/scanner/opt-in?org=${encodeURIComponent(orgSlug)}` : "/scanner/opt-in";
   }, [orgSlug]);
+
+  useEffect(() => {
+    if (!isJourneyLoaded || !journey) {
+      return;
+    }
+
+    if (!journey.skipOnboarding) {
+      return;
+    }
+
+    const target = journey.mode === "continue" ? journey.resumeRoute || journey.entryRoute : journey.entryRoute;
+    if (!target || target === "/onboarding/chat" || target.startsWith("/onboarding/chat?")) {
+      return;
+    }
+
+    router.replace(target);
+  }, [isJourneyLoaded, journey, router]);
 
   useEffect(() => {
     introTimerRef.current = setTimeout(() => {

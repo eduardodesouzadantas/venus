@@ -68,10 +68,32 @@ export interface LeadRecord {
   intent_score: number | null;
   whatsapp_key: string | null;
   next_follow_up_at: string | null;
+  notes: string | null;
+  owner_user_id: string | null;
+  conversation_id: string | null;
   created_at?: string | null;
   updated_at?: string | null;
   last_interaction_at?: string | null;
 }
+
+export interface LeadTimelineEvent {
+  id: string;
+  lead_id: string;
+  org_id: string;
+  actor_user_id: string | null;
+  event_type: string;
+  event_data: Record<string, unknown>;
+  created_at: string;
+}
+
+export type LeadTimelineEventType =
+  | "created"
+  | "status_changed"
+  | "note_added"
+  | "assigned"
+  | "conversation_linked"
+  | "follow_up_scheduled"
+  | "whatsapp_message";
 
 export interface LeadUpsertInput {
   orgId: string;
@@ -85,6 +107,9 @@ export interface LeadUpsertInput {
   whatsappKey?: string | null;
   lastInteractionAt?: string | null;
   nextFollowUpAt?: string | null;
+  notes?: string | null;
+  ownerUserId?: string | null;
+  conversationId?: string | null;
 }
 
 export interface LeadSignals {

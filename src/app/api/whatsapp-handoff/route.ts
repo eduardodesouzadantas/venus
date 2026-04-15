@@ -7,6 +7,8 @@ import { recordDecisionOutcome } from "@/lib/decision-engine/learning";
 import { bumpTenantUsageDaily, resolveAppTenantOrg } from "@/lib/tenant/core";
 import { enforceTenantOperationalState } from "@/lib/tenant/enforcement";
 import { buildWhatsAppHandoffMessage } from "@/lib/whatsapp/handoff";
+import type { VenusStylistAudit } from "@/lib/venus/audit/engine";
+import { buildWhatsAppStylistCommercePlan } from "@/lib/whatsapp/stylist-engine";
 
 type WhatsAppHandoffBody = {
   resultId?: string;
@@ -102,6 +104,20 @@ export async function POST(request: Request) {
     whatsappHandoff: body.payload,
   });
 
+  const commercePlan = await buildWhatsAppStylistCommercePlan({
+    orgId: org.id,
+    audit: (body.payload as Record<string, unknown> | null)?.audit as VenusStylistAudit | undefined,
+    contactName: (body.payload.contactName as string | undefined) || leadSignals.name || null,
+    styleIdentity: (body.payload.styleIdentity as string | undefined) || (body.payload.dominantStyle as string | undefined) || null,
+    imageGoal: body.payload.imageGoal as string | undefined,
+    paletteFamily: body.payload.paletteFamily as string | undefined,
+    fit: body.payload.fit as string | undefined,
+    metal: body.payload.metal as string | undefined,
+    intentScore: leadSignals.intentScore ?? null,
+    resultState: (body.payload.resultState as "hero" | "preview" | "retry_required" | undefined) || undefined,
+    lookSummary: Array.isArray(body.payload.lookSummary) ? (body.payload.lookSummary as any) : null,
+  });
+
   const { error: updateError } = await supabase
     .from("saved_results")
     .update({
@@ -114,7 +130,10 @@ export async function POST(request: Request) {
           orgSlug: org.slug,
           source: data.org_id ? "existing_org_id" : resolvedTenant?.source || "single_active_org",
         },
-        whatsappHandoff: body.payload,
+        whatsappHandoff: {
+          ...body.payload,
+          commerce: commercePlan,
+        },
       },
     })
     .eq("id", body.resultId);
@@ -204,15 +223,17 @@ export async function POST(request: Request) {
     });
 
     contextForMessage = updatedContext;
-    decision = decideNextAction(updatedContext);
+    if (updatedContext) {
+      decision = decideNextAction(updatedContext);
+    }
 
     await upsertLeadContextByLeadId(supabase, {
       orgId: org.id,
       leadId: lead.id,
       whatsappContext: {
-        nextAction: decision.chosenAction,
-        nextActionReason: decision.reason,
-        nextActionConfidence: decision.adaptiveConfidence,
+        nextAction: decision?.chosenAction || "SEND_WHATSAPP_MESSAGE",
+        nextActionReason: decision?.reason || "Handoff consultivo para WhatsApp",
+        nextActionConfidence: decision?.adaptiveConfidence ?? 0.5,
       },
     });
 
@@ -249,6 +270,8 @@ export async function POST(request: Request) {
     resultState: contextForMessage?.last_tryon?.status === "completed" ? "hero" : undefined,
     decision: decision ? { action: decision.chosenAction, reason: decision.reason } : undefined,
     lastTryOn: contextForMessage?.last_tryon,
+    audit: (body.payload as Record<string, unknown> | null)?.audit as VenusStylistAudit | undefined,
+    commerce: commercePlan,
   });
 
   return Response.json({ ok: true, decision, message });

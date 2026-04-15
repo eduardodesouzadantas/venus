@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { Text } from "@/components/ui/Text";
 import { useWhatsApp } from "@/lib/whatsapp/WhatsAppContext";
 import { generateSmartReplies } from "@/lib/whatsapp/smart-replies";
@@ -12,14 +12,17 @@ import {
   type SmartReplyOrgRanking,
 } from "@/lib/whatsapp/smart-reply-ranking";
 import { buildSalesCopilotPlan } from "@/lib/whatsapp/sales-copilot";
-import type { SmartReplySuggestion } from "@/types/whatsapp";
+import type { SmartReplySuggestion, WhatsAppConversation } from "@/types/whatsapp";
 import { InboxConversationList } from "@/components/whatsapp/inbox/InboxConversationList";
 import { InboxChatPanel } from "@/components/whatsapp/inbox/InboxChatPanel";
 import { InboxIntelPanel } from "@/components/whatsapp/inbox/InboxIntelPanel";
 import { toTitleCase } from "@/components/whatsapp/inbox/inbox-utils";
 
+const normalizePhone = (value?: string | null) => (value || "").replace(/\D/g, "");
+
 function WhatsAppInboxPageShell() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const slug = params?.slug as string;
   const storeName = slug ? toTitleCase(slug) : "VENUS";
 
@@ -82,6 +85,31 @@ function WhatsAppInboxPageShell() {
   );
 
   const topReply = rankedSmartReplies[0] ?? smartReplies[0] ?? null;
+
+  useEffect(() => {
+    if (activeConversation) {
+      return;
+    }
+
+    const targetConversationId = searchParams.get("conversationId")?.trim() || "";
+    const targetPhone = normalizePhone(searchParams.get("phone"));
+
+    if (!targetConversationId && !targetPhone) {
+      return;
+    }
+
+    const match: WhatsAppConversation | null =
+      (targetConversationId ? conversations.find((conversation) => conversation.id === targetConversationId) : null) ||
+      (targetPhone ? conversations.find((conversation) => normalizePhone(conversation.user.phone) === targetPhone) : null) ||
+      null;
+
+    const matchConversation = match as WhatsAppConversation | null;
+    if (!matchConversation) {
+      return;
+    }
+
+    setActiveConversation(matchConversation.id);
+  }, [activeConversation, conversations, searchParams, setActiveConversation]);
 
   const salesCopilotPlan = useMemo(() => {
     if (!activeConversation) return null;

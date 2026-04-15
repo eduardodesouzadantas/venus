@@ -3,12 +3,13 @@
 import { use, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { ArrowLeft, Globe, Image as ImageIcon, Lock, LogOut, Settings, Share2 } from "lucide-react";
+import { ArrowLeft, Globe, Image as ImageIcon, Lock, LogOut, Settings, Share2, Sparkles } from "lucide-react";
 
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { VenusButton } from "@/components/ui/VenusButton";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { StoreExperienceSettings } from "@/components/org/StoreExperienceSettings";
 
 type MerchantOrgSettings = {
   id: string;
@@ -176,6 +177,7 @@ export default function MerchantSettings({ params }: { params: Promise<{ slug: s
     { href: `${orgBase}/dashboard`, icon: <ArrowLeft size={16} />, label: "Dashboard" },
     { href: `${orgBase}/settings`, icon: <Globe size={16} />, label: "Identidade", active: true },
     { href: `${orgBase}/rewards`, icon: <Share2 size={16} />, label: "Recompensas" },
+    { href: `${orgBase}/gamification`, icon: <Sparkles size={16} />, label: "Gamificação" },
     { href: `${orgBase}/settings#whatsapp`, icon: <Lock size={16} />, label: "WhatsApp" },
     { href: `${orgBase}/settings#plan`, icon: <Settings size={16} />, label: "Plano" },
   ];
@@ -226,6 +228,11 @@ export default function MerchantSettings({ params }: { params: Promise<{ slug: s
             <Link href={`${orgBase}/rewards`}>
               <VenusButton variant="outline" className="h-12 px-5 rounded-full text-[10px] uppercase tracking-[0.08em] font-medium border-white/10">
                 Abrir recompensas
+              </VenusButton>
+            </Link>
+            <Link href={`${orgBase}/gamification`}>
+              <VenusButton variant="outline" className="h-12 px-5 rounded-full text-[10px] uppercase tracking-[0.08em] font-medium border-white/10">
+                Abrir gamificação
               </VenusButton>
             </Link>
             <VenusButton
@@ -349,6 +356,7 @@ export default function MerchantSettings({ params }: { params: Promise<{ slug: s
             <Panel title="Acesso rapido" description="Pontos que o lojista costuma usar depois do setup inicial.">
               <div className="space-y-3">
                 <QuickLink href={`${orgBase}/rewards`} label="Recompensas do loop viral" description="Criar e ativar share_rewards." />
+                <QuickLink href={`${orgBase}/gamification`} label="Gamificação budget-aware" description="Criar regras e distribuir benefícios com budget controlado." />
                 <QuickLink href={`${orgBase}/catalog`} label="Produtos" description="Cadastrar e revisar o catalogo da loja." />
                 <QuickLink href={`${orgBase}/whatsapp/inbox`} label="WhatsApp" description="Validar integracao e conversa de vendas." />
               </div>
@@ -371,6 +379,10 @@ export default function MerchantSettings({ params }: { params: Promise<{ slug: s
               </div>
             </Panel>
           </aside>
+        </div>
+
+        <div className="mt-6">
+          <StoreExperienceSettings slug={slug} />
         </div>
       </main>
     </div>

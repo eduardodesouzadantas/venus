@@ -4,6 +4,7 @@
  */
 
 import { AuditLogEntry, ActionType, ResourceType, Role } from "@/types/hardened";
+import { sanitizePrivacyLogEntry } from "@/lib/privacy/logging";
 
 export const logAudit = async (
   userId: string,
@@ -13,7 +14,7 @@ export const logAudit = async (
   action: ActionType,
   success: boolean,
   payloadSummary: string,
-  metadata?: any
+  metadata?: Record<string, unknown> | null
 ) => {
   const entry: AuditLogEntry = {
     id: `audit_${Date.now()}_${Math.random().toString(36).substring(7)}`,
@@ -26,8 +27,8 @@ export const logAudit = async (
     success,
     payload: { summary: payloadSummary },
     metadata: {
-      ip: metadata?.ip || "SYSTEM",
-      userAgent: metadata?.userAgent || "VENUS_INTERNAL"
+      ip: typeof metadata?.ip === "string" && metadata.ip ? metadata.ip : "SYSTEM",
+      userAgent: typeof metadata?.userAgent === "string" && metadata.userAgent ? metadata.userAgent : "VENUS_INTERNAL"
     }
   };
 
@@ -36,8 +37,8 @@ export const logAudit = async (
   try {
     const existingLogs = JSON.parse(localStorage.getItem('venus_audit_logs') || '[]');
     localStorage.setItem('venus_audit_logs', JSON.stringify([entry, ...existingLogs.slice(0, 499)]));
-  } catch (error) {
-    console.error(`[AUDIT_FAIL] Could not log action: ${action} on ${resource}`, entry);
+  } catch {
+    console.error(`[AUDIT_FAIL] Could not log action: ${action} on ${resource}`, sanitizePrivacyLogEntry(entry as unknown as Record<string, unknown>));
   }
 
   // 2. Alert for critical failures

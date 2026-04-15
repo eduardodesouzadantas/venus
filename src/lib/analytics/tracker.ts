@@ -30,6 +30,7 @@ export const trackBehavior = (id: string, type: TrackEvent['type'], category: Tr
   const countKey = `${category}_${id}_${type}`;
   stored[countKey] = (stored[countKey] || 0) + 1;
   localStorage.setItem('venus_stats', JSON.stringify(stored));
+  window.dispatchEvent(new Event("venus-stats-updated"));
 };
 
 export const getEngagedIds = (category: TrackEvent['category']): string[] => {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { processGamificationTriggerEvent } from "@/lib/gamification/events";
 import {
   loadLeadContextByIdentity,
   updateLeadContextIntent,
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest) {
       normalizeText(leadSnapshot.lead?.last_interaction_at) ||
       null;
 
-    const resolvedIntentScore = eventType
+  const resolvedIntentScore = eventType
       ? updateIntentScore(eventType, currentIntentScore, {
           now: new Date().toISOString(),
           lastActivityAt,
@@ -73,6 +74,44 @@ export async function POST(request: NextRequest) {
       : typeof body.intentScore === "number"
         ? body.intentScore
         : null;
+
+    const shouldTriggerGamification = eventType === "whatsapp_clicked" || eventType === "product_revisited";
+    const gamificationCustomerKey = leadId || savedResultId || phone || email || null;
+    const gamificationEventKey = shouldTriggerGamification && gamificationCustomerKey
+      ? [
+          "lead_reengaged",
+          orgId,
+          gamificationCustomerKey,
+          normalizeText(body.timestamp ?? body.eventTimestamp ?? body.event_timestamp) || lastActivityAt || eventType,
+        ]
+          .filter(Boolean)
+          .join(":")
+      : null;
+    const gamificationEventPromise =
+      shouldTriggerGamification && gamificationCustomerKey && gamificationEventKey
+        ? processGamificationTriggerEvent(
+            {
+              orgId,
+              eventType: "lead_reengaged",
+              customerKey: gamificationCustomerKey,
+              customerLabel: normalizeText(body.customerLabel ?? body.customer_label) || gamificationCustomerKey,
+              eventKey: gamificationEventKey,
+              actorUserId: null,
+              reason: "Lead reengajado",
+              payload: {
+                event_type: eventType,
+                lead_id: leadId || null,
+                saved_result_id: savedResultId || null,
+                phone: phone || null,
+                email: email || null,
+                last_activity_at: lastActivityAt,
+              },
+            },
+            { now: new Date() }
+          ).catch((error) => {
+            console.warn("[GAMIFICATION] failed to process lead_reengaged", error);
+          })
+        : Promise.resolve(null);
 
     const lastTryon = asRecord(body.lastTryon);
 
@@ -120,6 +159,8 @@ export async function POST(request: NextRequest) {
         actionHistory: (body.actionHistory as unknown[] | undefined) || null,
       });
 
+      await gamificationEventPromise;
+
       return NextResponse.json({ ok: true, context });
     }
 
@@ -138,6 +179,8 @@ export async function POST(request: NextRequest) {
         actionHistory: (body.actionHistory as unknown[] | undefined) || null,
       });
 
+      await gamificationEventPromise;
+
       return NextResponse.json({ ok: true, context });
     }
 
@@ -153,6 +196,8 @@ export async function POST(request: NextRequest) {
         lastAction: mappedAction || null,
         lastActionOutcome: mappedOutcome || null,
       });
+
+      await gamificationEventPromise;
 
       return NextResponse.json({ ok: true, context });
     }
@@ -177,6 +222,8 @@ export async function POST(request: NextRequest) {
       lastActionOutcome: mappedOutcome || null,
       intentScore: resolvedIntentScore,
     });
+
+    await gamificationEventPromise;
 
     return NextResponse.json({ ok: true, context });
   } catch (error) {

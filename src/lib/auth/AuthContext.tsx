@@ -4,6 +4,8 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Role } from "@/types/hardened";
+import type { UserJourneyState } from "@/lib/user/journey";
+import { fetchUserJourneyState } from "@/lib/user/journey";
 
 interface User {
   id: string;
@@ -19,6 +21,8 @@ interface AuthContextType {
   logout: () => Promise<void>;
   isLoading: boolean;
   lastError: string | null;
+  journey: UserJourneyState | null;
+  refreshJourney: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -27,7 +31,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [journey, setJourney] = useState<UserJourneyState | null>(null);
   const router = useRouter();
+
+  const refreshJourney = React.useCallback(async () => {
+    try {
+      const snapshot = await fetchUserJourneyState();
+      setJourney(snapshot?.journey || null);
+    } catch {
+      setJourney(null);
+    }
+  }, []);
 
   useEffect(() => {
     const supabase = createClient();
@@ -44,6 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           name: userMeta?.name ?? u.email?.split("@")[0] ?? "",
           orgId: appMeta?.org_id ?? userMeta?.org_id ?? undefined,
         });
+        void refreshJourney();
       }
       setIsLoading(false);
     });
@@ -62,8 +77,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           name: userMeta?.name ?? u.email?.split("@")[0] ?? "",
           orgId: appMeta?.org_id ?? userMeta?.org_id ?? undefined,
         });
+        void refreshJourney();
       } else {
         setUser(null);
+        setJourney(null);
       }
     });
 
@@ -103,12 +120,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      const supabase = createClient();
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-      if (signInError) throw signInError;
+    const supabase = createClient();
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    if (signInError) throw signInError;
+    await refreshJourney();
 
-      if (role.startsWith("agency_")) {
-        router.push("/agency");
+    if (role.startsWith("agency_")) {
+      router.push("/agency");
       } else {
         router.push("/merchant");
       }
@@ -125,11 +143,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const supabase = createClient();
     await supabase.auth.signOut();
     setUser(null);
+    setJourney(null);
     router.push("/login");
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading, lastError }}>
+    <AuthContext.Provider value={{ user, login, logout, isLoading, lastError, journey, refreshJourney }}>
       {children}
     </AuthContext.Provider>
   );

@@ -11,6 +11,11 @@ import {
   type OrgSoftCapSummary,
   type PlanSoftCaps,
 } from "@/lib/billing/limits";
+import {
+  normalizeStripeBillingStatus,
+  type StripeBillingSubscriptionRecord,
+  type StripeBillingStatus,
+} from "@/lib/billing/stripe";
 
 export interface BillingCategorySnapshot {
   count: number;
@@ -32,6 +37,15 @@ export interface OrgUsageSummary {
 }
 
 export interface OrgBillingSummary extends OrgUsageSummary {
+  billing_provider?: "stripe" | "manual" | "none" | null;
+  billing_status?: StripeBillingStatus | null;
+  stripe_customer_id?: string | null;
+  stripe_subscription_id?: string | null;
+  stripe_checkout_session_id?: string | null;
+  stripe_price_id?: string | null;
+  stripe_cancel_at_period_end?: boolean | null;
+  stripe_current_period_end?: string | null;
+  stripe_synced_at?: string | null;
   estimated_cost_today_cents: number;
   estimated_cost_total_cents: number;
   estimated_ai_cost_today_cents: number;
@@ -147,6 +161,7 @@ async function listAgencyBillingRowsWithFilters(filters: AgencyBillingFilters): 
     tenantEventsResult,
     whatsappConversationsResult,
     whatsappMessagesResult,
+    billingSubscriptionsResult,
   ] = await Promise.all([
     queryWithTimeout(
       admin.from("products").select("org_id, created_at").order("created_at", { ascending: false }).limit(50),
@@ -172,6 +187,16 @@ async function listAgencyBillingRowsWithFilters(filters: AgencyBillingFilters): 
       admin.from("whatsapp_messages").select("org_slug, created_at").order("created_at", { ascending: false }).limit(50),
       { data: [], error: null }
     ),
+    queryWithTimeout(
+      admin
+        .from("billing_subscriptions")
+        .select(
+          "org_id, billing_provider, billing_status, stripe_customer_id, stripe_subscription_id, stripe_checkout_session_id, stripe_price_id, stripe_cancel_at_period_end, stripe_current_period_end, stripe_synced_at, updated_at"
+        )
+        .order("updated_at", { ascending: false })
+        .limit(200),
+      { data: [], error: null }
+    ),
   ]);
 
   if (productsResult.error) throw new Error(`Failed to load billing products: ${productsResult.error.message}`);
@@ -181,6 +206,7 @@ async function listAgencyBillingRowsWithFilters(filters: AgencyBillingFilters): 
 
   const whatsappConversationsAvailable = !whatsappConversationsResult.error;
   const whatsappMessagesAvailable = !whatsappMessagesResult.error;
+  const billingSubscriptionsAvailable = !billingSubscriptionsResult.error;
 
   const totalEventsByOrgId = new Map<string, number>();
   const totalProductsByOrgId = new Map<string, number>();
@@ -195,6 +221,11 @@ async function listAgencyBillingRowsWithFilters(filters: AgencyBillingFilters): 
   const todayWhatsappConversationsByOrgId = new Map<string, number>();
   const todayWhatsappMessagesByOrgId = new Map<string, number>();
   const lastActivityByOrgId = new Map<string, string | null>();
+  type BillingSubscriptionSnapshot = Omit<StripeBillingSubscriptionRecord, "org_id"> & {
+    last_activity_at?: string | null;
+  };
+
+  const billingByOrgId = new Map<string, BillingSubscriptionSnapshot>();
 
   for (const row of (tenantEventsResult.data || []) as Array<{ org_id: string | null; created_at: string | null }>) {
     if (!row.org_id || !orgById.has(row.org_id)) continue;
@@ -262,6 +293,37 @@ async function listAgencyBillingRowsWithFilters(filters: AgencyBillingFilters): 
     }
   }
 
+  if (billingSubscriptionsAvailable) {
+    for (const row of (billingSubscriptionsResult.data || []) as Array<{
+      org_id: string | null;
+      billing_provider: string | null;
+      billing_status: string | null;
+      stripe_customer_id: string | null;
+      stripe_subscription_id: string | null;
+      stripe_checkout_session_id: string | null;
+      stripe_price_id: string | null;
+      stripe_cancel_at_period_end: boolean | null;
+      stripe_current_period_end: string | null;
+      stripe_synced_at: string | null;
+      updated_at: string | null;
+    }>) {
+      if (!row.org_id || !orgById.has(row.org_id)) continue;
+
+      billingByOrgId.set(row.org_id, {
+        billing_provider: "stripe",
+        billing_status: normalizeStripeBillingStatus(row.billing_status),
+        stripe_customer_id: normalize(row.stripe_customer_id) || null,
+        stripe_subscription_id: normalize(row.stripe_subscription_id) || null,
+        stripe_checkout_session_id: normalize(row.stripe_checkout_session_id) || null,
+        stripe_price_id: normalize(row.stripe_price_id) || null,
+        stripe_cancel_at_period_end: row.stripe_cancel_at_period_end ?? null,
+        stripe_current_period_end: normalize(row.stripe_current_period_end) || null,
+        stripe_synced_at: normalize(row.stripe_synced_at) || null,
+        last_activity_at: normalize(row.stripe_synced_at) || row.updated_at || null,
+      });
+    }
+  }
+
   return orgRows.map((org) => {
     const usage = org.usage_today || null;
     const totalEvents = totalEventsByOrgId.get(org.id) || 0;
@@ -309,8 +371,19 @@ async function listAgencyBillingRowsWithFilters(filters: AgencyBillingFilters): 
       estimated_cost_total_cents: estimatedCostTotal,
     });
 
+    const billing = billingByOrgId.get(org.id) || null;
+
     return {
       ...org,
+      billing_provider: billing?.billing_provider || null,
+      billing_status: billing?.billing_status || null,
+      stripe_customer_id: billing?.stripe_customer_id || null,
+      stripe_subscription_id: billing?.stripe_subscription_id || null,
+      stripe_checkout_session_id: billing?.stripe_checkout_session_id || null,
+      stripe_price_id: billing?.stripe_price_id || null,
+      stripe_cancel_at_period_end: billing?.stripe_cancel_at_period_end ?? null,
+      stripe_current_period_end: billing?.stripe_current_period_end || null,
+      stripe_synced_at: billing?.stripe_synced_at || null,
       usage_date: usage?.usage_date || null,
       ai_tokens: usage?.ai_tokens || 0,
       ai_requests: usage?.ai_requests || 0,

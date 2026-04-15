@@ -1,19 +1,13 @@
 import type { CSSProperties, ReactNode } from "react";
-import { DM_Sans, Space_Mono } from "next/font/google";
 
 import { AgencySidebar } from "@/components/agency/AgencySidebar";
 
-const dmSans = DM_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "700"],
-  variable: "--font-dm-sans",
-});
-
-const spaceMono = Space_Mono({
-  subsets: ["latin"],
-  weight: ["400", "700"],
-  variable: "--font-space-mono",
-});
+const dmSans = { className: "font-[family-name:var(--font-dm-sans)]", variable: "--font-dm-sans" };
+const spaceMono = { className: "font-[family-name:var(--font-space-mono)]", variable: "--font-space-mono" };
+const fontVars: CSSProperties & Record<string, string> = {
+  ["--font-dm-sans"]: "DM Sans, ui-sans-serif, system-ui, sans-serif",
+  ["--font-space-mono"]: '"Space Mono", ui-monospace, SFMono-Regular, monospace',
+};
 
 const themeVars = {
   ["--gold"]: "#C9A84C",
@@ -32,7 +26,7 @@ export default function AgencyLayout({ children }: { children: ReactNode }) {
   return (
     <section
       className={`${dmSans.variable} ${spaceMono.variable} ${dmSans.className} min-h-screen bg-[var(--bg)] text-[var(--text)]`}
-      style={themeVars}
+      style={{ ...themeVars, ...fontVars }}
     >
       <div className="min-h-screen bg-[radial-gradient(circle_at_80%_0%,rgba(201,168,76,0.12),transparent_28%),linear-gradient(135deg,var(--bg),#050705)] lg:flex">
         <AgencySidebar />

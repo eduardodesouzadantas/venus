@@ -13,8 +13,8 @@ import { LookCardSwipeable } from "@/components/ui/LookCardSwipeable";
 import { SavedProfileToast } from "@/components/ui/SavedProfileToast";
 import { SaveResultsModal } from "@/components/onboarding/SaveResultsModal";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
-import { getEngagedIds, getStatsSummary } from "@/lib/analytics/tracker";
-import type { BehaviorStatsSummary } from "@/lib/analytics/tracker";
+import { getEngagedIds } from "@/lib/analytics/tracker";
+import { useBehaviorStatsSummary } from "@/lib/analytics/use-behavior-stats";
 import type { UserStats } from "@/lib/ai/orchestrator";
 import type { LookData } from "@/types/result";
 import type { VisualAnalysisPayload } from "@/types/visual-analysis";
@@ -51,7 +51,7 @@ export default function DramaticResultPage() {
   const canOpenWhatsApp = Boolean(whatsappHandoffPhone);
 
   const [engagedLookIds, setEngagedLookIds] = useState<string[]>([]);
-  const [statsSummary, setStatsSummary] = useState<BehaviorStatsSummary | null>(null);
+  const statsSummary = useBehaviorStatsSummary();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [visualAnalysis, setVisualAnalysis] = useState<VisualAnalysisPayload | null>(null);
 
@@ -68,7 +68,6 @@ export default function DramaticResultPage() {
 
   useEffect(() => {
     setEngagedLookIds(getEngagedIds("look"));
-    setStatsSummary(getStatsSummary());
   }, []);
 
   useEffect(() => {

@@ -6,20 +6,27 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { VenusButton } from "@/components/ui/VenusButton";
 import { SaveResultsModal } from "@/components/onboarding/SaveResultsModal";
-import { SocialShareActions } from "@/components/ui/SocialShareActions";
+import { ShareableLookCard } from "@/components/result/ShareableLookCard";
+import { LookCompositionGallery } from "@/components/look-composition/LookCompositionGallery";
+import { AssistedLookStrip } from "@/components/catalog/AssistedLookStrip";
+import { ConversationalCatalogBlock } from "@/components/catalog/ConversationalCatalogBlock";
+import type { LookComposition } from "@/lib/look-composition/engine";
 import { ResultErrorBoundary } from "@/components/result/ResultErrorBoundary";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
 import { useUserImage } from "@/lib/onboarding/UserImageContext";
 import { syncLeadContext } from "@/lib/lead-context/client";
 import { useTryOn, TRYON_LOADING_MESSAGES } from "@/hooks/useTryOn";
 import { buildResultSurface, hasLegacyTryOnProducts, type ResultSurface } from "@/lib/result/surface";
-import { RESULT_ID_PATTERN, isValidResultId } from "@/lib/result/id";
+import { buildAssistedCatalogProductCards, buildAssistedLookStripItems } from "@/lib/catalog-query/presentation";
+import { buildCatalogAccessCopy } from "@/lib/catalog-query/presentation";
+import { isValidResultId } from "@/lib/result/id";
 import { decideNextAction } from "@/lib/decision-engine/engine";
 import { DecisionResult } from "@/lib/decision-engine/types";
 import { buildWhatsAppHandoffMessage, buildWhatsAppHandoffUrl } from "@/lib/whatsapp/handoff";
 import { ensureTryOnProductId } from "@/lib/tryon/product-id";
 import { classifyTryOnQuality } from "@/lib/tryon/result-quality";
 import { buildVenusResultNarrative, VENUS_STYLIST_NAME } from "@/lib/venus/brand";
+import { buildVenusStylistAudit, type VenusStylistAudit } from "@/lib/venus/audit/engine";
 
 // Categorization logic for the try-on engine
 function inferTryOnCategory(product: any): "tops" | "bottoms" | "one-pieces" {
@@ -47,6 +54,12 @@ function ResultDashboardContent() {
   const [loading, setLoading] = React.useState(true);
   const [redirecting, setRedirecting] = React.useState(false);
   const [showSaveModal, setShowSaveModal] = React.useState(false);
+  const [catalogLink, setCatalogLink] = React.useState("");
+  const [catalogSourceLabel, setCatalogSourceLabel] = React.useState<string | null>(null);
+  const [socialFeedbackUrl, setSocialFeedbackUrl] = React.useState("");
+  const [socialFeedbackNote, setSocialFeedbackNote] = React.useState("");
+  const [socialFeedbackStatus, setSocialFeedbackStatus] = React.useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [revealStage, setRevealStage] = React.useState(0);
   const [tenantContext, setTenantContext] = React.useState<{
     whatsappNumber?: string | null;
     orgSlug?: string | null;
@@ -116,6 +129,55 @@ function ResultDashboardContent() {
       }),
     [tryOnQuality.state, tryOnQuality.reason, hasTryOnArtifact, hasLegacyTryOnLooks]
   );
+  const stylistAudit = useMemo<VenusStylistAudit | null>(() => {
+    if (!surface) return null;
+
+    return buildVenusStylistAudit({
+      surface,
+      tryOnQuality,
+      onboardingData,
+      contactName: onboardingData?.contact?.name || null,
+      decision,
+      resultId: id,
+      orgName: tenantContext?.branchName || tenantContext?.orgSlug || null,
+    });
+  }, [surface, tryOnQuality, onboardingData, decision, id, tenantContext?.branchName, tenantContext?.orgSlug]);
+  const assistedCatalogProducts = useMemo(
+    () =>
+      buildAssistedCatalogProductCards(looks, {
+        limit: 3,
+        sourceLabel: catalogSourceLabel || tenantContext?.branchName || tenantContext?.orgSlug || "Catálogo da loja",
+      }),
+    [catalogSourceLabel, looks, tenantContext?.branchName, tenantContext?.orgSlug]
+  );
+  const assistedLookStripItems = useMemo(
+    () => buildAssistedLookStripItems(looks, { limit: 3 }),
+    [looks]
+  );
+  const catalogCopy = useMemo(
+    () =>
+      buildCatalogAccessCopy({
+        sourceLabel: catalogSourceLabel || tenantContext?.branchName || tenantContext?.orgSlug || "catálogo da loja",
+        productCount: assistedCatalogProducts.length,
+        lookCount: looks.length,
+        explicit: false,
+      }),
+    [assistedCatalogProducts.length, catalogSourceLabel, looks.length, tenantContext?.branchName, tenantContext?.orgSlug]
+  );
+  const explicitCatalogCopy = useMemo(
+    () =>
+      buildCatalogAccessCopy({
+        sourceLabel: catalogSourceLabel || tenantContext?.branchName || tenantContext?.orgSlug || "catálogo da loja",
+        productCount: assistedCatalogProducts.length,
+        lookCount: looks.length,
+        explicit: true,
+      }),
+    [assistedCatalogProducts.length, catalogSourceLabel, looks.length, tenantContext?.branchName, tenantContext?.orgSlug]
+  );
+  const progressiveRevealLimit = tryOnQuality.state === "retry_required" ? 2 : 3;
+  const canShowDiagnosis = revealStage >= 1;
+  const canShowDirection = revealStage >= 2;
+  const canShowCommerce = revealStage >= 3 && tryOnQuality.state !== "retry_required";
 
   const currentLoadingMessage = (() => {
     if (tryOnProgress < 30) return TRYON_LOADING_MESSAGES[0];
@@ -126,9 +188,14 @@ function ResultDashboardContent() {
   const retryPhotoHref = tenantContext?.orgSlug
     ? `/scanner/face?org=${encodeURIComponent(tenantContext.orgSlug)}`
     : "/scanner/face";
+  const advanceReveal = React.useCallback(() => {
+    setRevealStage((current) => Math.min(current + 1, progressiveRevealLimit));
+  }, [progressiveRevealLimit]);
   const mainCtaLabel =
-    resultNarrative.primaryCta;
-  const secondaryCtaLabel = resultNarrative.secondaryCta;
+    tryOnQuality.state === "hero"
+      ? stylistAudit?.whatsapp.cta || resultNarrative.primaryCta
+      : resultNarrative.primaryCta;
+  const secondaryCtaLabel = stylistAudit?.whatsapp.cta || resultNarrative.secondaryCta;
 
   React.useEffect(() => {
     if (!surface) return;
@@ -169,9 +236,10 @@ function ResultDashboardContent() {
       lookSummary: looks as any,
       lastTryOn: tryOnImageUrl ? { image_url: tryOnImageUrl, status: "completed" } : persistedTryOn,
       decision: decision ? { action: decision.chosenAction, reason: decision.reason } : undefined,
+      audit: stylistAudit,
     });
     return buildWhatsAppHandoffUrl(message, tenantContext?.whatsappNumber || "5511967011133") || "";
-  }, [surface, onboardingData, essenceLabel, looks, tryOnImageUrl, persistedTryOn, decision, tenantContext]);
+  }, [surface, onboardingData, essenceLabel, looks, tryOnImageUrl, persistedTryOn, decision, tenantContext, stylistAudit]);
 
   // ── Global error instrumentation (always called) ──
   React.useEffect(() => {
@@ -254,6 +322,8 @@ function ResultDashboardContent() {
         console.log(`[DEBUG][RESULT_PAGE] Result loaded successfully`);
         if (payload.tenant) setTenantContext(payload.tenant);
         if (payload.lastTryOn) setPersistedTryOn(payload.lastTryOn);
+        if (typeof payload.catalogLink === "string") setCatalogLink(payload.catalogLink);
+        if (typeof payload.catalogSourceLabel === "string") setCatalogSourceLabel(payload.catalogSourceLabel);
 
         const builtSurface = buildResultSurface(onboardingData, payload.analysis, payload.finalResult);
         setSurface(builtSurface);
@@ -381,6 +451,37 @@ function ResultDashboardContent() {
     [resolvedOrgId, id]
   );
 
+  const handleSaveSocialFeedback = React.useCallback(async () => {
+    if (!resolvedOrgId || !id) return;
+
+    setSocialFeedbackStatus("saving");
+    try {
+      const response = await fetch("/api/social-feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orgId: resolvedOrgId,
+          resultId: id,
+          platform: "manual",
+          postUrl: socialFeedbackUrl || undefined,
+          notes: socialFeedbackNote || undefined,
+          aligned: tryOnQuality.state !== "retry_required",
+          lookId: looks[0]?.id || undefined,
+          productId: looks[0]?.product_id || undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Falha ao registrar a postagem.");
+      }
+
+      setSocialFeedbackStatus("saved");
+    } catch (err) {
+      console.warn("[SOCIAL_FEEDBACK] failed", err);
+      setSocialFeedbackStatus("error");
+    }
+  }, [resolvedOrgId, id, socialFeedbackUrl, socialFeedbackNote, tryOnQuality.state, looks]);
+
   // ──────────────────────────────────────────────────────────────
   // EARLY RETURNS (after ALL hooks have been called)
   // ──────────────────────────────────────────────────────────────
@@ -492,9 +593,9 @@ function ResultDashboardContent() {
                 </div>
                 <div className="absolute bottom-6 left-6 right-6">
                   <div className="rounded-[22px] border border-white/10 bg-black/55 px-4 py-3 backdrop-blur-md">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/45">Por que este look funciona</p>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/45">{stylistAudit?.tryOn.eyebrow || "Por que este look funciona"}</p>
                     <p className="mt-2 text-[13px] leading-relaxed text-white/82">
-                      {tryOnQuality.reason}
+                      {stylistAudit?.tryOn.helper || tryOnQuality.reason}
                     </p>
                   </div>
                 </div>
@@ -571,74 +672,268 @@ function ResultDashboardContent() {
 
           <div className="mt-10 space-y-6 text-center">
             <div className="space-y-3">
-              <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#C9A84C]">{resultNarrative.eyebrow}</p>
+              <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#C9A84C]">{stylistAudit?.opening.eyebrow || resultNarrative.eyebrow}</p>
               <h1 className="font-serif text-3xl font-bold tracking-tight text-white">
-                {essenceLabel}
+                {stylistAudit?.opening.title || essenceLabel}
               </h1>
               <p className="mx-auto max-w-sm text-[16px] leading-relaxed text-white/60">
-                {resultNarrative.subtitle}
+                {stylistAudit?.opening.subtitle || resultNarrative.subtitle}
               </p>
               <p className="mx-auto max-w-sm text-[12px] leading-relaxed text-white/40">
-                {resultNarrative.helper}
+                {stylistAudit?.diagnosis.buyingGuidance || resultNarrative.helper}
               </p>
-            </div>
-
-            <div className="flex flex-col gap-3 pt-4">
-              {tryOnQuality.state === "hero" ? (
-                <Link
-                  href={whatsappUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    void openWhatsApp(whatsappUrl);
-                  }}
-                  className="flex h-14 items-center justify-center rounded-2xl bg-[#C9A84C] px-6 text-[13px] font-black uppercase tracking-widest text-black transition-transform active:scale-95 group"
-                  >
-                  {mainCtaLabel}
-                  <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
-                </Link>
-              ) : (
-                <Link
-                  href={retryPhotoHref}
-                  className="flex h-14 items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-6 text-[11px] font-bold uppercase tracking-widest text-white/90 transition-colors hover:bg-white/10"
+              {revealStage < 1 && (
+                <button
+                  type="button"
+                  onClick={advanceReveal}
+                  className="mt-2 inline-flex h-11 items-center justify-center rounded-full border border-[#C9A84C]/20 bg-[#C9A84C]/10 px-5 text-[9px] font-black uppercase tracking-[0.24em] text-[#C9A84C] transition-colors hover:bg-[#C9A84C]/16"
                 >
-                  {mainCtaLabel}
-                </Link>
+                  Continuar leitura
+                </button>
               )}
+            </div>
+          </div>
 
-              {tryOnQuality.showRetryPhotoCta && (
-                tryOnQuality.state === "preview" && (
-                  <button
-                    type="button"
-                    onClick={() => void openWhatsApp(whatsappUrl)}
-                    className="flex h-12 items-center justify-center rounded-2xl border border-[#C9A84C]/20 bg-[#C9A84C]/8 px-6 text-[10px] font-black uppercase tracking-[0.2em] text-[#C9A84C] transition-colors hover:bg-[#C9A84C]/12"
-                  >
-                    {secondaryCtaLabel}
-                  </button>
-                )
-              )}
-
-              {decision?.chosenAction === "OFFER_DISCOUNT" && (
-                <div className="rounded-2xl border border-[#C9A84C]/20 bg-[#C9A84C]/5 p-4 text-center animate-in fade-in zoom-in-95">
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-[#C9A84C]">Condição reservada</p>
-                  <p className="mt-1 text-xs text-white/70">A Venus separou um cuidado especial para este momento.</p>
+          {canShowDiagnosis && stylistAudit && (
+            <div className="mt-10 space-y-4">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-[24px] border border-white/5 bg-black/20 p-4">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.28em] text-[#C9A84C]">O que já funciona</p>
+                  <div className="mt-3 space-y-2">
+                    {stylistAudit.diagnosis.strengths.slice(0, 3).map((item) => (
+                      <p key={item} className="text-[13px] leading-relaxed text-white/70">{item}</p>
+                    ))}
+                  </div>
                 </div>
+                <div className="rounded-[24px] border border-white/5 bg-black/20 p-4">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.28em] text-[#C9A84C]">O que ainda pesa</p>
+                  <div className="mt-3 space-y-2">
+                    {stylistAudit.diagnosis.blockers.slice(0, 3).map((item) => (
+                      <p key={item} className="text-[13px] leading-relaxed text-white/70">{item}</p>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-[24px] border border-white/5 bg-black/20 p-4">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.28em] text-[#C9A84C]">O que ampliar</p>
+                  <div className="mt-3 space-y-2">
+                    {stylistAudit.diagnosis.amplify.slice(0, 3).map((item) => (
+                      <p key={item} className="text-[13px] leading-relaxed text-white/70">{item}</p>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {revealStage < 2 && (
+                <button
+                  type="button"
+                  onClick={advanceReveal}
+                  className="inline-flex h-11 w-full items-center justify-center rounded-2xl border border-[#C9A84C]/20 bg-[#C9A84C]/10 px-5 text-[9px] font-black uppercase tracking-[0.24em] text-[#C9A84C] transition-colors hover:bg-[#C9A84C]/16"
+                >
+                  Ver a direção
+                </button>
               )}
 
+              <div className={`${revealStage >= 2 ? "" : "hidden"} rounded-[28px] border border-white/5 bg-white/[0.03] p-5`}>
+                <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-[#C9A84C]">{stylistAudit.direction.eyebrow}</p>
+                <h2 className="mt-2 font-serif text-2xl text-white">{stylistAudit.direction.title}</h2>
+                <p className="mt-2 text-[14px] leading-relaxed text-white/65">{stylistAudit.direction.subtitle}</p>
+                <p className="mt-3 text-[13px] leading-relaxed text-white/50">{stylistAudit.direction.realWorldImpression}</p>
+                <div className="mt-4 grid gap-2">
+                  {stylistAudit.direction.bullets.map((bullet) => (
+                    <div key={bullet} className="rounded-2xl border border-white/5 bg-black/25 px-4 py-3 text-[12px] leading-relaxed text-white/70">
+                      {bullet}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className={`${revealStage >= 2 ? "" : "hidden"} rounded-[28px] border border-white/5 bg-white/[0.03] p-5`}>
+                <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-[#C9A84C]">{stylistAudit.tryOn.eyebrow}</p>
+                <h2 className="mt-2 font-serif text-2xl text-white">{stylistAudit.tryOn.title}</h2>
+                <p className="mt-2 text-[14px] leading-relaxed text-white/65">{stylistAudit.tryOn.subtitle}</p>
+                <p className="mt-3 text-[12px] leading-relaxed text-white/45">{stylistAudit.tryOn.helper}</p>
+              </div>
+
+              {revealStage < 3 && tryOnQuality.state !== "retry_required" && (
+                <button
+                  type="button"
+                  onClick={advanceReveal}
+                  className="inline-flex h-11 w-full items-center justify-center rounded-2xl border border-[#C9A84C]/20 bg-[#C9A84C]/10 px-5 text-[9px] font-black uppercase tracking-[0.24em] text-[#C9A84C] transition-colors hover:bg-[#C9A84C]/16"
+                >
+                  Ver o que comprar agora
+                </button>
+              )}
+            </div>
+          )}
+
+          {canShowCommerce && (assistedCatalogProducts.length > 0 || assistedLookStripItems.length > 0) && (
+            <div id="catalog-assistido" className="mt-10 space-y-6">
+              <ConversationalCatalogBlock
+                copy={catalogCopy}
+                products={assistedCatalogProducts}
+                reinforcement={[
+                  "Baseado no seu corpo",
+                  "Cores ideais para você",
+                  "Look recomendado para você",
+                ]}
+                catalogAction={
+                  catalogLink || "/catalog"
+                    ? {
+                      label: explicitCatalogCopy.openLabel,
+                      href: catalogLink || "/catalog",
+                      target: "_blank",
+                    }
+                    : undefined
+                }
+                continueAction={{
+                  label: explicitCatalogCopy.continueLabel,
+                  onClick: () => {
+                    if (whatsappUrl) {
+                      openWhatsApp(whatsappUrl);
+                    }
+                  },
+                }}
+                saveAction={{
+                  label: explicitCatalogCopy.saveLabel,
+                  onClick: () => setShowSaveModal(true),
+                }}
+                onOpenProduct={() => {
+                  document.getElementById("look-composition-gallery")?.scrollIntoView({ behavior: "smooth" });
+                }}
+                onAskOpinion={() => {
+                  if (whatsappUrl) {
+                    openWhatsApp(whatsappUrl);
+                  }
+                }}
+                onSaveLook={() => setShowSaveModal(true)}
+              />
+
+              <div className="rounded-[28px] border border-white/5 bg-white/[0.03] p-4 sm:p-5">
+                <AssistedLookStrip
+                  looks={assistedLookStripItems}
+                  onSelectLook={() => {
+                    document.getElementById("look-composition-gallery")?.scrollIntoView({ behavior: "smooth" });
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Look Composition Gallery - Looks completos do catálogo */}
+          {canShowCommerce && tryOnQuality.state !== "retry_required" && resolvedOrgId && (
+            <div id="look-composition-gallery" className="mt-10">
+              <LookCompositionGallery
+                orgId={resolvedOrgId}
+                userPhotoUrl={tryOnPersonImage}
+                styleDirection={onboardingData?.intent?.styleDirection}
+                imageGoal={onboardingData?.intent?.imageGoal}
+                bodyFit={onboardingData?.body?.fit}
+                colorContrast={onboardingData?.colors?.contrast}
+                essenceLabel={surface?.essence?.label}
+                paletteFamily={paletteFamily}
+                storeName={tenantContext?.branchName || tenantContext?.orgSlug || "Loja"}
+                storePhone={tenantContext?.whatsappNumber || org.whatsapp_phone}
+                customerName={onboardingData?.contact?.name}
+                resultUrl={typeof window !== "undefined" ? `${window.location.origin}/result?id=${id}` : undefined}
+                onTryOnStart={(composition: LookComposition) => {
+                  // Iniciar try-on com a peça âncora do look
+                  if (composition.anchorPiece.id) {
+                    handleGenerateTryOn(composition.anchorPiece.id);
+                  }
+                }}
+              />
+            </div>
+          )}
+
+          {looks[0] && tryOnQuality.state !== "retry_required" && (
+            <div className="mt-10">
+              <ShareableLookCard
+                look={looks[0]}
+                looks={looks}
+                surface={surface}
+                resultId={id}
+                resultUrl={typeof window !== "undefined" ? `${window.location.origin}/result?id=${id}` : undefined}
+                orgId={resolvedOrgId || null}
+                brandName={tenantContext?.branchName || tenantContext?.orgSlug || "Venus"}
+                appName={VENUS_STYLIST_NAME}
+                orgName={tenantContext?.orgSlug || tenantContext?.branchName || null}
+                customerName={onboardingData?.contact?.name || null}
+                userImageUrl={tryOnPersonImage || null}
+                tryOnImageUrl={displayImageUrl || persistedTryOn?.image_url || null}
+              />
+            </div>
+          )}
+
+          {canShowCommerce && tryOnQuality.state !== "retry_required" && (
+            <div className="mt-8 rounded-[28px] border border-white/5 bg-white/[0.03] p-5">
+              <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-[#C9A84C]">{stylistAudit?.social.eyebrow || "Prova social e memória"}</p>
+              <h2 className="mt-2 font-serif text-2xl text-white">{stylistAudit?.social.title || "Registrar a postagem ou o link da leitura"}</h2>
+              <p className="mt-2 text-[13px] leading-relaxed text-white/60">
+                {stylistAudit?.social.prompt || "Se você já publicou, a Venus guarda o sinal para refinar a próxima leitura."}
+              </p>
+              <div className="mt-4 grid gap-3">
+                <input
+                  type="url"
+                  value={socialFeedbackUrl}
+                  onChange={(event) => setSocialFeedbackUrl(event.target.value)}
+                  placeholder="Cole o link do post, story ou foto"
+                  className="h-12 rounded-2xl border border-white/10 bg-black/40 px-4 text-[12px] text-white placeholder:text-white/30 outline-none"
+                />
+                <textarea
+                  value={socialFeedbackNote}
+                  onChange={(event) => setSocialFeedbackNote(event.target.value)}
+                  placeholder="Uma nota curta sobre o que aconteceu"
+                  rows={3}
+                  className="rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-[12px] text-white placeholder:text-white/30 outline-none"
+                />
+                <div className="flex flex-wrap items-center gap-3">
+                  <VenusButton onClick={() => void handleSaveSocialFeedback()} className="h-12 px-5 text-[10px] tracking-[0.28em]">
+                    Registrar postagem
+                  </VenusButton>
+                  <span className="text-[11px] text-white/45">
+                    {socialFeedbackStatus === "saved"
+                      ? "Memória registrada."
+                      : socialFeedbackStatus === "error"
+                        ? "Não foi possível registrar agora."
+                        : "Opcional, mas útil para a próxima leitura."}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {canShowCommerce && (
+      <section className="mt-16 border-y border-white/5 bg-white/[0.02] py-12 px-5">
+        <div className="mx-auto max-w-lg space-y-10">
+          <div className="rounded-[28px] border border-[#C9A84C]/15 bg-[#C9A84C]/8 p-5 text-left">
+            <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-[#C9A84C]">{stylistAudit?.whatsapp.eyebrow || "Continuação natural"}</p>
+            <h2 className="mt-2 font-serif text-2xl text-white">{stylistAudit?.whatsapp.title || `Continuar com ${VENUS_STYLIST_NAME}`}</h2>
+            <p className="mt-2 max-w-lg text-[13px] leading-relaxed text-white/65">{stylistAudit?.whatsapp.subtitle || "A conversa segue com a mesma leitura, sem começar do zero."}</p>
+            <div className="mt-5 flex flex-col gap-3">
+              <Link
+                href={whatsappUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(event) => {
+                  event.preventDefault();
+                  void openWhatsApp(whatsappUrl);
+                }}
+                className="flex h-14 items-center justify-center rounded-2xl bg-[#C9A84C] px-6 text-[13px] font-black uppercase tracking-widest text-black transition-transform active:scale-95 group"
+              >
+                {stylistAudit?.whatsapp.cta || mainCtaLabel}
+                <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </Link>
               <button
-                onClick={() => router.push('/')}
-                className="flex h-14 items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-6 text-[11px] font-bold uppercase tracking-widest text-white/90 transition-colors hover:bg-white/10"
+                onClick={() => router.push("/")}
+                className="flex h-12 items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-6 text-[10px] font-bold uppercase tracking-[0.24em] text-white/80 transition-colors hover:bg-white/10"
               >
                 Nova leitura
               </button>
             </div>
           </div>
-        </div>
-      </section>
 
-      <section className="mt-16 border-y border-white/5 bg-white/[0.02] py-12 px-5">
-        <div className="mx-auto max-w-lg space-y-10">
           <div>
             <p className="mb-3 font-mono text-[9px] uppercase tracking-[0.3em] text-[#C9A84C]">Leitura de cor • {paletteFamily}</p>
             <p className="mb-6 text-[13px] leading-relaxed text-white/55">
@@ -666,6 +961,7 @@ function ResultDashboardContent() {
           </div>
         </div>
       </section>
+      )}
 
       <section className="px-5 py-12 pb-20">
         <div className="mx-auto max-w-lg text-center space-y-6">
@@ -678,6 +974,7 @@ function ResultDashboardContent() {
         </div>
       </section>
 
+      {canShowCommerce && (
       <div className="fixed bottom-0 left-0 right-0 z-[150] flex h-14 items-center justify-between bg-[#C9A84C] px-4 shadow-[0_-10px_40px_rgba(0,0,0,0.3)]">
         <span className="text-[10px] font-bold uppercase tracking-wider text-black flex items-center gap-2">
           <div className="h-2 w-2 rounded-full bg-black animate-pulse" />
@@ -696,6 +993,7 @@ function ResultDashboardContent() {
           Continuar no WhatsApp
         </Link>
       </div>
+      )}
 
       <SaveResultsModal isOpen={showSaveModal} onClose={() => setShowSaveModal(false)} surface={surface} />
     </main>

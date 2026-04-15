@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { loadLeadContextByIdentity } from "@/lib/lead-context";
+import { resolveProductStockSnapshot } from "@/lib/catalog/stock";
 import type { VenusContext, VenusConversationMessage } from "./types";
 
 function normalize(value: unknown) {
@@ -136,7 +137,7 @@ export async function loadContext(phone_number: string, org_id: string): Promise
   try {
     const { data } = await admin
       .from("products")
-      .select("id, name, category, style, primary_color, emotional_copy, tags, size_type, created_at")
+      .select("id, name, category, style, primary_color, emotional_copy, tags, size_type, stock_qty, reserved_qty, stock_status, stock, created_at")
       .eq("org_id", org_id)
       .order("created_at", { ascending: false })
       .limit(10);
@@ -247,7 +248,8 @@ export async function loadContext(phone_number: string, org_id: string): Promise
   let productStock = 0;
   const catalogLines = productsRows.map((product) => {
     const productId = normalize(product.id);
-    const stock = stockByProductId.get(productId) || 0;
+    const stockSnapshot = resolveProductStockSnapshot(product, stockByProductId.get(productId) || 0);
+    const stock = stockSnapshot.availableQty;
     if (focusedProductName && normalize(product.name).toLowerCase().includes(focusedProductName)) {
       productStock = stock;
     }
@@ -262,7 +264,7 @@ export async function loadContext(phone_number: string, org_id: string): Promise
   });
 
   if (!productStock && productsRows[0]) {
-    productStock = stockByProductId.get(normalize(productsRows[0].id)) || 0;
+    productStock = resolveProductStockSnapshot(productsRows[0], stockByProductId.get(normalize(productsRows[0].id)) || 0).availableQty;
   }
 
   const resolvedProductName = productName || normalize(productsRows[0]?.name) || "";

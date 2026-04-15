@@ -1,22 +1,25 @@
-"use client";
-
-import { use } from "react";
 import type { ReactNode } from "react";
+import { redirect } from "next/navigation";
+import Link from "next/link";
 import {
   ArrowLeft,
-  ChevronDown,
-  Edit3,
-  Eye,
   Image as ImageIcon,
   LayoutGrid,
   Layers,
   Plus,
+  Settings,
   Sparkles,
   Tag,
 } from "lucide-react";
-import Link from "next/link";
+
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
+import { createClient } from "@/lib/supabase/server";
+import { fetchTenantBySlug, isAgencyRole, isTenantActive } from "@/lib/tenant/core";
+import { updateProductStock } from "@/app/b2b/product/new/actions";
+import { buildInventoryAlerts, formatStockStatusLabel, resolveProductStockSnapshot, type InventoryAlert, type ProductStockSnapshot } from "@/lib/catalog/stock";
+
+export const dynamic = "force-dynamic";
 
 type NavItemProps = {
   href: string;
@@ -25,22 +28,324 @@ type NavItemProps = {
   active?: boolean;
 };
 
-export default function MerchantCatalog({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = use(params);
+type ProductRow = {
+  id: string;
+  name: string;
+  category: string | null;
+  primary_color: string | null;
+  style: string | null;
+  image_url: string | null;
+  stock_qty: number | null;
+  reserved_qty: number | null;
+  stock_status: string | null;
+  stock: number | null;
+  created_at: string | null;
+};
+
+type TryOnRow = {
+  product_id: string | null;
+  created_at: string | null;
+  status: string | null;
+};
+
+type ProductView = ProductRow & {
+  stockSnapshot: ProductStockSnapshot;
+  alerts: InventoryAlert[];
+  tryons7d: number;
+  tryons30d: number;
+};
+
+function formatCatalogError(error?: string) {
+  if (!error) return null;
+  if (error === "tenant") return "Sessao invalida ou ausente.";
+  if (error === "product_not_found") return "Produto nao encontrado para atualizar o estoque.";
+
+  if (error.startsWith("validation:")) {
+    const reason = error.split(":")[1] || "";
+    if (reason === "product_required") return "Selecione um produto valido.";
+    if (reason === "stock_qty_invalid") return "A quantidade total precisa ser um numero valido.";
+    if (reason === "reserved_qty_invalid") return "A quantidade reservada precisa ser um numero valido.";
+    if (reason === "stock_status_invalid") return "Selecione um status de estoque valido.";
+    return "Corrija os dados de estoque antes de salvar.";
+  }
+
+  return error;
+}
+
+function stockTone(status: ProductStockSnapshot["stockStatus"]) {
+  if (status === "in_stock") return "green";
+  if (status === "low_stock") return "yellow";
+  return "red";
+}
+
+function formatAlertBadge(alert: InventoryAlert) {
+  if (alert.type === "rupture") return "Ruptura";
+  if (alert.type === "dead_stock") return "Dead stock";
+  return "Demanda reprimida";
+}
+
+async function loadCatalogData(orgId: string): Promise<ProductView[]> {
+  const supabase = await createClient();
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  const [productsResult, tryonsResult] = await Promise.all([
+    supabase
+      .from("products")
+      .select("id, name, category, primary_color, style, image_url, stock_qty, reserved_qty, stock_status, stock, created_at")
+      .eq("org_id", orgId)
+      .order("created_at", { ascending: false })
+      .limit(200),
+    supabase
+      .from("tryon_events")
+      .select("product_id, created_at, status")
+      .eq("org_id", orgId)
+      .in("status", ["completed"])
+      .gte("created_at", thirtyDaysAgo)
+      .limit(2000),
+  ]);
+
+  if (productsResult.error) {
+    throw productsResult.error;
+  }
+
+  if (tryonsResult.error) {
+    throw tryonsResult.error;
+  }
+
+  const products = (productsResult.data || []) as ProductRow[];
+  const tryons = (tryonsResult.data || []) as TryOnRow[];
+  const tryonsByProduct = new Map<string, TryOnRow[]>();
+
+  for (const row of tryons) {
+    if (!row.product_id) continue;
+    const current = tryonsByProduct.get(row.product_id) || [];
+    current.push(row);
+    tryonsByProduct.set(row.product_id, current);
+  }
+
+  return products.map((product) => {
+    const productTryons = tryonsByProduct.get(product.id) || [];
+    const tryons7d = productTryons.filter((row) => (row.created_at ? new Date(row.created_at).getTime() : 0) >= new Date(sevenDaysAgo).getTime()).length;
+    const tryons30d = productTryons.length;
+    const stockSnapshot = resolveProductStockSnapshot(product);
+    const alerts = buildInventoryAlerts({
+      productId: product.id,
+      productName: product.name,
+      stockSnapshot,
+      tryons7d,
+      tryons30d,
+    });
+
+    return {
+      ...product,
+      stockSnapshot,
+      alerts,
+      tryons7d,
+      tryons30d,
+    };
+  });
+}
+
+function NavItem({ href, icon, label, active = false }: NavItemProps) {
+  return (
+    <Link
+      href={href}
+      className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all ${active ? "bg-white text-black shadow-2xl" : "text-white/40 hover:bg-white/5 hover:text-white"}`}
+    >
+      {icon}
+      <span className="text-[11px] font-bold uppercase tracking-widest">{label}</span>
+    </Link>
+  );
+}
+
+function ProductCard({ orgBase, product }: { orgBase: string; product: ProductView }) {
+  const stockStatusTone = stockTone(product.stockSnapshot.stockStatus);
+  const alertChips = product.alerts.slice(0, 3);
+
+  return (
+    <div className="rounded-[32px] border border-white/5 bg-white/[0.02] p-5 transition-all hover:bg-white/[0.04]">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex items-start gap-5 min-w-0">
+          <div className="w-20 h-20 rounded-[28px] bg-white/10 relative overflow-hidden flex-shrink-0">
+            {product.image_url ? (
+              <img src={product.image_url} className="w-full h-full object-cover" alt={product.name} />
+            ) : (
+              <div className="h-full w-full flex items-center justify-center">
+                <ImageIcon size={22} className="text-white/20" />
+              </div>
+            )}
+          </div>
+
+          <div className="min-w-0 space-y-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Heading as="h3" className="text-xl uppercase tracking-tight leading-none truncate">
+                {product.name}
+              </Heading>
+              <span className={`rounded-full px-3 py-1 text-[8px] font-bold uppercase tracking-[0.25em] ${stockStatusTone === "green" ? "bg-green-500/15 text-green-300" : stockStatusTone === "yellow" ? "bg-yellow-500/15 text-yellow-300" : "bg-red-500/15 text-red-300"}`}>
+                {formatStockStatusLabel(product.stockSnapshot.stockStatus)}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.25em] text-white/35">
+              <span>{product.category || "categoria"}</span>
+              <span>•</span>
+              <span>{product.style || "estilo"}</span>
+              <span>•</span>
+              <span>{product.primary_color || "cor"}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-[9px] uppercase tracking-[0.24em] text-white/30">
+              <span className="rounded-full border border-white/10 px-3 py-1">Total {product.stockSnapshot.totalQty}</span>
+              <span className="rounded-full border border-white/10 px-3 py-1">Reservado {product.stockSnapshot.reservedQty}</span>
+              <span className="rounded-full border border-white/10 px-3 py-1">Disponível {product.stockSnapshot.availableQty}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2 lg:justify-end">
+          {alertChips.length ? (
+            alertChips.map((alert) => (
+              <span
+                key={alert.id}
+                className={`rounded-full border px-3 py-1 text-[8px] font-bold uppercase tracking-[0.25em] ${
+                  alert.severity === "critical"
+                    ? "border-red-500/25 bg-red-500/10 text-red-300"
+                    : alert.severity === "alert"
+                      ? "border-amber-500/25 bg-amber-500/10 text-amber-300"
+                      : "border-white/10 bg-white/5 text-white/45"
+                }`}
+              >
+                {formatAlertBadge(alert)}
+              </span>
+            ))
+          ) : (
+            <span className="rounded-full border border-white/10 px-3 py-1 text-[8px] font-bold uppercase tracking-[0.25em] text-white/35">
+              Sem alertas
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 lg:grid-cols-[1.1fr_0.9fr_auto]">
+        <form action={updateProductStock} className="grid gap-3 md:grid-cols-4 lg:col-span-3">
+          <input type="hidden" name="product_id" value={product.id} />
+          <input type="hidden" name="return_to" value={`${orgBase}/catalog`} />
+
+          <label className="space-y-2">
+            <span className="text-[9px] uppercase tracking-[0.25em] text-white/30">Quantidade total</span>
+            <input
+              name="stock_qty"
+              type="number"
+              min={0}
+              step={1}
+              defaultValue={product.stockSnapshot.totalQty}
+              className="w-full rounded-2xl border border-white/10 bg-black/40 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-[#C9A84C]/40"
+            />
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-[9px] uppercase tracking-[0.25em] text-white/30">Reservado</span>
+            <input
+              name="reserved_qty"
+              type="number"
+              min={0}
+              step={1}
+              defaultValue={product.stockSnapshot.reservedQty}
+              className="w-full rounded-2xl border border-white/10 bg-black/40 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-[#C9A84C]/40"
+            />
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-[9px] uppercase tracking-[0.25em] text-white/30">Status</span>
+            <select
+              name="stock_status"
+              defaultValue={product.stockSnapshot.stockStatus}
+              className="w-full rounded-2xl border border-white/10 bg-[#111] px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-[#C9A84C]/40"
+            >
+              <option value="in_stock">Em estoque</option>
+              <option value="low_stock">Estoque baixo</option>
+              <option value="out_of_stock">Sem estoque</option>
+            </select>
+          </label>
+
+          <div className="flex items-end">
+            <button
+              type="submit"
+              className="inline-flex h-11 w-full items-center justify-center rounded-2xl bg-white px-4 py-2 text-[9px] font-bold uppercase tracking-[0.24em] text-black transition-colors hover:bg-white/90"
+            >
+              Salvar estoque
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {product.alerts.length ? (
+        <div className="mt-4 flex flex-wrap gap-3">
+          {product.alerts.map((alert) => (
+            <div
+              key={alert.id}
+              className={`rounded-2xl border px-4 py-3 text-sm ${
+                alert.severity === "critical"
+                  ? "border-red-500/20 bg-red-500/10 text-red-50"
+                  : alert.severity === "alert"
+                    ? "border-amber-500/20 bg-amber-500/10 text-amber-50"
+                    : "border-white/10 bg-black/20 text-white/70"
+              }`}
+            >
+              <div className="text-[9px] font-bold uppercase tracking-[0.3em] text-white/45">{alert.title}</div>
+              <p className="mt-2 max-w-3xl text-sm leading-relaxed">{alert.description}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export default async function MerchantCatalog({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams?: { error?: string; updated?: string };
+}) {
+  const { slug } = await params;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  const { org } = await fetchTenantBySlug(supabase, slug);
+  if (!org || !isTenantActive(org)) {
+    redirect("/merchant");
+  }
+
+  const appMeta = user.app_metadata as Record<string, string> | undefined;
+  const userMeta = user.user_metadata as Record<string, string> | undefined;
+  const userRole = appMeta?.role ?? userMeta?.role ?? "";
+  const userOrgSlug = appMeta?.org_slug ?? userMeta?.org_slug ?? "";
+
+  if (!isAgencyRole(userRole) && userOrgSlug !== slug) {
+    redirect("/merchant");
+  }
+
   const orgBase = `/org/${slug}`;
+  const products = await loadCatalogData(org.id).catch(() => []);
+  const alertCount = products.reduce((total, product) => total + product.alerts.length, 0);
+  const criticalCount = products.flatMap((product) => product.alerts).filter((alert) => alert.severity === "critical").length;
+  const lowStockCount = products.filter((product) => product.stockSnapshot.stockStatus === "low_stock").length;
+  const outOfStockCount = products.filter((product) => product.stockSnapshot.stockStatus === "out_of_stock").length;
+  const catalogError = formatCatalogError(searchParams?.error);
 
   const navItems = [
-    { href: `${orgBase}/catalog`, icon: <LayoutGrid size={16} />, label: "Acervo", active: true },
+    { href: `${orgBase}/dashboard`, icon: <LayoutGrid size={16} />, label: "Executivo" },
+    { href: `${orgBase}/catalog`, icon: <Tag size={16} />, label: "Acervo", active: true },
     { href: `${orgBase}/catalog/new`, icon: <Plus size={16} />, label: "Novo produto" },
     { href: `${orgBase}/whatsapp/campaigns`, icon: <Layers size={16} />, label: "Looks & bundles" },
-    { href: `${orgBase}/integrations`, icon: <ImageIcon size={16} />, label: "Integrações" },
-    { href: `${orgBase}/settings`, icon: <Tag size={16} />, label: "Mapeamento" },
-  ];
-
-  const products = [
-    { id: "1", name: "Blazer Lã Merino", price: "R$ 2.450", status: "Enriquecido", score: 95, tags: ["Elegance", "Authority", "Winter"] },
-    { id: "2", name: "Camisa Algodão Gold", price: "R$ 820", status: "Incompleto", score: 42, tags: ["Essential", "Base"], alert: true },
-    { id: "3", name: "Sombra Turtleneck", price: "R$ 650", status: "Rascunho", score: 10, tags: [] },
+    { href: `${orgBase}/settings`, icon: <Settings size={16} />, label: "Configurações" },
   ];
 
   return (
@@ -56,160 +361,102 @@ export default function MerchantCatalog({ params }: { params: Promise<{ slug: st
             <NavItem key={item.label} {...item} />
           ))}
         </nav>
+
+        <Link
+          href={`${orgBase}/catalog/new`}
+          className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-4 py-3 text-[9px] font-bold uppercase tracking-[0.24em] text-black"
+        >
+          <Sparkles size={14} />
+          Novo produto
+        </Link>
       </aside>
 
-      <main className="flex-1 p-12 overflow-y-auto no-scrollbar">
-        <header className="flex items-center justify-between mb-16 gap-8">
-          <div className="space-y-1">
+      <main className="flex-1 p-8 lg:p-12 overflow-y-auto no-scrollbar">
+        <header className="mb-8 flex items-start justify-between gap-6">
+          <div className="space-y-3">
             <Text className="text-[10px] uppercase font-bold tracking-[0.4em] text-[#C9A84C]">Venus Engine Management</Text>
-            <Heading as="h1" className="text-3xl tracking-tighter uppercase whitespace-nowrap">
-              Gestão de Catálogo AI
+            <Heading as="h1" className="text-3xl lg:text-5xl tracking-tighter uppercase leading-none">
+              Estoque do catálogo
             </Heading>
+            <Text className="max-w-2xl text-sm text-white/50">
+              Revise quantidade total, reservado e status operacional por produto. O estoque legado continua compatível e os alertas são calculados por tenant.
+            </Text>
           </div>
 
-          <div className="flex gap-4">
-            <Link
-              href={`${orgBase}/catalog/new`}
-              className="inline-flex min-h-12 items-center justify-center rounded-full border border-white/10 px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-white/40 transition-all hover:bg-white/5 hover:text-white"
-            >
-              Lote AI Enrichment
-            </Link>
-            <Link
-              href={`${orgBase}/integrations`}
-              className="inline-flex min-h-12 items-center justify-center rounded-full bg-white px-6 py-3.5 text-[10px] font-bold uppercase tracking-widest text-black transition-all hover:bg-white/90 shadow-[0_0_20px_rgba(255,255,255,0.1)]"
-            >
-              Importar Catálogo
+          <div className="flex flex-col items-end gap-3">
+            <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[9px] font-bold uppercase tracking-[0.3em] text-white/45">
+              {products.length} produtos
+            </span>
+            <Link href={`${orgBase}/catalog/new`} className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-[10px] font-bold uppercase tracking-[0.24em] text-black">
+              <Plus size={14} />
+              Novo produto
             </Link>
           </div>
         </header>
 
-        <div className="space-y-8">
-          <div className="flex items-center gap-4 px-4">
-            <div className="relative flex-1">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20 text-[10px]">🔎</span>
-              <input
-                type="text"
-                placeholder="Buscar produto por nome ou tag..."
-                className="w-full h-14 rounded-3xl bg-white/5 border border-white/10 pl-12 pr-6 text-sm text-white focus:border-[#C9A84C]/40 outline-none transition-all"
-              />
-            </div>
-            <Link
-              href={`${orgBase}/integrations`}
-              className="inline-flex h-14 w-14 items-center justify-center rounded-3xl bg-white/5 border border-white/10 text-white/40 hover:text-white transition-colors"
-              aria-label="Abrir integrações"
-            >
-              <ChevronDown size={18} />
+        {searchParams?.updated ? (
+          <div className="mb-6 rounded-2xl border border-green-500/20 bg-green-500/10 px-4 py-3 text-sm text-green-100">Estoque atualizado com sucesso.</div>
+        ) : null}
+
+        {catalogError ? (
+          <div className="mb-6 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+            {catalogError}
+          </div>
+        ) : null}
+
+        <section className="mb-8 grid gap-4 lg:grid-cols-4">
+          <div className="rounded-[28px] border border-white/5 bg-white/[0.03] p-5">
+            <Text className="text-[9px] uppercase tracking-[0.3em] text-white/35">Alertas</Text>
+            <div className="mt-2 font-mono text-3xl font-bold">{alertCount}</div>
+          </div>
+          <div className="rounded-[28px] border border-white/5 bg-white/[0.03] p-5">
+            <Text className="text-[9px] uppercase tracking-[0.3em] text-white/35">Críticos</Text>
+            <div className="mt-2 font-mono text-3xl font-bold text-red-300">{criticalCount}</div>
+          </div>
+          <div className="rounded-[28px] border border-white/5 bg-white/[0.03] p-5">
+            <Text className="text-[9px] uppercase tracking-[0.3em] text-white/35">Baixo estoque</Text>
+            <div className="mt-2 font-mono text-3xl font-bold text-yellow-300">{lowStockCount}</div>
+          </div>
+          <div className="rounded-[28px] border border-white/5 bg-white/[0.03] p-5">
+            <Text className="text-[9px] uppercase tracking-[0.3em] text-white/35">Sem estoque</Text>
+            <div className="mt-2 font-mono text-3xl font-bold text-red-300">{outOfStockCount}</div>
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <span className="text-[9px] font-bold uppercase tracking-[0.35em] text-white/40">Produtos</span>
+            <Link href={`${orgBase}/catalog/new`} className="text-[9px] font-bold uppercase tracking-[0.3em] text-[#C9A84C]">
+              Revisar com IA
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 gap-4">
-            {products.map((product, index) => (
-              <div
-                key={product.id}
-                className="p-8 rounded-[48px] bg-white/[0.02] border border-white/5 flex items-center justify-between group hover:bg-white/[0.04] transition-all gap-8"
-              >
-                <div className="flex items-center gap-10 min-w-0">
-                  <div className="w-20 h-20 rounded-[32px] bg-white/10 relative overflow-hidden group">
-                    <img src={`https://i.pravatar.cc/150?u=thumb_${index}`} className="w-full h-full object-cover" alt="" />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <ImageIcon size={20} className="text-white/60" />
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col space-y-2 min-w-0">
-                    <Heading as="h3" className="text-xl tracking-tight uppercase leading-none truncate">
-                      {product.name}
-                    </Heading>
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <span className="px-3 py-1 rounded-full bg-white/5 text-[8px] font-bold uppercase tracking-widest text-[#C9A84C] border border-[#C9A84C]/20">
-                        {product.price}
-                      </span>
-                      <div className="flex gap-1 flex-wrap">
-                        {product.tags.map((tag) => (
-                          <span key={tag} className="px-2 py-0.5 rounded-md bg-white/5 text-[7px] text-white/20 uppercase tracking-[0.2em] font-bold">
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-8 flex-shrink-0">
-                  <div className="flex flex-col items-center">
-                    <span className="text-[9px] uppercase font-bold tracking-widest text-white/20 mb-1">Look readiness</span>
-                    <div className="flex flex-col items-center">
-                      <div className="w-32 h-1.5 bg-white/5 rounded-full overflow-hidden mb-2">
-                        <div className={`h-full ${product.score > 80 ? "bg-[#C9A84C]" : "bg-yellow-500"} transition-all duration-1000`} style={{ width: `${product.score}%` }} />
-                      </div>
-                      <span className="text-[10px] font-mono text-white/40">{product.score}%</span>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <Link
-                      href={`${orgBase}/catalog/new`}
-                      className={`inline-flex items-center gap-2 px-6 py-4 rounded-full text-[9px] font-bold uppercase tracking-widest border transition-all active:scale-95 ${product.alert
-                          ? "bg-yellow-500/10 text-yellow-500 border-yellow-500/20 hover:bg-yellow-500/15"
-                          : "bg-white/5 text-white/70 border-white/10 hover:text-white hover:bg-white/10"
-                        }`}
-                    >
-                      <Sparkles size={14} />
-                      {product.alert ? "Corrigir AI" : "Abrir produto"}
-                    </Link>
-
-                    <Link
-                      href={`${orgBase}/catalog/new`}
-                      className="inline-flex w-14 h-14 items-center justify-center rounded-full border border-white/5 text-white/20 hover:text-white hover:border-[#C9A84C]/40 transition-all"
-                      aria-label={`Editar ${product.name}`}
-                    >
-                      <Edit3 size={18} />
-                    </Link>
-
-                    <Link
-                      href={`${orgBase}/dashboard`}
-                      className="inline-flex w-14 h-14 items-center justify-center rounded-full border border-white/5 text-white/20 hover:text-white hover:border-[#C9A84C]/40 transition-all"
-                      aria-label={`Voltar ao painel para ${product.name}`}
-                    >
-                      <Eye size={18} />
-                    </Link>
-                  </div>
-                </div>
+          {products.length ? (
+            <div className="space-y-4">
+              {products.map((product) => (
+                <ProductCard key={product.id} orgBase={orgBase} product={product} />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-[32px] border border-dashed border-white/10 bg-white/[0.02] p-10 text-center">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-white/5 text-white/20">
+                <ImageIcon size={26} />
               </div>
-            ))}
-          </div>
-        </div>
+              <Heading as="h3" className="text-xl uppercase tracking-tight">
+                Catálogo vazio
+              </Heading>
+              <Text className="mt-2 text-sm text-white/45">Cadastre o primeiro produto por foto para liberar o inventário operacional.</Text>
+              <Link
+                href={`${orgBase}/catalog/new`}
+                className="mt-6 inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-[10px] font-bold uppercase tracking-[0.24em] text-black"
+              >
+                <Plus size={14} />
+                Adicionar produto
+              </Link>
+            </div>
+          )}
+        </section>
       </main>
-
-      <div className="fixed bottom-10 right-10 z-50">
-        <div className="p-6 rounded-[40px] bg-black/80 backdrop-blur-3xl border border-[#C9A84C]/30 shadow-2xl flex items-center gap-6">
-          <div className="flex flex-col">
-            <span className="text-[10px] uppercase font-bold tracking-widest text-white/40 mb-1">Queue Status</span>
-            <span className="text-xs font-bold text-[#C9A84C] flex items-center gap-2">
-              <Sparkles size={12} /> AI Enrichment active
-            </span>
-          </div>
-          <div className="h-10 w-px bg-white/10" />
-          <div className="flex -space-x-3">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="w-8 h-8 rounded-full border-2 border-black bg-white/10" />
-            ))}
-          </div>
-        </div>
-      </div>
     </div>
-  );
-}
-
-function NavItem({ href, icon, label, active = false }: NavItemProps) {
-  return (
-    <Link
-      href={href}
-      className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all ${active ? "bg-white text-black shadow-2xl" : "text-white/40 hover:bg-white/5 hover:text-white"
-        }`}
-    >
-      {icon}
-      <span className="text-[11px] font-bold uppercase tracking-widest">{label}</span>
-    </Link>
   );
 }

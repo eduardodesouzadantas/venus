@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { processGamificationTriggerEvent } from "@/lib/gamification/events";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,7 @@ interface ShareReward {
 
 interface ShareEventRow {
   id: string;
+  user_id: string | null;
   confirmed_at: string | null;
   reward_id: string | null;
   share_rewards: ShareReward | null;
@@ -41,7 +43,7 @@ export async function POST(req: NextRequest) {
 
   const { data: shareEvent } = await supabase
     .from("share_events")
-    .select("id, confirmed_at, reward_id, share_rewards(type, value, label)")
+    .select("id, user_id, confirmed_at, reward_id, share_rewards(type, value, label)")
     .eq("ref_code", ref_code)
     .eq("org_id", org_id)
     .maybeSingle<ShareEventRow>();
@@ -74,6 +76,26 @@ export async function POST(req: NextRequest) {
     console.error("[share/confirm] Update error:", updateError);
     return NextResponse.json({ error: "Failed to confirm share" }, { status: 500 });
   }
+
+  await processGamificationTriggerEvent(
+    {
+      orgId: org_id,
+      eventType: "result_shared",
+      customerKey: shareEvent.user_id || ref_code,
+      customerLabel: shareEvent.user_id || ref_code,
+      eventKey: `result_shared:${org_id}:${ref_code}`,
+      actorUserId: user.id,
+      reason: "Share confirmado",
+      payload: {
+        ref_code,
+        platform: platform ?? null,
+        reward_id: shareEvent.reward_id,
+      },
+    },
+    { now: new Date() }
+  ).catch((eventError) => {
+    console.warn("[GAMIFICATION] failed to process result_shared", eventError);
+  });
 
   return NextResponse.json({ success: true, reward: rewardUnlocked });
 }

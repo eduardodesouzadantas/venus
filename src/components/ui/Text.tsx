@@ -1,7 +1,7 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 
-export interface TextProps extends React.HTMLAttributes<HTMLParagraphElement> {}
+export type TextProps = React.HTMLAttributes<HTMLParagraphElement>;
 
 export function Text({ className, ...props }: TextProps) {
   return (

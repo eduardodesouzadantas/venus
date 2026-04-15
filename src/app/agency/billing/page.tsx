@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { listAgencyBillingRows, type AgencyBillingRow } from "@/lib/billing";
+import { isStripeBillingConfigured, isStripeBillingStatusBlocking, normalizeStripeBillingStatus, resolveStripePriceId } from "@/lib/billing/stripe";
 import { resolveAgencySession } from "@/lib/agency";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { queryWithTimeout } from "@/lib/supabase/query-timeout";
@@ -53,9 +54,21 @@ function formatDate(value: string | null) {
 }
 
 function statusTone(row: AgencyBillingRow) {
+  const billingStatus = normalizeStripeBillingStatus(row.billing_status);
+  if (billingStatus && isStripeBillingStatusBlocking(billingStatus)) return "red";
+  if (billingStatus === "trialing") return "gold";
   if (row.kill_switch || row.status === "blocked") return "red";
   if (row.status === "suspended" || row.billing_risk === "high") return "amber";
   return "green";
+}
+
+function isBillingLive(row: AgencyBillingRow) {
+  const billingStatus = normalizeStripeBillingStatus(row.billing_status);
+  if (billingStatus) {
+    return billingStatus === "active" || billingStatus === "trialing";
+  }
+
+  return row.status === "active" && !row.kill_switch;
 }
 
 function statusClass(tone: "green" | "amber" | "red" | "gold") {
@@ -144,10 +157,11 @@ export default async function AgencyBillingPage() {
     loadCommissionHistory().catch(() => [] as CommissionHistoryRow[]),
   ]);
 
-  const activeRows = rows.filter((row) => row.status === "active" && !row.kill_switch);
+  const stripeConfigured = isStripeBillingConfigured();
+  const activeRows = rows.filter((row) => isBillingLive(row));
   const mrrTotal = activeRows.reduce((sum, row) => sum + planPrice(row.plan_id), 0);
   const breakdown = buildBreakdown(rows);
-  const pendingRows = rows.filter((row) => row.status !== "active" || row.kill_switch || row.billing_risk === "high");
+  const pendingRows = rows.filter((row) => !isBillingLive(row) || row.billing_risk === "high");
   const revenueTotal = revenueRows.reduce((sum, row) => sum + Math.round((row.revenue_cents || 0) / 100), 0);
   const costTotal = revenueRows.reduce((sum, row) => sum + Math.round((row.cost_cents || 0) / 100), 0);
   const commissionTotal = commissionRows.reduce((sum, row) => sum + Number(row.commission_amount || 0), 0);
@@ -182,6 +196,17 @@ export default async function AgencyBillingPage() {
         <Kpi label="Planos pagos" value={String(activeRows.filter((row) => planPrice(row.plan_id) > 0).length)} sub="base ativa monetizada" tone="green" />
         <Kpi label="Pendências" value={String(pendingRows.length)} sub="inadimplência, risco ou bloqueio" tone={pendingRows.length ? "amber" : "green"} />
         <Kpi label="Receita operacional 30d" value={formatMoney(revenueTotal)} sub={`custo registrado ${formatMoney(costTotal)}`} tone="gold" />
+      </section>
+
+      <section className="border-b border-[#1e2820] bg-[#0f1410] px-6 py-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className={`font-mono text-[10px] uppercase tracking-[1px] ${stripeConfigured ? "text-[#00ff88]" : "text-[#ffaa00]"}`}>
+            Stripe {stripeConfigured ? "configurado" : "fallback ativo"}
+          </span>
+          <span className="font-mono text-[10px] uppercase tracking-[1px] text-[#6b7d6c]">
+            Checkout por org via webhook e tabela de subscriptions
+          </span>
+        </div>
       </section>
 
       <section className="grid gap-[1px] bg-[#1e2820] lg:grid-cols-[1fr_360px]">
@@ -224,13 +249,31 @@ export default async function AgencyBillingPage() {
                         <p className="mt-1 text-xs text-[#6b7d6c]">
                           {row.slug} / plano {row.plan_id || "sem dados"}
                         </p>
+                        {row.billing_status ? (
+                          <p className="mt-1 text-[10px] uppercase tracking-[1px] text-[#C9A84C]">
+                            Stripe {row.billing_status}
+                          </p>
+                        ) : null}
                       </div>
                       <span className={`w-fit border px-3 py-1 font-mono text-[10px] uppercase ${statusClass(tone)}`}>
                         {row.kill_switch ? "kill switch" : row.status}
                       </span>
-                      <Link href={`/agency/merchants/${row.id}`} className="font-mono text-[11px] uppercase tracking-[1px] text-[#C9A84C]">
-                        Abrir loja
-                      </Link>
+                      <div className="flex flex-wrap gap-2">
+                        <Link href={`/agency/merchants/${row.id}`} className="font-mono text-[11px] uppercase tracking-[1px] text-[#C9A84C]">
+                          Abrir loja
+                        </Link>
+                        <form action="/api/agency/billing/checkout" method="post">
+                          <input type="hidden" name="orgId" value={row.id} />
+                          <input type="hidden" name="planId" value={row.plan_id || "starter"} />
+                          <button
+                            type="submit"
+                            className="font-mono text-[11px] uppercase tracking-[1px] text-white/70 disabled:cursor-not-allowed disabled:opacity-40"
+                            disabled={!stripeConfigured || !resolveStripePriceId(row.plan_id)}
+                          >
+                            {stripeConfigured ? "Ativar Stripe" : "Stripe indisponível"}
+                          </button>
+                        </form>
+                      </div>
                     </div>
                   );
                 })

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Upload, X, Sparkles, CheckCircle2, ChevronRight, LayoutGrid, Type, ShieldCheck, ShoppingBag, Eye, Save, Plus, Star } from "lucide-react";
+import { Upload, X, Sparkles, CheckCircle2, ChevronRight, LayoutGrid, ShieldCheck, Eye, Plus, Star } from "lucide-react";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { VenusButton } from "@/components/ui/VenusButton";
@@ -86,7 +86,7 @@ export default function AdminCatalogAddPage() {
              <div className="grid grid-cols-2 gap-4">
                 {images.map((img, i) => (
                   <div key={i} className="relative aspect-square rounded-2xl overflow-hidden border border-white/10 group">
-                     <img src={img} className="w-full h-full object-cover" />
+             <img src={img} alt="Imagem enviada do produto" className="w-full h-full object-cover" />
                      <button 
                         onClick={() => setImages(prev => prev.filter((_, idx) => idx !== i))}
                         className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/60 backdrop-blur-md flex items-center justify-center text-white/60 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -270,7 +270,7 @@ export default function AdminCatalogAddPage() {
              >
                 Adicionar Outro
              </VenusButton>
-             <button className="text-white/20 text-[9px] uppercase tracking-widest font-bold underline" onClick={() => (window as any).location.href = "/"}>Voltar ao Painel</button>
+             <button className="text-white/20 text-[9px] uppercase tracking-widest font-bold underline" onClick={() => { window.location.href = "/"; }}>Voltar ao Painel</button>
           </div>
         )}
       </div>

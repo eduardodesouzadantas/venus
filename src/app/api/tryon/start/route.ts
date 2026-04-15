@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { submitTryOn } from "@/lib/tryon/client";
+import {
+  checkInMemoryRateLimit,
+  logSecurityEvent,
+  recordSecurityAlert,
+} from "@/lib/reliability/security";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +43,45 @@ export async function POST(req: NextRequest) {
 
   if (!membership) {
     return NextResponse.json({ error: "Forbidden: not a member of this org" }, { status: 403 });
+  }
+
+  const rateLimit = checkInMemoryRateLimit({
+    scope: "tryon_start",
+    request: req,
+    limit: 10,
+    windowMs: 10 * 60 * 1000,
+    keyParts: [org_id, user.id],
+  });
+
+  if (!rateLimit.allowed) {
+    logSecurityEvent("warn", "rate_limit_exceeded", {
+      route: "tryon/start",
+      orgId: org_id,
+      userId: user.id,
+      retryAfterSeconds: rateLimit.retryAfterSeconds,
+      limit: rateLimit.limit,
+    });
+
+    await recordSecurityAlert(createAdminClient(), {
+      orgId: org_id,
+      orgSlug: null,
+      eventType: "security.rate_limited",
+      summary: "Try-on start rate limit exceeded",
+      details: {
+        route: "tryon/start",
+        user_id: user.id,
+        retry_after_seconds: rateLimit.retryAfterSeconds,
+        limit: rateLimit.limit,
+      },
+    }).catch(() => null);
+
+    return NextResponse.json(
+      { error: "rate_limited", retry_after_seconds: rateLimit.retryAfterSeconds },
+      {
+        status: 429,
+        headers: { "Retry-After": String(rateLimit.retryAfterSeconds || 60) },
+      }
+    );
   }
 
   // Verificar produto pertence à org
@@ -99,7 +144,12 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ request_id: requestId });
   } catch (error) {
-    console.error("[tryon/start] Submit error:", error);
+    logSecurityEvent("error", "tryon_start_failed", {
+      route: "tryon/start",
+      orgId: org_id,
+      userId: user.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json({ error: "Failed to start try-on" }, { status: 500 });
   }
 }

@@ -4,9 +4,10 @@
  */
 
 import { generateWACopy } from "./copy";
-import { UserContext } from "@/types/whatsapp";
+import { UserContext, type AudienceSegment } from "@/types/whatsapp";
 import { createWhatsAppClient } from "@/lib/supabase/whatsapp-client";
 import { hydrateWhatsAppConversationContext } from "@/lib/whatsapp/context-bridge";
+import { maskPhone } from "@/lib/privacy/logging";
 
 const supabase = createWhatsAppClient();
 
@@ -22,12 +23,12 @@ export const triggerReEngagement = async (
 
   const orgSlug = hydratedContext.orgSlug || user.context.orgSlug;
   if (!orgSlug) {
-    console.warn(`[AUTOMAÇÃO] Skipping re-engagement for ${user.phone} without org_slug`);
+    console.warn(`[AUTOMAÇÃO] Skipping re-engagement for ${maskPhone(user.phone)} without org_slug`);
     return;
   }
 
   // 1. Identify or Create Conversation
-  const { data: conv, error: convError } = await supabase
+  const { data: conv } = await supabase
     .from('whatsapp_conversations')
     .select('id, status, org_slug')
     .eq('user_phone', user.phone)
@@ -61,7 +62,7 @@ export const triggerReEngagement = async (
     triggerType === 'abandoned_tryon' ? 'try_on_users' : 
     triggerType === 'high_intent_exit' ? 'alta_intencao' : 'inativos';
     
-  const copy = generateWACopy('cross_sell', segmentKey as any, 'premium');
+    const copy = generateWACopy('cross_sell', segmentKey as AudienceSegment, 'premium');
 
   // 3. Send AI Message
   const text = `${copy.headline}: ${copy.body} ${copy.cta}`;
@@ -88,25 +89,39 @@ export const triggerReEngagement = async (
     .eq('id', conversationId)
     .eq('org_slug', orgSlug);
 
-  console.log(`[AUTOMAÇÃO] Mensagem de reajuste enviada para ${user.phone} via ${triggerType}`);
+  console.log(`[AUTOMAÇÃO] Mensagem de reajuste enviada via ${triggerType}`, {
+    phone: maskPhone(user.phone),
+    orgSlug,
+  });
 };
 
 /**
  * Hook-like function to be called on page exit or inactivity
  */
-export const trackPotentialAbandonment = (stats: any, userData: any) => {
+type LookStats = { view?: number; try_on?: number };
+type AbandonmentStats = {
+  looks?: Record<string, LookStats>;
+};
+
+type AbandonmentUserData = {
+  phone?: string;
+  orgSlug?: string;
+  name?: string;
+};
+
+export const trackPotentialAbandonment = (stats: AbandonmentStats, userData: AbandonmentUserData) => {
   if (!userData?.phone || !userData?.orgSlug) return;
 
   // Logic: View count > 5 or Try-on used but no final CTA click
-  const totalViews = Object.values(stats.looks || {}).reduce((acc: number, curr: any) => acc + (curr.view || 0), 0);
-  const tryOnUsed = Object.values(stats.looks || {}).reduce((acc: number, curr: any) => acc + (curr.try_on || 0), 0);
+  const totalViews = Object.values(stats.looks || {}).reduce((acc: number, curr: LookStats) => acc + (curr.view || 0), 0);
+  const tryOnUsed = Object.values(stats.looks || {}).reduce((acc: number, curr: LookStats) => acc + (curr.try_on || 0), 0);
 
   if (tryOnUsed > 0 && totalViews > 3) {
      // Scenario: User tested but didn't buy
      setTimeout(() => {
         // Double check if they bought (not implemented in this mock)
-       triggerReEngagement(
-          { name: userData.name, phone: userData.phone, context: { ...(stats as any), orgSlug: userData.orgSlug } }, 
+      triggerReEngagement(
+          { name: userData.name || "", phone: userData.phone || "", context: { ...(stats as Record<string, unknown>), orgSlug: userData.orgSlug || "" } as UserContext }, 
           'abandoned_tryon'
         );
      }, 1000 * 60 * 5); // 5 minutes lag

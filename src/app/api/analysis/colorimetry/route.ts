@@ -1,6 +1,12 @@
 import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 import type { ColorimetryAnalysisData } from "@/types/onboarding";
+import {
+  checkInMemoryRateLimit,
+  logSecurityEvent,
+  recordSecurityAlert,
+} from "@/lib/reliability/security";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +30,12 @@ const FALLBACK_COLORIMETRY: ColorimetryAnalysisData = {
   justification:
     "A leitura neutra prioriza equilíbrio, contraste controlado e cores que mantêm a imagem limpa sem exagero. Quando a análise não consegue ser concluída com segurança, a Venus retorna uma base segura e versátil para não travar o fluxo.",
 };
+
+const COLORIMETRY_RATE_LIMIT = {
+  limit: 4,
+  windowMs: 10 * 60 * 1000,
+};
+const MAX_IMAGE_BASE64_LENGTH = 15_000_000;
 
 function normalizeText(value: unknown): string {
   return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
@@ -108,13 +120,56 @@ export async function POST(req: NextRequest) {
   const orgId = normalizeText(body.orgId);
 
   if (!imageBase64) {
-    console.warn("[analysis/colorimetry] missing imageBase64", { orgId });
+    logSecurityEvent("warn", "missing_ai_image", { route: "analysis/colorimetry", orgId: orgId || null });
+    return fallbackResponse();
+  }
+
+  if (imageBase64.length > MAX_IMAGE_BASE64_LENGTH) {
+    logSecurityEvent("warn", "ai_payload_too_large", {
+      route: "analysis/colorimetry",
+      orgId: orgId || null,
+      imageLength: imageBase64.length,
+      maxLength: MAX_IMAGE_BASE64_LENGTH,
+    });
+    return fallbackResponse();
+  }
+
+  const rateLimit = checkInMemoryRateLimit({
+    scope: "colorimetry",
+    request: req,
+    limit: COLORIMETRY_RATE_LIMIT.limit,
+    windowMs: COLORIMETRY_RATE_LIMIT.windowMs,
+    keyParts: [orgId || "global"],
+  });
+
+  if (!rateLimit.allowed) {
+    logSecurityEvent("warn", "rate_limit_exceeded", {
+      route: "analysis/colorimetry",
+      orgId: orgId || null,
+      retryAfterSeconds: rateLimit.retryAfterSeconds,
+      limit: rateLimit.limit,
+    });
+
+    if (orgId) {
+      await recordSecurityAlert(createAdminClient(), {
+        orgId,
+        orgSlug: null,
+        eventType: "security.rate_limited",
+        summary: "Colorimetry analysis rate limit exceeded",
+        details: {
+          route: "analysis/colorimetry",
+          retry_after_seconds: rateLimit.retryAfterSeconds,
+          limit: rateLimit.limit,
+        },
+      }).catch(() => null);
+    }
+
     return fallbackResponse();
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    console.warn("[analysis/colorimetry] missing OPENAI_API_KEY", { orgId });
+    logSecurityEvent("warn", "missing_openai_key", { route: "analysis/colorimetry", orgId: orgId || null });
     return fallbackResponse();
   }
 
@@ -164,7 +219,11 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(payload);
   } catch (error) {
-    console.error("[analysis/colorimetry] error:", error);
+    logSecurityEvent("error", "analysis_failed", {
+      route: "analysis/colorimetry",
+      orgId: orgId || null,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return fallbackResponse();
   }
 }

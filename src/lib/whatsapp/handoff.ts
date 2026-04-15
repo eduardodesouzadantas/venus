@@ -2,6 +2,8 @@ import { LookData } from "@/types/result";
 import type { WhatsAppLookSummary } from "@/types/whatsapp";
 import { describeLookIntelligence } from "@/lib/whatsapp/fashion-consultant";
 import { buildVenusWhatsAppLeadIn, type VenusResultState } from "@/lib/venus/brand";
+import type { VenusStylistAudit } from "@/lib/venus/audit/engine";
+import type { WhatsAppStylistCommercePlan } from "@/lib/whatsapp/stylist-engine";
 
 type HandoffLook = WhatsAppLookSummary & {
   items?: Array<NonNullable<LookData["items"]>[number]>;
@@ -26,6 +28,8 @@ export interface WhatsAppHandoffInput {
     reason: string;
     payload?: any;
   };
+  audit?: VenusStylistAudit | null;
+  commerce?: WhatsAppStylistCommercePlan | null;
 }
 
 const normalizePhone = (value?: string | null) => (value || "").replace(/\D/g, "");
@@ -65,6 +69,8 @@ export function buildWhatsAppHandoffMessage(input: WhatsAppHandoffInput) {
     state: input.resultState,
     lookName: input.lookSummary?.[0]?.name || input.lastTryOn?.product_name || null,
   });
+  const audit = input.audit;
+  const commerce = input.commerce;
   const style = input.styleIdentity || input.dominantStyle || "sua assinatura de estilo";
   const goal = input.imageGoal || "seguir evoluindo a sua imagem";
   const outcome = inferOutcome(input);
@@ -77,19 +83,38 @@ export function buildWhatsAppHandoffMessage(input: WhatsAppHandoffInput) {
 
   const lines = [
     leadIntro,
+    audit ? audit.whatsapp.leadIn : null,
+    audit ? audit.opening.title : null,
+    audit ? audit.opening.subtitle : null,
     isAggressive
       ? `Esse resultado ganhou presença e já abriu caminho para a próxima peça certa.`
       : `Quero continuar por aqui com a mesma leitura consultiva.`,
-    `Minha presença ficou mais alinhada com ${style}, com foco em ${goal}.`,
-    `O efeito que eu busco é ${outcome}.`,
+    audit
+      ? `Minha presença ficou mais alinhada com ${audit.diagnosis.positioning.toLowerCase()}`
+      : `Minha presença ficou mais alinhada com ${style}, com foco em ${goal}.`,
+    audit ? `O efeito que eu busco é ${audit.diagnosis.hiddenPotential}` : `O efeito que eu busco é ${outcome}.`,
+    commerce?.openingLine || null,
+    commerce?.summaryLine || null,
     lastTryOn?.image_url
       ? `Acabei de experimentar o look ${lastTryOn.product_name || "personalizado"} e quero entender como levar isso para as peças certas.`
       : topLook
         ? `O look que mais fez sentido foi ${topLook.name}${topLook.explanation ? `, porque ${trimSentence(topLook.explanation)}` : ""}${intelligence ? ` • ${trimSentence(intelligence)}` : ""}.`
         : `Quero entender a próxima opção mais coerente com o meu perfil.`,
+    audit?.buyNow.looks?.[0]
+      ? `Se eu for comprar agora, começo por ${audit.buyNow.looks[0].name}${audit.buyNow.looks[0].whenToWear ? `, que funciona melhor para ${audit.buyNow.looks[0].whenToWear}` : ""}.`
+      : null,
+    commerce?.completeLooks?.[0]?.items?.length
+      ? `Para montar o conjunto completo, eu começaria por ${commerce.completeLooks[0].items
+          .map((item) => item.name)
+          .slice(0, 3)
+          .join(" + ")}.`
+      : null,
+    commerce?.upsellLine || null,
+    commerce?.crossSellLine || null,
+    commerce?.alternativeLine || null,
     isAggressive ? `Esse visual me transmite confiança para seguir.` : null,
     secondLook && !isAggressive ? `Se fizer sentido, me mostra outra opção no mesmo clima.` : null,
-    `Pode me orientar com a próxima etapa?`,
+    audit ? audit.whatsapp.cta : `Pode me orientar com a próxima etapa?`,
   ].filter(Boolean) as string[];
 
   return lines.join("\n");

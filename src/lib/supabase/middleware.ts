@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import {
   fetchTenantBySlug,
+  fetchTenantById,
   isAgencyRole,
   isTenantActive,
   resolveTenantContext,
@@ -97,6 +98,17 @@ export async function updateSession(request: NextRequest) {
 
     const orgSlug = pathname.split("/")[2] || "";
     const authOrgSlug = tenantContext.orgSlug || "";
+    const authOrgId = tenantContext.orgId || "";
+
+    if (authOrgId) {
+      const tenantById = await fetchTenantById(supabase, authOrgId);
+      if (tenantById.org && isTenantActive(tenantById.org)) {
+        if (orgSlug && tenantById.org.slug !== orgSlug) {
+          return redirectTo("/merchant");
+        }
+        return supabaseResponse;
+      }
+    }
 
     if (!authOrgSlug || authOrgSlug !== orgSlug) {
       return redirectTo("/merchant");

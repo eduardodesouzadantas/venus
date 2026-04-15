@@ -110,6 +110,25 @@ function readMetadata(metadata: Record<string, unknown> | null | undefined, keys
   return "";
 }
 
+export async function fetchOrgIdFromSlug(supabase: SupabaseClient, slug: string) {
+  const normalizedSlug = normalizeTenantSlug(slug);
+  if (!normalizedSlug) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("orgs")
+    .select("id")
+    .eq("slug", normalizedSlug)
+    .maybeSingle();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return data.id;
+}
+
 export function resolveTenantContext(user?: Pick<User, "email" | "app_metadata" | "user_metadata"> | null): TenantContext {
   if (!user) {
     return { orgSlug: null, orgId: null, role: null, email: null, name: null };
@@ -157,6 +176,90 @@ export function isTenantActive(record?: Pick<TenantRecord, "status" | "kill_swit
   }
 
   return record.status === "active" && !record.kill_switch;
+}
+
+export function getTenantOperationalError(record?: Pick<TenantRecord, "status" | "kill_switch" | "slug"> | null): string | null {
+  if (!record) {
+    return "Tenant not found";
+  }
+
+  if (record.kill_switch) {
+    return `Tenant ${record.slug} is paused by administrator`;
+  }
+
+  if (record.status === "suspended") {
+    return `Tenant ${record.slug} is suspended`;
+  }
+
+  if (record.status === "blocked") {
+    return `Tenant ${record.slug} is blocked`;
+  }
+
+  return null;
+}
+
+export function isValidMembershipRole(role: string | null | undefined) {
+  const normalizedRole = normalizeString(role);
+  const validRoles = new Set([
+    "agency_owner",
+    "agency_admin",
+    "agency_ops",
+    "agency_support",
+    "merchant_owner",
+    "merchant_manager",
+    "merchant_editor",
+    "merchant_viewer",
+  ]);
+  return validRoles.has(normalizedRole);
+}
+
+export function isAgencyRoleStrict(role: string | null | undefined) {
+  const normalizedRole = normalizeString(role);
+  return normalizedRole.startsWith("agency_");
+}
+
+export function isMerchantRoleStrict(role: string | null | undefined) {
+  const normalizedRole = normalizeString(role);
+  return normalizedRole.startsWith("merchant_");
+}
+
+export function canManageOrg(role: string | null | undefined) {
+  const normalizedRole = normalizeString(role);
+  const managementRoles = new Set([
+    "agency_owner",
+    "agency_admin",
+    "merchant_owner",
+    "merchant_manager",
+  ]);
+  return managementRoles.has(normalizedRole);
+}
+
+export function canEditCatalog(role: string | null | undefined) {
+  const normalizedRole = normalizeString(role);
+  const editRoles = new Set([
+    "agency_owner",
+    "agency_admin",
+    "agency_ops",
+    "merchant_owner",
+    "merchant_manager",
+    "merchant_editor",
+  ]);
+  return editRoles.has(normalizedRole);
+}
+
+export function canViewAnalytics(role: string | null | undefined) {
+  const normalizedRole = normalizeString(role);
+  const viewRoles = new Set([
+    "agency_owner",
+    "agency_admin",
+    "agency_ops",
+    "agency_support",
+    "merchant_owner",
+    "merchant_manager",
+    "merchant_editor",
+    "merchant_viewer",
+  ]);
+  return viewRoles.has(normalizedRole);
 }
 
 export async function fetchTenantBySlug(supabase: SupabaseClient, slug: string) {
@@ -253,6 +356,32 @@ export async function fetchMerchantMembership(
   }
 
   const { data, error } = await query.maybeSingle();
+
+  if (error) {
+    return { member: null as TenantMemberRecord | null, error };
+  }
+
+  return { member: (data as TenantMemberRecord | null) ?? null, error: null };
+}
+
+export async function fetchMembershipByOrgId(
+  supabase: SupabaseClient,
+  userId: string,
+  orgId: string
+) {
+  const normalizedUserId = normalizeString(userId);
+  const normalizedOrgId = normalizeString(orgId);
+
+  if (!normalizedUserId || !normalizedOrgId) {
+    return { member: null as TenantMemberRecord | null, error: null };
+  }
+
+  const { data, error } = await supabase
+    .from("org_members")
+    .select(ORG_MEMBER_SELECT_COLUMNS)
+    .eq("user_id", normalizedUserId)
+    .eq("org_id", normalizedOrgId)
+    .maybeSingle();
 
   if (error) {
     return { member: null as TenantMemberRecord | null, error };

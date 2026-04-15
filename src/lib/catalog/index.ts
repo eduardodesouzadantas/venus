@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { StockStatus } from "@/lib/catalog/stock";
 
 export interface Product {
   id: string;
@@ -11,6 +12,15 @@ export interface Product {
   price_range: string | null;
   image_url: string | null;
   external_url: string | null;
+  stock?: number | null;
+  stock_qty?: number | null;
+  reserved_qty?: number | null;
+  stock_status?: StockStatus | null;
+  description?: string | null;
+  persuasive_description?: string | null;
+  emotional_copy?: string | null;
+  tags?: string[] | null;
+  size_type?: string | null;
   created_at: string;
   style_direction?: "Masculina" | "Feminina" | "Neutra" | null;
   style_tags?: string[] | null;

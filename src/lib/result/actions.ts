@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { redirect } from "next/navigation"
 import { extractLeadSignalsFromSavedResultPayload, findOrCreateLead } from "@/lib/leads"
 import { updateIntentScore, upsertLeadContextByLeadId } from "@/lib/lead-context"
+import { processGamificationTriggerEvent } from "@/lib/gamification/events"
 import { bumpTenantUsageDaily, fetchTenantById, resolveAppTenantOrg } from "@/lib/tenant/core"
 
 function asRecord(value: unknown) {
@@ -146,6 +147,27 @@ export async function updateB2CResult(formData: FormData, dbResultId: string) {
         source: "app",
         resultId: dbResultId,
       },
+    });
+
+    await processGamificationTriggerEvent(
+      {
+        orgId: resolvedTenant.org.id,
+        eventType: "onboarding_completed",
+        customerKey: lead.id,
+        customerLabel: name || lead.name || email || lead.id,
+        eventKey: `onboarding_completed:${resolvedTenant.org.id}:${dbResultId}`,
+        actorUserId: null,
+        reason: "Onboarding concluído",
+        payload: {
+          saved_result_id: dbResultId,
+          lead_id: lead.id,
+          org_slug: resolvedTenant.org.slug,
+          source: "app",
+        },
+      },
+      { now: new Date() }
+    ).catch((eventError) => {
+      console.warn("[GAMIFICATION] failed to process onboarding_completed", eventError);
     });
 
     await supabase.from("tenant_events").insert({

@@ -1,15 +1,7 @@
 import type { CSSProperties } from "react";
-import { DM_Sans, Space_Mono } from "next/font/google";
 
-const dmSans = DM_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "700"],
-});
-
-const spaceMono = Space_Mono({
-  subsets: ["latin"],
-  weight: ["400", "700"],
-});
+const dmSans = { className: "font-[family-name:var(--font-dm-sans)]" };
+const spaceMono = { className: "font-[family-name:var(--font-space-mono)]" };
 
 const themeVars = {
   ["--gold"]: "#C9A84C",

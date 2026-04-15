@@ -6,6 +6,8 @@ import { decideNextAction } from "@/lib/decision-engine";
 import { recordDecisionOutcome } from "@/lib/decision-engine/learning";
 import { bumpTenantUsageDaily } from "@/lib/tenant/core";
 import { loadMetaIntegrationByPhoneNumberId } from "@/lib/whatsapp/meta";
+import { maskPhone } from "@/lib/privacy/logging";
+import { logSecurityEvent } from "@/lib/reliability/security";
 
 export const dynamic = "force-dynamic";
 
@@ -74,7 +76,12 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const payload = (await request.json().catch(() => null)) as WhatsAppWebhookPayload | null;
-  console.log("[DEBUG][WHATSAPP_WEBHOOK] Incoming payload:", JSON.stringify(payload));
+  logSecurityEvent("info", "whatsapp_webhook_received", {
+    route: "meta/whatsapp/webhook",
+    hasPayload: !!payload,
+    entryCount: payload?.entry?.length || 0,
+    changeCount: payload?.entry?.reduce((total, entry) => total + (entry.changes?.length || 0), 0) || 0,
+  });
 
   if (!payload?.entry?.length) {
     return NextResponse.json({ ok: true });
@@ -147,7 +154,11 @@ export async function POST(request: Request) {
             .single();
 
           if (convError) {
-            console.error("[WEBHOOK] conv insert error:", convError);
+            logSecurityEvent("error", "whatsapp_conversation_insert_failed", {
+              route: "meta/whatsapp/webhook",
+              orgSlug: org.slug,
+              error: convError.message,
+            });
           }
 
           finalConversationId = createdConversation?.id || null;
@@ -169,7 +180,11 @@ export async function POST(request: Request) {
         });
 
         if (msgError) {
-          console.error("[WEBHOOK] msg insert error:", msgError);
+          logSecurityEvent("error", "whatsapp_message_insert_failed", {
+            route: "meta/whatsapp/webhook",
+            orgSlug: org.slug,
+            error: msgError.message,
+          });
         }
 
         const seedLead = await findOrCreateLead(admin, {
@@ -244,7 +259,12 @@ export async function POST(request: Request) {
             outcome: "REQUESTED_VARIATION",
             timestamp,
           }).catch((error) => {
-            console.warn("[WEBHOOK] failed to record variation outcome", error);
+            logSecurityEvent("warn", "whatsapp_outcome_record_failed", {
+              route: "meta/whatsapp/webhook",
+              orgSlug: org.slug,
+              outcome: "variation_requested",
+              error: error instanceof Error ? error.message : String(error),
+            });
           });
         } else if (intentEventType === "recommendation_ignored") {
           await recordDecisionOutcome({
@@ -253,7 +273,12 @@ export async function POST(request: Request) {
             outcome: "DROPPED_SESSION",
             timestamp,
           }).catch((error) => {
-            console.warn("[WEBHOOK] failed to record ignored recommendation outcome", error);
+            logSecurityEvent("warn", "whatsapp_outcome_record_failed", {
+              route: "meta/whatsapp/webhook",
+              orgSlug: org.slug,
+              outcome: "recommendation_ignored",
+              error: error instanceof Error ? error.message : String(error),
+            });
           });
         } else if (intentEventType === "inactive_24h") {
           await recordDecisionOutcome({
@@ -262,7 +287,12 @@ export async function POST(request: Request) {
             outcome: "NO_RESPONSE",
             timestamp,
           }).catch((error) => {
-            console.warn("[WEBHOOK] failed to record inactivity outcome", error);
+            logSecurityEvent("warn", "whatsapp_outcome_record_failed", {
+              route: "meta/whatsapp/webhook",
+              orgSlug: org.slug,
+              outcome: "inactive_24h",
+              error: error instanceof Error ? error.message : String(error),
+            });
           });
         }
 
@@ -322,7 +352,12 @@ export async function POST(request: Request) {
                             ? 35
                             : 40;
 
-            console.log(`[DEBUG][WHATSAPP_WEBHOOK] Lead Context loaded for ${userPhone}. Intent detected: ${intent}`);
+            logSecurityEvent("info", "whatsapp_intent_detected", {
+              route: "meta/whatsapp/webhook",
+              orgSlug: org.slug,
+              phone: maskPhone(userPhone),
+              intent,
+            });
 
             const enrichedContext = await upsertLeadContextByLeadId(admin, {
               orgId: org.id,
@@ -346,9 +381,14 @@ export async function POST(request: Request) {
               },
             });
 
-            console.log(`[DEBUG][WHATSAPP_WEBHOOK] Decision Engine running for ${userPhone}`);
             const decision = decideNextAction(enrichedContext);
-            console.log(`[DEBUG][WHATSAPP_WEBHOOK] Decision Outcome: ${decision.chosenAction} (Confidence: ${decision.confidence})`);
+            logSecurityEvent("info", "whatsapp_decision_made", {
+              route: "meta/whatsapp/webhook",
+              orgSlug: org.slug,
+              phone: maskPhone(userPhone),
+              action: decision.chosenAction,
+              confidence: decision.confidence,
+            });
 
             await upsertLeadContextByLeadId(admin, {
               orgId: org.id,
@@ -373,20 +413,37 @@ export async function POST(request: Request) {
                 .maybeSingle();
 
               if (recentVenus) {
-                console.log("[VENUS] resposta recente detectada - skip");
+                logSecurityEvent("info", "whatsapp_recent_reply_skipped", {
+                  route: "meta/whatsapp/webhook",
+                  orgSlug: org.slug,
+                  phone: maskPhone(userPhone),
+                });
               } else {
-                console.log(`[DEBUG][WHATSAPP_WEBHOOK] Generating AI reply for ${userPhone}`);
+                logSecurityEvent("info", "whatsapp_ai_reply_requested", {
+                  route: "meta/whatsapp/webhook",
+                  orgSlug: org.slug,
+                  phone: maskPhone(userPhone),
+                });
                 let venusReply = "";
 
                 try {
                   venusReply = await generateReply({ ...context, state: intent }, text);
                 } catch (replyErr) {
-                  console.error("[DEBUG][WHATSAPP_WEBHOOK] AI Reply Generation Failed:", replyErr);
+                  logSecurityEvent("error", "whatsapp_ai_reply_failed", {
+                    route: "meta/whatsapp/webhook",
+                    orgSlug: org.slug,
+                    phone: maskPhone(userPhone),
+                    error: replyErr instanceof Error ? replyErr.message : String(replyErr),
+                  });
                   venusReply = "Oi! Estou processando sua mensagem com carinho. Só um instante que já te respondo com todos os detalhes.";
                 }
 
                 if (venusReply) {
-                  console.log(`[DEBUG][WHATSAPP_WEBHOOK] Sending response to Graph API for ${userPhone}`);
+                  logSecurityEvent("info", "whatsapp_graph_send_started", {
+                    route: "meta/whatsapp/webhook",
+                    orgSlug: org.slug,
+                    phone: maskPhone(userPhone),
+                  });
                   const graphResponse = await fetch(`https://graph.facebook.com/v25.0/${phoneNumberId}/messages`, {
                     method: "POST",
                     headers: {
@@ -402,10 +459,24 @@ export async function POST(request: Request) {
                   });
 
                   const graphResult = await graphResponse.json().catch(() => ({}));
-                  console.log(`[DEBUG][WHATSAPP_WEBHOOK] Graph API Response:`, JSON.stringify(graphResult));
+                  logSecurityEvent("info", "whatsapp_graph_response", {
+                    route: "meta/whatsapp/webhook",
+                    orgSlug: org.slug,
+                    phone: maskPhone(userPhone),
+                    ok: graphResponse.ok,
+                    status: graphResponse.status,
+                    messageCount: Array.isArray((graphResult as { messages?: unknown[] }).messages)
+                      ? (graphResult as { messages?: unknown[] }).messages?.length || 0
+                      : 0,
+                  });
 
                   if (!graphResponse.ok) {
-                    console.error("[DEBUG][WHATSAPP_WEBHOOK] Failed to send message via Graph API");
+                    logSecurityEvent("warn", "whatsapp_graph_send_failed", {
+                      route: "meta/whatsapp/webhook",
+                      orgSlug: org.slug,
+                      phone: maskPhone(userPhone),
+                      status: graphResponse.status,
+                    });
                   }
 
                   await admin.from("whatsapp_messages").insert({
@@ -432,7 +503,12 @@ export async function POST(request: Request) {
             }
           }
         } catch (venusError) {
-          console.error("[VENUS_STYLIST] error:", venusError);
+          logSecurityEvent("error", "whatsapp_venus_flow_failed", {
+            route: "meta/whatsapp/webhook",
+            orgSlug: org.slug,
+            phone: maskPhone(userPhone),
+            error: venusError instanceof Error ? venusError.message : String(venusError),
+          });
         }
 
         await admin
@@ -465,7 +541,11 @@ export async function POST(request: Request) {
 
           await bumpTenantUsageDaily(admin, org.id, { leads: seedLead.created ? 1 : 0, events_count: 1 });
         } catch (e) {
-          console.error("[WEBHOOK] lead sync error:", e);
+          logSecurityEvent("error", "whatsapp_lead_sync_failed", {
+            route: "meta/whatsapp/webhook",
+            orgSlug: org.slug,
+            error: e instanceof Error ? e.message : String(e),
+          });
         }
       }
     }

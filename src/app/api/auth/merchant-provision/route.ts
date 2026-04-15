@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   ensureTenantCoreRecords,
   fetchMerchantGroupById,
+  fetchTenantBySlug,
   isAgencyRole,
   normalizeTenantSlug,
   resolveTenantContext,
@@ -137,38 +138,16 @@ export async function POST(request: Request) {
   }
 
   const existing = usersPage.users.find((user) => user.email?.toLowerCase() === email.toLowerCase()) || null;
-  const metadata = {
-    org_slug: orgSlug,
-    org_id: orgSlug,
-    role,
-    plan_id: planId,
-    tenant_source: "merchant_provision",
-    branch_name: branchName || name || orgSlug,
-  };
-
-  const userMetadata = {
-    email,
-    name: name || email.split("@")[0],
-    org_slug: orgSlug,
-    org_id: orgSlug,
-    role,
-    plan_id: planId,
-    branch_name: branchName || name || orgSlug,
-  };
 
   const result = existing
     ? await admin.auth.admin.updateUserById(existing.id, {
         password,
-        app_metadata: metadata,
-        user_metadata: userMetadata,
         email_confirm: true,
       })
     : await admin.auth.admin.createUser({
         email,
         password,
         email_confirm: true,
-        app_metadata: metadata,
-        user_metadata: userMetadata,
       });
 
   if (result.error || !result.data.user) {
@@ -226,6 +205,30 @@ export async function POST(request: Request) {
       source: "merchant_provision",
     });
 
+    const canonicalMetadata = {
+      org_slug: orgSlug,
+      org_id: tenantCore.org.id,
+      role,
+      plan_id: planId,
+      tenant_source: "merchant_provision",
+      branch_name: branchName || name || orgSlug,
+    };
+
+    const canonicalUserMetadata = {
+      email,
+      name: name || email.split("@")[0],
+      org_slug: orgSlug,
+      org_id: tenantCore.org.id,
+      role,
+      plan_id: planId,
+      branch_name: branchName || name || orgSlug,
+    };
+
+    await admin.auth.admin.updateUserById(result.data.user.id, {
+      app_metadata: canonicalMetadata,
+      user_metadata: canonicalUserMetadata,
+    });
+
     const loginUrl = new URL("/b2b/login", request.url).toString();
     if (whatsappNumber) {
       const { error: whatsappError } = await admin
@@ -268,7 +271,7 @@ export async function POST(request: Request) {
         user_id: result.data.user.id,
         email: result.data.user.email,
         org_slug: orgSlug,
-        org_id: orgSlug,
+        org_id: tenantCore.org.id,
         tenant_org_id: tenantCore.org.id,
         merchant_group_id: provisionMode === "branch" ? tenantCore.org.group_id || merchantGroupRecord?.id || merchantGroupId || null : null,
         merchant_group_name: provisionMode === "branch" ? merchantGroupRecord?.name || merchantGroupName || null : null,

@@ -7,7 +7,19 @@ import { VenusButton } from "@/components/ui/VenusButton";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
 
 export default function OptInPage() {
-  const { updateData } = useOnboarding();
+  const { updateData, journey } = useOnboarding();
+  const title =
+    journey?.mode === "continue"
+      ? "Retomando seu contexto."
+      : journey?.mode === "light"
+        ? "Seu perfil já está salvo."
+        : "A Venus lê sua presença.";
+  const subtitle =
+    journey?.mode === "continue"
+      ? "Vamos continuar de onde você parou, sem repetir etapas já concluídas."
+      : journey?.mode === "light"
+        ? "Agora só refinamos a leitura visual para esta loja, sem repetir o onboarding inteiro."
+        : "Vamos usar a câmera para refinar proporções, rosto e presença com mais precisão.";
 
   const handleSkip = () => {
     updateData("scanner", { skipped: true });
@@ -18,13 +30,11 @@ export default function OptInPage() {
       <div className="pointer-events-none absolute left-1/2 top-1/2 h-[240px] w-[240px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/5 blur-[72px] sm:h-[300px] sm:w-[300px] sm:blur-[80px]" />
 
       <Heading as="h1" className="z-10 mb-6 text-center font-light italic sm:mb-8">
-        A Venus lê sua presença.
+        {title}
       </Heading>
 
       <div className="relative z-10 w-full max-w-[520px] overflow-hidden rounded-[28px] border border-white/10 bg-white/5 p-6 text-center shadow-2xl backdrop-blur-[30px] sm:rounded-[32px] sm:p-8">
-        <Text className="mb-4 text-white/80 sm:mb-6">
-          Vamos usar a câmera para refinar proporções, rosto e presença com mais precisão.
-        </Text>
+        <Text className="mb-4 text-white/80 sm:mb-6">{subtitle}</Text>
         <Text className="mb-8 text-[14px] text-white/60 sm:mb-10 sm:text-sm">
           Se preferir, você pode seguir sem câmera e ainda receber uma leitura forte com base no que já contou.
         </Text>

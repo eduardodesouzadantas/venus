@@ -40,8 +40,6 @@ async function resolvePublicImageUrl(imageInput: string, orgId: string): Promise
     const res = await fetch(imageInput);
     blob = await res.blob();
   } else {
-    // Unknown format — try sending as-is and let the API decide
-    console.warn("[useTryOn] Unknown image format, attempting to use as-is");
     return imageInput;
   }
 
@@ -60,7 +58,6 @@ async function resolvePublicImageUrl(imageInput: string, orgId: string): Promise
   }
 
   const { publicUrl } = (await uploadRes.json()) as { publicUrl: string };
-  console.log("[useTryOn] Uploaded person image:", publicUrl);
   return publicUrl;
 }
 
@@ -90,7 +87,6 @@ export function useTryOn(): UseTryOnResult {
       model_image,
       product_id,
       org_id,
-      saved_result_id,
     }: {
       model_image: string;
       product_id: string;
@@ -108,23 +104,11 @@ export function useTryOn(): UseTryOnResult {
       try {
         const resolvedProductId = ensureTryOnProductId(product_id);
         if (!resolvedProductId) {
-          console.error("[useTryOn] Invalid product_id before try-on", {
-            product_id,
-            saved_result_id,
-            org_id,
-          });
+          console.error("[useTryOn] Invalid product_id before try-on");
           setError("Produto inválido para try-on.");
           setStatus("failed");
           return;
         }
-
-        // Step 1: Resolve the person image to a public URL
-        console.log("[useTryOn] Resolving person image...", {
-          isDataUri: model_image.startsWith("data:"),
-          isBlob: model_image.startsWith("blob:"),
-          isHttps: model_image.startsWith("https://"),
-          length: model_image.length,
-        });
 
         const resolvedPersonUrl = await resolvePublicImageUrl(model_image, org_id);
 
@@ -142,11 +126,6 @@ export function useTryOn(): UseTryOnResult {
           setStatus("failed");
           return;
         }
-
-        console.log("[useTryOn] Calling /api/tryon/auto with:", {
-          person: resolvedPersonUrl.substring(0, 80),
-          garment: garmentImageUrl.substring(0, 80),
-        });
 
         // Step 3: Call the auto try-on endpoint (no auth required)
         const res = await fetch("/api/tryon/auto", {
@@ -168,7 +147,6 @@ export function useTryOn(): UseTryOnResult {
         }
 
         const autoResult = await res.json();
-        console.log("[useTryOn] Auto result:", autoResult);
 
         // If the image was generated synchronously (within timeout)
         if (autoResult.status === "completed" && autoResult.generatedImageUrl) {
@@ -219,7 +197,7 @@ export function useTryOn(): UseTryOnResult {
         }, 3000);
       } catch (err) {
         clearTimers();
-        console.error("[useTryOn] Error:", err);
+        console.error("[useTryOn] Error during try-on");
         setError(err instanceof Error ? err.message : "Erro de conexão. Verifique sua internet e tente novamente.");
         setStatus("failed");
       }

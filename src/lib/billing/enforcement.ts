@@ -7,6 +7,10 @@ import {
   formatOperationalReason,
   recordOperationalTenantEvent,
 } from "@/lib/reliability/observability";
+import {
+  isStripeBillingStatusBlocking,
+  normalizeStripeBillingStatus,
+} from "@/lib/billing/stripe";
 
 export type HardCapOperation =
   | "saved_result_generation"
@@ -19,7 +23,8 @@ export type HardCapMetric =
   | "estimated_cost_today"
   | "estimated_cost_total"
   | "products"
-  | "whatsapp_messages";
+  | "whatsapp_messages"
+  | "billing_status";
 
 export interface HardCapDecision {
   allowed: boolean;
@@ -123,6 +128,18 @@ function evaluateHardCap(summary: Awaited<ReturnType<typeof getOrgBillingSummary
 
   const planId = summary.plan_id || null;
   const caps = summary.plan_soft_caps;
+  const billingStatus = normalizeStripeBillingStatus(summary.billing_status);
+
+  if (billingStatus && isStripeBillingStatusBlocking(billingStatus)) {
+    return blockDecision(
+      operation,
+      "billing_status",
+      1,
+      1,
+      planId,
+      `A assinatura Stripe está ${billingStatus} e bloqueia esta operação.`
+    );
+  }
 
   if (operation === "saved_result_generation" || operation === "ai_recommendation_generation") {
     if (summary.total_saved_results >= caps.saved_results) {

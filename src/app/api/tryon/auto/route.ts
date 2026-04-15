@@ -1,6 +1,12 @@
 import { fal } from "@fal-ai/client";
 import { NextRequest, NextResponse } from "next/server";
 import { getTryOnResult, getTryOnStatus } from "@/lib/tryon/client";
+import {
+  checkInMemoryRateLimit,
+  logSecurityEvent,
+  recordSecurityAlert,
+} from "@/lib/reliability/security";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +39,10 @@ function buildTryOnInput(personImageUrl: string, garmentImageUrl: string, catego
   };
 }
 
+function isHttpsImageUrl(value: string) {
+  return /^https:\/\/[^\s]+$/i.test(value);
+}
+
 function toRequestId(params: URLSearchParams) {
   return params.get("request_id") || params.get("requestId") || params.get("id") || "";
 }
@@ -52,8 +62,62 @@ export async function POST(req: NextRequest) {
   const category = normalizeText(body.category) || "tops";
 
   if (!personImageUrl || !garmentImageUrl) {
-    console.error("[tryon/auto] Missing images:", { personImageUrl: !!personImageUrl, garmentImageUrl: !!garmentImageUrl });
+    logSecurityEvent("warn", "tryon_missing_images", {
+      route: "tryon/auto",
+      orgId: orgId || null,
+      hasPersonImage: !!personImageUrl,
+      hasGarmentImage: !!garmentImageUrl,
+    });
     return NextResponse.json({ error: "Missing required fields: person_image_url, garment_image_url" }, { status: 400 });
+  }
+
+  if (!isHttpsImageUrl(personImageUrl) || !isHttpsImageUrl(garmentImageUrl)) {
+    logSecurityEvent("warn", "tryon_invalid_image_url", {
+      route: "tryon/auto",
+      orgId: orgId || null,
+      hasPersonImage: isHttpsImageUrl(personImageUrl),
+      hasGarmentImage: isHttpsImageUrl(garmentImageUrl),
+    });
+    return NextResponse.json({ error: "Invalid image url" }, { status: 400 });
+  }
+
+  const rateLimit = checkInMemoryRateLimit({
+    scope: "tryon_auto",
+    request: req,
+    limit: 8,
+    windowMs: 10 * 60 * 1000,
+    keyParts: [orgId || "global"],
+  });
+
+  if (!rateLimit.allowed) {
+    logSecurityEvent("warn", "rate_limit_exceeded", {
+      route: "tryon/auto",
+      orgId: orgId || null,
+      retryAfterSeconds: rateLimit.retryAfterSeconds,
+      limit: rateLimit.limit,
+    });
+
+    if (orgId) {
+      await recordSecurityAlert(createAdminClient(), {
+        orgId,
+        orgSlug: null,
+        eventType: "security.rate_limited",
+        summary: "Try-on auto rate limit exceeded",
+        details: {
+          route: "tryon/auto",
+          retry_after_seconds: rateLimit.retryAfterSeconds,
+          limit: rateLimit.limit,
+        },
+      }).catch(() => null);
+    }
+
+    return NextResponse.json(
+      { error: "rate_limited", retry_after_seconds: rateLimit.retryAfterSeconds },
+      {
+        status: 429,
+        headers: { "Retry-After": String(rateLimit.retryAfterSeconds || 60) },
+      }
+    );
   }
 
   if (!process.env.FAL_KEY) {
@@ -87,10 +151,11 @@ export async function POST(req: NextRequest) {
         ? (result as { images: Array<{ url?: string }> }).images[0]?.url || ""
         : "";
 
-      console.log("[tryon/auto] Result received:", {
+      logSecurityEvent("info", "tryon_result_received", {
+        route: "tryon/auto",
+        orgId: orgId || null,
         hasImages: !!generatedImageUrl,
         requestId: requestId || null,
-        resultKeys: result ? Object.keys(result) : [],
       });
 
       if (generatedImageUrl) {
@@ -113,7 +178,11 @@ export async function POST(req: NextRequest) {
       orgId: orgId || null,
     });
   } catch (error) {
-    console.error("[tryon/auto] start error:", error);
+    logSecurityEvent("error", "tryon_start_failed", {
+      route: "tryon/auto",
+      orgId: orgId || null,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to start auto try-on" },
       { status: 500 }
@@ -131,6 +200,30 @@ export async function GET(req: NextRequest) {
 
   if (!process.env.FAL_KEY) {
     return NextResponse.json({ error: "Missing FAL_KEY" }, { status: 500 });
+  }
+
+  const rateLimit = checkInMemoryRateLimit({
+    scope: "tryon_auto_status",
+    request: req,
+    limit: 30,
+    windowMs: 60 * 1000,
+    keyParts: [orgId || "global"],
+  });
+
+  if (!rateLimit.allowed) {
+    logSecurityEvent("warn", "rate_limit_exceeded", {
+      route: "tryon/auto/status",
+      orgId: orgId || null,
+      retryAfterSeconds: rateLimit.retryAfterSeconds,
+      limit: rateLimit.limit,
+    });
+    return NextResponse.json(
+      { error: "rate_limited", retry_after_seconds: rateLimit.retryAfterSeconds },
+      {
+        status: 429,
+        headers: { "Retry-After": String(rateLimit.retryAfterSeconds || 60) },
+      }
+    );
   }
 
   fal.config({
@@ -162,7 +255,11 @@ export async function GET(req: NextRequest) {
       orgId: orgId || null,
     });
   } catch (error) {
-    console.error("[tryon/auto] status error:", error);
+    logSecurityEvent("error", "tryon_status_failed", {
+      route: "tryon/auto/status",
+      orgId: orgId || null,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to get auto try-on status" },
       { status: 500 }

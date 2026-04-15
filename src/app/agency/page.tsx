@@ -1,6 +1,5 @@
 import Link from "next/link";
 import type { CSSProperties } from "react";
-import { DM_Sans, Space_Mono } from "next/font/google";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildOrgSoftCapSummary, getPlanSoftCaps, type OrgSoftCapSummary } from "@/lib/billing/limits";
@@ -8,15 +7,8 @@ import { buildOrgSoftCapSummary, getPlanSoftCaps, type OrgSoftCapSummary } from 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const dmSans = DM_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "700"],
-});
-
-const spaceMono = Space_Mono({
-  subsets: ["latin"],
-  weight: ["400", "700"],
-});
+const dmSans = { className: "font-[family-name:var(--font-dm-sans)]" };
+const spaceMono = { className: "font-[family-name:var(--font-space-mono)]" };
 
 const themeVars: CSSProperties & Record<string, string> = {
   ["--gold"]: "#C9A84C",

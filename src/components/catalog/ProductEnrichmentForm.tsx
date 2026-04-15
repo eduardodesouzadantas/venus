@@ -3,30 +3,31 @@
 import type { ChangeEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import {
-  ArrowLeft,
-  CheckCircle2,
-  Image as ImageIcon,
-  Loader2,
-  Plus,
-  Sparkles,
-  X,
-} from "lucide-react";
+import { ArrowLeft, CheckCircle2, Image as ImageIcon, Loader2, Plus, Sparkles, X } from "lucide-react";
 
+import { createProduct } from "@/app/b2b/product/new/actions";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { VenusButton } from "@/components/ui/VenusButton";
-import { createProduct } from "@/app/b2b/product/new/actions";
+import {
+  buildFallbackProductEnrichment,
+  normalizeProductCategory,
+  normalizeProductStyle,
+  normalizeProductTags,
+  validateProductImageFile,
+  type ProductEnrichmentResult,
+} from "@/lib/catalog/product-enrichment";
+import {
+  deriveStockStatus,
+  formatStockStatusLabel,
+  STOCK_STATUS_LABELS,
+  STOCK_STATUS_VALUES,
+} from "@/lib/catalog/stock";
 
 type SizeType = "clothing" | "numeric" | "shoes" | "single";
 
-type EnrichmentResponse = {
-  name?: string;
-  category?: string;
-  dominant_color?: string;
-  style?: string;
-  emotional_copy?: string;
-  tags?: string[];
+type EnrichmentResponse = ProductEnrichmentResult & {
+  file_name?: string;
 };
 
 const SIZE_PRESETS: Record<SizeType, string[]> = {
@@ -36,50 +37,22 @@ const SIZE_PRESETS: Record<SizeType, string[]> = {
   single: ["U"],
 };
 
-const ANALYSIS_STEPS = [
-  "Analisando a peça...",
-  "Identificando estilo...",
-  "Gerando copy emocional...",
-];
+const ANALYSIS_STEPS = ["Analisando a peÃ§a...", "Identificando estilo...", "Gerando copy emocional..."];
 
 function normalizeTag(value: string) {
   return value.trim().replace(/\s+/g, " ");
 }
 
-function normalizeAccentless(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-}
-
-function normalizeCategory(value: string) {
-  const normalized = normalizeAccentless(value);
-  if (normalized.includes("acessor")) return "acessorio";
-  return "roupa";
-}
-
-function normalizeStyleValue(value: string) {
-  const normalized = normalizeAccentless(value);
-  if (normalized.includes("alfai")) return "alfaiataria";
-  if (normalized.includes("street")) return "streetwear";
-  if (normalized.includes("lux")) return "festa";
-  if (normalized.includes("festa")) return "festa";
-  if (normalized.includes("casual")) return "casual";
-  return "casual";
-}
-
 function sizeLabel(value: SizeType) {
   switch (value) {
     case "clothing":
-      return "Vestuário";
+      return "VestuÃ¡rio";
     case "numeric":
-      return "Numérico";
+      return "NumÃ©rico";
     case "shoes":
-      return "Calçados";
+      return "CalÃ§ados";
     default:
-      return "Tamanho único";
+      return "Tamanho Ãºnico";
   }
 }
 
@@ -137,15 +110,29 @@ export function ProductEnrichmentForm({
   const [category, setCategory] = useState("roupa");
   const [primaryColor, setPrimaryColor] = useState("");
   const [style, setStyle] = useState("alfaiataria");
+  const [description, setDescription] = useState("");
+  const [persuasiveDescription, setPersuasiveDescription] = useState("");
   const [emotionalCopy, setEmotionalCopy] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [sizeType, setSizeType] = useState<SizeType>("clothing");
   const [quantities, setQuantities] = useState<Record<string, string>>({});
+  const [stockQty, setStockQty] = useState("0");
+  const [reservedQty, setReservedQty] = useState("0");
+  const [stockStatus, setStockStatus] = useState<"in_stock" | "low_stock" | "out_of_stock">("in_stock");
+  const [stockQtyTouched, setStockQtyTouched] = useState(false);
+  const [stockStatusTouched, setStockStatusTouched] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [analysisNotice, setAnalysisNotice] = useState<string | null>(null);
   const previewUrlRef = useRef("");
+  const analysisRunRef = useRef(0);
 
   const sizes = useMemo(() => SIZE_PRESETS[sizeType], [sizeType]);
+  const variantTotal = useMemo(
+    () => sizes.reduce((total, size) => total + Number(quantities[size] || 0), 0),
+    [quantities, sizes]
+  );
+  const availableQty = Math.max(Number(stockQty || 0) - Number(reservedQty || 0), 0);
 
   useEffect(() => {
     const nextQuantities: Record<string, string> = {};
@@ -155,6 +142,18 @@ export function ProductEnrichmentForm({
     setQuantities(nextQuantities);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sizeType]);
+
+  useEffect(() => {
+    if (!stockQtyTouched) {
+      setStockQty(String(variantTotal));
+    }
+  }, [stockQtyTouched, variantTotal]);
+
+  useEffect(() => {
+    if (!stockStatusTouched) {
+      setStockStatus(deriveStockStatus(Number(stockQty || 0), Number(reservedQty || 0)));
+    }
+  }, [reservedQty, stockQty, stockStatusTouched]);
 
   useEffect(() => {
     return () => {
@@ -167,6 +166,7 @@ export function ProductEnrichmentForm({
   const updateFile = (nextFile: File | null) => {
     setFile(nextFile);
     setAnalysisError(null);
+    setAnalysisNotice(null);
     if (previewUrlRef.current) {
       URL.revokeObjectURL(previewUrlRef.current);
       previewUrlRef.current = "";
@@ -176,22 +176,36 @@ export function ProductEnrichmentForm({
     setPreviewUrl(nextUrl);
   };
 
-  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const nextFile = event.target.files?.[0] || null;
-    updateFile(nextFile);
-  };
+  const applyEnrichment = async (targetFile?: File | null) => {
+    const nextFile = targetFile ?? file;
+    if (!nextFile) return;
 
-  const applyEnrichment = async () => {
-    if (!file || analyzing) return;
+    const validation = validateProductImageFile(nextFile);
+    if (!validation.valid) {
+      setAnalysisError(
+        validation.reason === "image_too_large"
+          ? "A imagem excede 10MB."
+          : validation.reason === "image_invalid_type"
+            ? "Use JPG, PNG ou WEBP."
+            : "Selecione uma imagem valida."
+      );
+      setAnalysisNotice(null);
+      return;
+    }
+
+    const runId = analysisRunRef.current + 1;
+    analysisRunRef.current = runId;
 
     setAnalyzing(true);
     setAnalysisError(null);
+    setAnalysisNotice(null);
+
     const timer = window.setInterval(() => {
       setAnalysisStep((current) => (current + 1) % ANALYSIS_STEPS.length);
     }, 1000);
 
     try {
-      const imageBase64 = await fileToDataUrl(file);
+      const imageBase64 = await fileToDataUrl(nextFile);
       const response = await fetch("/api/products/enrich", {
         method: "POST",
         headers: {
@@ -200,34 +214,80 @@ export function ProductEnrichmentForm({
         },
         body: JSON.stringify({
           image_base64: imageBase64,
-          mime_type: file.type,
-          file_name: file.name,
+          mime_type: nextFile.type,
+          file_name: nextFile.name,
+          name,
+          category,
         }),
       });
 
       const payload = (await response.json().catch(() => null)) as EnrichmentResponse | null;
       if (!response.ok || !payload) {
-        throw new Error(
-          (payload && typeof payload === "object" && "error" in payload && typeof payload.error === "string" && payload.error) ||
-            "Falha ao analisar a peça"
-        );
+        throw new Error("Falha ao analisar a peca");
       }
 
-      if (payload.name) setName(payload.name);
-      if (payload.category) setCategory(normalizeCategory(payload.category));
-      if (payload.dominant_color) setPrimaryColor(payload.dominant_color);
-      if (payload.style) setStyle(normalizeStyleValue(payload.style));
-      if (payload.emotional_copy) setEmotionalCopy(payload.emotional_copy.slice(0, 300));
-      if (Array.isArray(payload.tags)) {
-        setTags(payload.tags.map(normalizeTag).filter(Boolean).slice(0, 8));
+      if (analysisRunRef.current !== runId) {
+        return;
       }
+
+      setName(payload.name || nextFile.name);
+      setCategory(normalizeProductCategory(payload.category || category));
+      setPrimaryColor(payload.primary_color || primaryColor);
+      setStyle(normalizeProductStyle(payload.style || style));
+      setDescription(payload.description || description);
+      setPersuasiveDescription(payload.persuasive_description || persuasiveDescription);
+      setEmotionalCopy(payload.emotional_copy || emotionalCopy);
+
+      const nextTags = normalizeProductTags(payload.tags, 8);
+      if (nextTags.length > 0) {
+        setTags(nextTags);
+      }
+
+      setAnalysisNotice(
+        payload.fallback_used
+          ? "A IA usou um fallback conservador. Revise antes de salvar."
+          : "Preenchimento concluido. Revise os campos antes de salvar."
+      );
     } catch (error) {
-      console.error("[PRODUCT_ENRICHMENT]", error);
-      setAnalysisError(error instanceof Error ? error.message : "Falha ao analisar a peça");
+      console.warn("[PRODUCT_ENRICHMENT]", error);
+      const fallback = buildFallbackProductEnrichment({
+        name,
+        category,
+        fileName: nextFile.name,
+        primaryColor,
+        style,
+        description,
+        persuasiveDescription,
+        emotionalCopy,
+        tags,
+      });
+
+      if (analysisRunRef.current === runId) {
+        setName(fallback.name);
+        setCategory(fallback.category);
+        setPrimaryColor(fallback.primary_color);
+        setStyle(fallback.style);
+        setDescription(fallback.description);
+        setPersuasiveDescription(fallback.persuasive_description);
+        setEmotionalCopy(fallback.emotional_copy);
+        setTags(fallback.tags);
+        setAnalysisNotice("IA indisponivel. Usei uma sugestao conservadora para nao travar o fluxo.");
+        setAnalysisError(null);
+      }
     } finally {
       window.clearInterval(timer);
       setAnalysisStep(0);
-      setAnalyzing(false);
+      if (analysisRunRef.current === runId) {
+        setAnalyzing(false);
+      }
+    }
+  };
+
+  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const nextFile = event.target.files?.[0] || null;
+    updateFile(nextFile);
+    if (nextFile) {
+      void applyEnrichment(nextFile);
     }
   };
 
@@ -257,6 +317,8 @@ export function ProductEnrichmentForm({
     { green: 0, amber: 0, red: 0 }
   );
 
+  const stockStatusLabel = formatStockStatusLabel(stockStatus);
+
   return (
     <div className="min-h-screen bg-black text-white p-6 md:p-10">
       <div className="mx-auto max-w-6xl space-y-8">
@@ -270,20 +332,16 @@ export function ProductEnrichmentForm({
           </Link>
           <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.35em] text-[#D4AF37]">
             <span className="h-1.5 w-1.5 rounded-full bg-[#D4AF37]" />
-            Catálogo inteligente com IA
+            Catalogo inteligente com IA
           </div>
         </header>
 
-        {errorMessage ? (
-          <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">
-            {errorMessage}
-          </div>
-        ) : null}
+        {errorMessage ? <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">{errorMessage}</div> : null}
 
         <form action={createProduct} encType="multipart/form-data" className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
           <section className="space-y-6 rounded-[36px] border border-white/5 bg-white/[0.02] p-5 md:p-7">
             <div className="space-y-2">
-              <Text className="text-[10px] uppercase tracking-[0.35em] text-[#D4AF37]">Nova peça</Text>
+              <Text className="text-[10px] uppercase tracking-[0.35em] text-[#D4AF37]">Nova peca</Text>
               <Heading as="h1" className="text-3xl md:text-4xl tracking-tighter uppercase leading-none">
                 {title}
               </Heading>
@@ -310,14 +368,14 @@ export function ProductEnrichmentForm({
                       <ImageIcon size={28} />
                     </div>
                     <div className="space-y-1">
-                      <Text className="text-xs uppercase font-bold tracking-[0.28em] text-white/40">Upload da peça</Text>
+                      <Text className="text-xs font-bold uppercase tracking-[0.28em] text-white/40">Upload da peca</Text>
                       <Text className="text-[10px] uppercase tracking-[0.22em] text-white/25">JPG, PNG ou WEBP</Text>
                     </div>
                   </label>
                 ) : (
                   <div className="space-y-4">
                     <div className="overflow-hidden rounded-[28px] border border-white/10 bg-black">
-                      <img src={previewUrl} alt="Preview da peça" className="h-[300px] w-full object-cover" />
+                      <img src={previewUrl} alt="Preview da peca" className="h-[300px] w-full object-cover" />
                     </div>
                     <div className="flex flex-wrap gap-3">
                       <label
@@ -328,24 +386,25 @@ export function ProductEnrichmentForm({
                       </label>
                       <VenusButton
                         type="button"
-                        onClick={applyEnrichment}
+                        onClick={() => void applyEnrichment()}
                         disabled={analyzing}
                         variant="solid"
                         className="h-10 rounded-full bg-[#D4AF37] px-5 text-[10px] font-bold uppercase tracking-[0.24em] text-black"
                       >
                         {analyzing ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                        {analyzing ? ANALYSIS_STEPS[analysisStep] : "Analisar com IA"}
+                        {analyzing ? ANALYSIS_STEPS[analysisStep] : "Reanalisar com IA"}
                       </VenusButton>
                     </div>
                   </div>
                 )}
 
-                {analysisError ? <div className="mt-4 text-xs text-[#ff4444]">{analysisError}</div> : null}
+                {analysisNotice ? <div className="mt-4 text-xs text-[#D4AF37]">{analysisNotice}</div> : null}
+                {analysisError ? <div className="mt-2 text-xs text-[#ff4444]">{analysisError}</div> : null}
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <label className="text-[9px] uppercase font-bold tracking-[0.24em] text-white/35">Nome da peça</label>
+                  <label className="text-[9px] uppercase font-bold tracking-[0.24em] text-white/35">Nome da peca</label>
                   <input
                     name="name"
                     value={name}
@@ -363,7 +422,7 @@ export function ProductEnrichmentForm({
                     className="w-full rounded-2xl border border-white/10 bg-[#1a1a1a] p-3 text-sm text-white outline-none transition-colors focus:border-[#D4AF37]/40"
                   >
                     <option value="roupa">Roupa</option>
-                    <option value="acessorio">Acessório</option>
+                    <option value="acessorio">Acessorio</option>
                   </select>
                 </div>
               </div>
@@ -391,7 +450,33 @@ export function ProductEnrichmentForm({
                     <option value="casual">Casual</option>
                     <option value="streetwear">Streetwear</option>
                     <option value="festa">Festa</option>
+                    <option value="luxo">Luxo</option>
                   </select>
+                </div>
+              </div>
+
+              <div className="grid gap-4">
+                <div className="space-y-2">
+                  <label className="text-[9px] uppercase font-bold tracking-[0.24em] text-white/35">Descricao base</label>
+                  <textarea
+                    name="description"
+                    value={description}
+                    onChange={(event) => setDescription(event.target.value)}
+                    rows={4}
+                    placeholder="Resumo objetivo da peca para catalogo"
+                    className="w-full rounded-[28px] border border-white/10 bg-black/40 p-4 text-sm leading-relaxed text-white outline-none transition-colors placeholder:text-white/20 focus:border-[#D4AF37]/40"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[9px] uppercase font-bold tracking-[0.24em] text-white/35">Descricao persuasiva</label>
+                  <textarea
+                    name="persuasive_description"
+                    value={persuasiveDescription}
+                    onChange={(event) => setPersuasiveDescription(event.target.value)}
+                    rows={4}
+                    placeholder="Texto de venda com mais desejo e intencao"
+                    className="w-full rounded-[28px] border border-white/10 bg-black/40 p-4 text-sm leading-relaxed text-white outline-none transition-colors placeholder:text-white/20 focus:border-[#D4AF37]/40"
+                  />
                 </div>
               </div>
             </div>
@@ -471,6 +556,60 @@ export function ProductEnrichmentForm({
               </div>
 
               <div className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className="space-y-2">
+                    <label className="text-[9px] uppercase font-bold tracking-[0.24em] text-white/35">Quantidade total</label>
+                    <input
+                      name="stock_qty"
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={stockQty}
+                      onChange={(event) => {
+                        setStockQtyTouched(true);
+                        setStockQty(event.target.value.replace(/[^\d]/g, ""));
+                      }}
+                      className="w-full rounded-2xl border border-white/10 bg-black/40 p-3 text-sm text-white outline-none transition-colors focus:border-[#D4AF37]/40"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[9px] uppercase font-bold tracking-[0.24em] text-white/35">Reservado</label>
+                    <input
+                      name="reserved_qty"
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={reservedQty}
+                      onChange={(event) => setReservedQty(event.target.value.replace(/[^\d]/g, ""))}
+                      className="w-full rounded-2xl border border-white/10 bg-black/40 p-3 text-sm text-white outline-none transition-colors focus:border-[#D4AF37]/40"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[9px] uppercase font-bold tracking-[0.24em] text-white/35">Status do estoque</label>
+                    <select
+                      name="stock_status"
+                      value={stockStatus}
+                      onChange={(event) => {
+                        setStockStatusTouched(true);
+                        setStockStatus(event.target.value as typeof stockStatus);
+                      }}
+                      className="w-full rounded-2xl border border-white/10 bg-[#1a1a1a] p-3 text-sm text-white outline-none transition-colors focus:border-[#D4AF37]/40"
+                    >
+                      {STOCK_STATUS_VALUES.map((value) => (
+                        <option key={value} value={value}>
+                          {STOCK_STATUS_LABELS[value]}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="rounded-[28px] border border-white/5 bg-black/30 p-4 text-[10px] uppercase tracking-[0.24em] text-white/30">
+                  Disponíveis: <span className="text-white/70">{availableQty}</span> • Total da grade: <span className="text-white/70">{variantTotal}</span> • Status: <span className="text-[#D4AF37]">{stockStatusLabel}</span>
+                </div>
+
                 <div className="space-y-2">
                   <label className="text-[9px] uppercase font-bold tracking-[0.24em] text-white/35">Tipo de grade</label>
                   <select
@@ -478,10 +617,10 @@ export function ProductEnrichmentForm({
                     onChange={(event) => setSizeType(event.target.value as SizeType)}
                     className="w-full rounded-2xl border border-white/10 bg-[#1a1a1a] p-3 text-sm text-white outline-none transition-colors focus:border-[#D4AF37]/40"
                   >
-                    <option value="clothing">Vestuário</option>
-                    <option value="numeric">Numérico</option>
-                    <option value="shoes">Calçados</option>
-                    <option value="single">Tamanho único</option>
+                    <option value="clothing">VestuÃ¡rio</option>
+                    <option value="numeric">NumÃ©rico</option>
+                    <option value="shoes">CalÃ§ados</option>
+                    <option value="single">Tamanho Ãºnico</option>
                   </select>
                 </div>
 
@@ -491,11 +630,11 @@ export function ProductEnrichmentForm({
                     <div className="flex items-center gap-2 text-[9px] uppercase tracking-[0.22em] text-white/25">
                       <StockDot quantity={stockSummary.green} />
                       <span>{stockSummary.green} verde</span>
-                      <span>•</span>
+                      <span>â€¢</span>
                       <StockDot quantity={3} />
-                      <span>{stockSummary.amber} atenção</span>
-                      <span>•</span>
-                      <span className="text-[#ff4444]">{stockSummary.red} crítico</span>
+                      <span>{stockSummary.amber} atencao</span>
+                      <span>â€¢</span>
+                      <span className="text-[#ff4444]">{stockSummary.red} critico</span>
                     </div>
                   </div>
 
@@ -525,9 +664,9 @@ export function ProductEnrichmentForm({
 
             <section className="rounded-[36px] border border-white/5 bg-white/[0.02] p-5 md:p-7">
               <div className="mb-4 space-y-1">
-                <Text className="text-[9px] uppercase tracking-[0.35em] text-[#D4AF37]">Publicação</Text>
+                <Text className="text-[9px] uppercase tracking-[0.35em] text-[#D4AF37]">Publicacao</Text>
                 <Heading as="h2" className="text-xl uppercase tracking-tight">
-                  Salvar inventário
+                  Salvar inventario
                 </Heading>
               </div>
 
@@ -541,7 +680,6 @@ export function ProductEnrichmentForm({
                   />
                 </div>
 
-                <input type="hidden" name="type" value={category} />
                 <input type="hidden" name="type" value={category} />
                 <input type="hidden" name="tags_json" value={JSON.stringify(tags)} />
                 <input
@@ -563,7 +701,7 @@ export function ProductEnrichmentForm({
               <div className="mt-6">
                 <VenusButton
                   type="submit"
-                  disabled={!file}
+                  disabled={!file || analyzing}
                   variant="solid"
                   className="h-12 w-full rounded-full bg-[#D4AF37] text-black disabled:opacity-40"
                 >

@@ -3,6 +3,7 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 ## Documentation
 
 - [Project State Canonical](docs/PROJECT_STATE_CANONICAL.md)
+- [Gamificação Budget-Aware v1](docs/GAMIFICATION_BUDGET_AWARE_V1.md)
 
 ## Getting Started
 
