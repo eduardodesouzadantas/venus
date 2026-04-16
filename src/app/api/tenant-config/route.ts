@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { validateGuard } from "@/lib/tenant/guards";
 import {
   getTenantConfig,
   updateTenantConfig,
@@ -17,8 +18,17 @@ function normalize(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function isAgencyOrOwner(request: Request, orgId: string) {
-  return true;
+async function isAgencyOrOwner(request: Request, orgId: string) {
+  if (!orgId) return false;
+  
+  const supabase = createAdminClient();
+  const guardResult = await validateGuard(supabase, {
+    requireAuthenticated: true,
+    requireOrgId: orgId,
+    requireAgency: true,
+  });
+  
+  return guardResult.allowed;
 }
 
 export async function GET(request: Request) {
@@ -32,6 +42,11 @@ export async function GET(request: Request) {
 
   if (!orgId) {
     return NextResponse.json({ error: "org_id is required" }, { status: 400 });
+  }
+
+  const hasAccess = await isAgencyOrOwner(request, orgId);
+  if (!hasAccess) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {
@@ -85,8 +100,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "org_id is required" }, { status: 400 });
     }
 
-    if (!isAgencyOrOwner(request, org_id)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const hasAccess = await isAgencyOrOwner(request, org_id);
+    if (!hasAccess) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
     switch (action) {

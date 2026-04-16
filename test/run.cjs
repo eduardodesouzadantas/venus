@@ -142,6 +142,7 @@ const {
 
 require("./catalog-query/presentation.test.ts");
 require("./assisted-recommendation.presentation.test.ts");
+require("./security/cross-tenant.test.ts");
 
 const sampleOnboarding = {
   intent: {
