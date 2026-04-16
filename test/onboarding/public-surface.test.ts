@@ -137,12 +137,17 @@ run("processing and result pages support the no-tenant preview fallback", () => 
   assert.match(resultSource, /buildResultSurface\(onboardingData, null, null\)/);
 });
 
-run("body photo upload keeps mobile capture and broad file input support", () => {
+run("body photo upload keeps gallery separate from camera capture", () => {
   const source = fs.readFileSync(path.join(process.cwd(), "src/components/ui/BodyPhotoUpload.tsx"), "utf8");
+  const pageSource = fs.readFileSync(path.join(process.cwd(), "src/app/scanner/body/page.tsx"), "utf8");
 
-  assert.match(source, /capture="environment"/);
+  assert.match(source, /type="file"/);
+  assert.doesNotMatch(source, /capture="environment"/);
   assert.match(source, /image\/heic/);
   assert.match(source, /image\/heif/);
+  assert.match(source, /onUseCamera/);
+  assert.match(pageSource, /onUseCamera=\{\(\) => setMode\("camera"\)\}/);
+  assert.match(pageSource, /RealCamera/);
 });
 
 run("try-on pipeline keeps timeout fallback and local generation logs", () => {

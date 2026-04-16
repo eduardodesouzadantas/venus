@@ -55,7 +55,7 @@ export function BodyPhotoUpload({ onPhotoSelected, onUseCamera }: BodyPhotoUploa
     }
   };
 
-  const triggerFileSelect = () => {
+  const triggerGallerySelect = () => {
     fileInputRef.current?.click();
   };
 
@@ -130,14 +130,13 @@ export function BodyPhotoUpload({ onPhotoSelected, onUseCamera }: BodyPhotoUploa
             ref={fileInputRef}
             type="file"
             accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-            capture="environment"
             onChange={handleFileSelect}
             className="hidden"
           />
 
           <VenusButton
             type="button"
-            onClick={triggerFileSelect}
+            onClick={triggerGallerySelect}
             className="w-full max-w-[240px]"
           >
             <span className="flex items-center gap-2">
