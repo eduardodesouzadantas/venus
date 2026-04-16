@@ -39,6 +39,11 @@ export interface ConversationContext {
   hasStyleProfile: boolean;
   hasPurchaseIntent: boolean;
   closingTriggers: ClosingTrigger[];
+  hasPhotoUploaded: boolean;
+  photoUploadAt: string | null;
+  analysisInProgress: boolean;
+  analysisCompleted: boolean;
+  firstWowDelivered: boolean;
 }
 
 export interface ClosingTrigger {

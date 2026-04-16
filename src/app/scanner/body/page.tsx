@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { BodyPhotoUpload } from "@/components/ui/BodyPhotoUpload";
@@ -13,6 +13,8 @@ import { buildVenusBodyScannerIntro } from "@/lib/venus/brand";
 
 export default function BodyScannerPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const org = searchParams.get("org");
   const { data, updateData, updateConversation } = useOnboarding();
   const { setUserPhoto } = useUserImage();
   const [mode, setMode] = useState<"upload" | "camera">("upload");
@@ -54,7 +56,7 @@ export default function BodyScannerPage() {
       }
     }
 
-    router.push("/processing");
+    router.push(org ? `/processing?org=${encodeURIComponent(org)}` : "/processing");
   };
 
   return (

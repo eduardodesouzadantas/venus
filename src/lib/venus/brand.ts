@@ -5,6 +5,22 @@ export const VENUS_GOLD = "#C9A84C";
 
 export type VenusResultState = "hero" | "preview" | "retry_required";
 
+export type VenusTenantBrandInput = {
+  orgSlug?: string | null;
+  orgName?: string | null;
+  branchName?: string | null;
+  logoUrl?: string | null;
+  primaryColor?: string | null;
+};
+
+export type VenusTenantBrand = {
+  displayName: string;
+  slug: string | null;
+  logoUrl: string | null;
+  primaryColor: string;
+  hasLogo: boolean;
+};
+
 type VenusResultNarrativeInput = {
   state: VenusResultState;
   reason?: string;
@@ -12,12 +28,40 @@ type VenusResultNarrativeInput = {
   hasLegacy?: boolean;
 };
 
+function normalizeText(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function prettifySlug(value: string) {
+  return value
+    .replace(/[-_]+/g, " ")
+    .split(/\s+/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+export function resolveVenusTenantBrand(input?: VenusTenantBrandInput | null, fallbackLabel = "sua loja"): VenusTenantBrand {
+  const branchName = normalizeText(input?.branchName);
+  const orgName = normalizeText(input?.orgName);
+  const slug = normalizeText(input?.orgSlug);
+  const logoUrl = normalizeText(input?.logoUrl) || null;
+
+  return {
+    displayName: branchName || orgName || (slug ? prettifySlug(slug) : fallbackLabel),
+    slug: slug || null,
+    logoUrl,
+    primaryColor: normalizeText(input?.primaryColor) || VENUS_GOLD,
+    hasLogo: Boolean(logoUrl),
+  };
+}
+
 export function buildVenusStylistIntro() {
-  return "Oi. Eu sou a Venus Stylist. Vou ler sua presença com precisão, cruzar sua foto com colorimetria e devolver uma curadoria elegante.";
+  return "Perfeito. Me envie uma foto e eu começo sua leitura premium agora.";
 }
 
 export function buildVenusBodyScannerIntro() {
-  return "Agora a Venus completa a leitura do corpo com precisão.";
+  return "Perfeito. Agora eu refino sua leitura premium ✨";
 }
 
 export function buildVenusResultNarrative(input: VenusResultNarrativeInput) {
@@ -76,7 +120,9 @@ export function buildVenusWhatsAppLeadIn(input: {
         ? "A Venus Stylist já chegou muito perto do ponto ideal."
         : "A Venus Stylist quer refinar a leitura com você.";
 
-  const lookLine = input.lookName ? `O look que mais faz sentido agora é ${input.lookName}.` : "O look mais coerente já está mapeado.";
+  const lookLine = input.lookName
+    ? `O look que mais faz sentido agora é ${input.lookName}.`
+    : "O look mais coerente já está mapeado.";
 
   return `${greet}\n${base}\n${lookLine}`;
 }

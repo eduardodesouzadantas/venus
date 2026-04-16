@@ -21,6 +21,28 @@ function asRecord(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 }
 
+function mapEventAction(eventType: string) {
+  switch (eventType) {
+    case "first_message_shown":
+      return { action: "SHOW_ONBOARDING_WELCOME", outcome: "FIRST_MESSAGE_SHOWN" };
+    case "photo_sent":
+      return { action: "UPLOAD_PHOTO", outcome: "PHOTO_SENT" };
+    case "photo_not_sent":
+      return { action: "SKIP_PHOTO", outcome: "PHOTO_NOT_SENT" };
+    case "wow_shown":
+      return { action: "SHOW_WOW", outcome: "WOW_SHOWN" };
+    case "post_wow_cta_clicked":
+      return { action: "CLICK_POST_WOW_CTA", outcome: "POST_WOW_CTA_CLICKED" };
+    case "whatsapp_clicked":
+      return { action: "SEND_WHATSAPP_MESSAGE", outcome: "WHATSAPP_CLICKED" };
+    case "tryon_generated":
+    case "product_revisited":
+      return { action: "SUGGEST_NEW_LOOK", outcome: "REQUESTED_VARIATION" };
+    default:
+      return { action: "", outcome: "" };
+  }
+}
+
 export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
 
@@ -36,6 +58,7 @@ export async function POST(request: NextRequest) {
   const eventType = normalizeText(body.eventType ?? body.event_type);
   const action = normalizeText(body.action ?? body.lastAction ?? body.last_action);
   const outcome = normalizeText(body.outcome ?? body.lastActionOutcome ?? body.last_action_outcome);
+  const eventMeta = asRecord(body.eventMeta ?? body.event_meta);
 
   if (!orgId) {
     return NextResponse.json({ error: "Missing orgId" }, { status: 400 });
@@ -66,7 +89,7 @@ export async function POST(request: NextRequest) {
       normalizeText(leadSnapshot.lead?.last_interaction_at) ||
       null;
 
-  const resolvedIntentScore = eventType
+    const resolvedIntentScore = eventType
       ? updateIntentScore(eventType, currentIntentScore, {
           now: new Date().toISOString(),
           lastActivityAt,
@@ -115,20 +138,45 @@ export async function POST(request: NextRequest) {
 
     const lastTryon = asRecord(body.lastTryon);
 
-    const mappedAction =
-      action ||
-      (eventType === "whatsapp_clicked"
-        ? "SEND_WHATSAPP_MESSAGE"
-        : eventType === "tryon_generated" || eventType === "product_revisited"
-          ? "SUGGEST_NEW_LOOK"
-          : "");
-    const mappedOutcome =
-      outcome ||
-      (eventType === "whatsapp_clicked"
-        ? "WHATSAPP_CLICKED"
-        : eventType === "tryon_generated" || eventType === "product_revisited"
-          ? "REQUESTED_VARIATION"
-          : "");
+    const eventMapping = mapEventAction(eventType);
+    const mappedAction = action || eventMapping.action;
+    const mappedOutcome = outcome || eventMapping.outcome;
+
+    const tenantEventPromise = eventType
+      ? (async () => {
+          const { error } = await supabase.from("tenant_events").insert({
+            org_id: orgId,
+            actor_user_id: null,
+            event_type: eventType,
+            event_source: normalizeText(body.eventSource ?? body.event_source) || "app",
+            dedupe_key: [
+              "lead-context",
+              orgId,
+              leadId || savedResultId || phone || email || "anonymous",
+              eventType,
+              normalizeText(body.timestamp ?? body.eventTimestamp ?? body.event_timestamp) || new Date().toISOString(),
+            ]
+              .filter(Boolean)
+              .join(":"),
+            payload: {
+              event_type: eventType,
+              org_id: orgId,
+              lead_id: leadId || null,
+              saved_result_id: savedResultId || null,
+              phone: phone || null,
+              email: email || null,
+              action: mappedAction || null,
+              outcome: mappedOutcome || null,
+              event_meta: eventMeta,
+              timestamp: normalizeText(body.timestamp ?? body.eventTimestamp ?? body.event_timestamp) || new Date().toISOString(),
+            },
+          });
+
+          if (error) {
+            console.warn("[LEAD_CONTEXT] failed to record tenant event", error);
+          }
+        })()
+      : Promise.resolve(null);
 
     if (leadId && mappedAction && mappedOutcome) {
       await recordDecisionOutcome({
@@ -160,6 +208,7 @@ export async function POST(request: NextRequest) {
       });
 
       await gamificationEventPromise;
+      await tenantEventPromise;
 
       return NextResponse.json({ ok: true, context });
     }
@@ -180,6 +229,7 @@ export async function POST(request: NextRequest) {
       });
 
       await gamificationEventPromise;
+      await tenantEventPromise;
 
       return NextResponse.json({ ok: true, context });
     }
@@ -198,6 +248,7 @@ export async function POST(request: NextRequest) {
       });
 
       await gamificationEventPromise;
+      await tenantEventPromise;
 
       return NextResponse.json({ ok: true, context });
     }
@@ -224,6 +275,7 @@ export async function POST(request: NextRequest) {
     });
 
     await gamificationEventPromise;
+    await tenantEventPromise;
 
     return NextResponse.json({ ok: true, context });
   } catch (error) {

@@ -17,6 +17,14 @@ import { detectExplorationRisk, applyAntiExplorationControl, enforceConduction, 
 import { refineResponse, getToneProfile, adaptToneForSentiment, getBrandVoice, adaptVocabularyWithBrand } from "./tone-engine";
 import { buildCloserResponse, getCloserConfig, getClosingMetrics, shouldReduceExploration } from "./closer-refinement";
 import { addEmotionalReinforcement, getPostPurchaseBehavior, buildPostPurchaseResponse as getEmotionalPostPurchaseResponse, adaptForInsecurity, hasResolvedIntent } from "./emotional-layer";
+import { buildVenusStylistIntro } from "@/lib/venus/brand";
+import {
+  detectPhotoUpload,
+  generateAnticipationMessage,
+  generateConsultoryAfterWow,
+  buildFollowUpWithoutPhoto,
+  buildFallbackWithoutTryOn,
+} from "./photo-analysis-flow";
 
 export interface ConversationEngineInput {
   orgId: string;
@@ -67,6 +75,11 @@ function buildInitialContext(
     hasStyleProfile: input.hasStyleProfile || false,
     hasPurchaseIntent: false,
     closingTriggers: [],
+    hasPhotoUploaded: false,
+    photoUploadAt: null,
+    analysisInProgress: false,
+    analysisCompleted: false,
+    firstWowDelivered: false,
   };
 }
 
@@ -116,6 +129,26 @@ export async function processConversation(
     response = buildClosingResponse(context, analysis, userMemory);
   } else {
     response = buildStateBasedResponse(context, analysis, userMemory, isClosing);
+  }
+
+  const hasPhoto = detectPhotoUpload(input.userMessage, context);
+  if (hasPhoto && !context.hasPhotoUploaded) {
+    context.hasPhotoUploaded = true;
+    context.photoUploadAt = new Date().toISOString();
+    context.analysisInProgress = true;
+    response = generateAnticipationMessage();
+  }
+
+  if (context.analysisCompleted && !context.firstWowDelivered && shouldShowLook(context.currentState, context)) {
+    const sampleAnalysis = {
+      colorSeason: "Outono",
+      faceShape: "oval",
+      bestColors: ["terracota", " бордо", "ouro"],
+      styleIdentity: "elegante",
+    };
+    const consultoryMessage = generateConsultoryAfterWow(sampleAnalysis, context);
+    response = response + " " + consultoryMessage;
+    context.firstWowDelivered = true;
   }
   
   response = applyAntiExplorationControl(response, context.currentState, context, analysis);
@@ -259,40 +292,69 @@ function buildStateBasedResponse(
   }
 }
 
+const PHOTO_TRIGGERS = [
+  "foto",
+  "imagem",
+  "envio",
+  "mandar",
+  "tirei",
+  "tirei foto",
+  "enviei",
+  "aqui está",
+  "está aqui",
+  "see",
+  "picture",
+  "image",
+];
+
+const PHOTO_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".gif"];
+
+function detectPhotoIntent(text: string, context: ConversationContext): boolean {
+  const lower = text.toLowerCase();
+
+  for (const trigger of PHOTO_TRIGGERS) {
+    if (lower.includes(trigger)) return true;
+  }
+
+  for (const ext of PHOTO_EXTENSIONS) {
+    if (lower.includes(ext)) return true;
+  }
+
+  if (context.hasPhotoUploaded) return true;
+
+  return false;
+}
+
 function buildDiscoveryResponse(context: ConversationContext, analysis: MessageAnalysis, memory: UserMemory | null): string {
   const skips = shouldSkipOnboarding(memory);
-  
-  if (skips) {
-    const profileHint = memory?.styleIdentity 
-      ? `seu estilo ${memory.styleIdentity}` 
+
+  if (skips && analysis.sentiment === "positive") {
+    const profileHint = memory?.styleIdentity
+      ? `seu estilo ${memory.styleIdentity}`
       : "o que já conversamos";
-    
+
     return `Que bom ter você aqui! Com base em ${profileHint}, ${memory?.imageGoal ? `para chegar em ${memory.imageGoal}` : "posso te mostrar opções"}. O que gostaria de ver?`;
   }
-  
-  const questions = [
-    "Para começar, me conta: qual é o objetivo dessa busca? (trabalho, evento especial, dia a dia?)",
-    "O que você está procurando? (uma peça específica ou looks completos?)",
-    "Me conta: você já tem alguma ideia do que quer ou Prefere sugestões baseadas no seu perfil?",
-  ];
-  
-  const idx = context.messageCount % questions.length;
-  return questions[idx];
+
+  const hasPhotoIntent = detectPhotoIntent(analysis.text, context);
+
+  if (hasPhotoIntent) {
+    return generateAnticipationMessage();
+  }
+
+  if (context.messageCount === 1) {
+    return buildVenusStylistIntro();
+  }
+
+  return buildFollowUpWithoutPhoto();
 }
 
 function buildStyleAnalysisResponse(context: ConversationContext, analysis: MessageAnalysis, memory: UserMemory | null): string {
   if (memory?.styleIdentity) {
-    return `Perfeito! Com base no seu estilo ${memory.styleIdentity}${memory.imageGoal ? ` e objetivo ${memory.imageGoal}` : ""}, vou te mostrar o que funciona. Quer ver um try-on para validar?`;
+    return `Perfeito. Agora eu conecto seu estilo ${memory.styleIdentity}${memory.imageGoal ? ` e seu objetivo ${memory.imageGoal}` : ""} com cor, visagismo e caimento para te entregar o primeiro wow. Quer que eu te mostre outras opções nessa mesma linha?`;
   }
-  
-  const nextSteps = [
-    "Agora que entendi seu objetivo, preciso entender melhor seu estilo. Quais cores você prefere usar no dia a dia?",
-    "Para refinar as sugestões, me conta: você Prefere peças mais formais ou casuais?",
-    "Entendi o contexto! Uma última pergunta: prefere algo mais justo ou mais solto no caimento?",
-  ];
-  
-  const idx = context.messageCount % nextSteps.length;
-  return nextSteps[idx];
+
+  return "Perfeito. Depois do primeiro wow, eu explico por que essa leitura funciona e sigo com a próxima sugestão.";
 }
 
 function buildTryOnGuidedResponse(context: ConversationContext, analysis: MessageAnalysis, memory: UserMemory | null): string {

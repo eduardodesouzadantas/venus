@@ -1,12 +1,15 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { VenusButton } from "@/components/ui/VenusButton";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
 
 export default function OptInPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const org = searchParams.get("org");
   const { updateData, journey } = useOnboarding();
   const title =
     journey?.mode === "continue"
@@ -23,6 +26,11 @@ export default function OptInPage() {
 
   const handleSkip = () => {
     updateData("scanner", { skipped: true });
+    router.push(org ? `/processing?org=${encodeURIComponent(org)}` : "/processing");
+  };
+
+  const handleStartScan = () => {
+    router.push(org ? `/scanner/face?org=${encodeURIComponent(org)}` : "/scanner/face");
   };
 
   return (
@@ -40,17 +48,17 @@ export default function OptInPage() {
         </Text>
 
         <div className="flex flex-col gap-3 sm:gap-4">
-          <Link href="/scanner/face" className="w-full">
-            <VenusButton variant="solid" className="w-full">
-              Ativar leitura visual
-            </VenusButton>
-          </Link>
+          <VenusButton variant="solid" className="w-full" onClick={handleStartScan}>
+            Ativar leitura visual
+          </VenusButton>
 
-          <Link href="/processing" className="w-full" onClick={handleSkip}>
-            <VenusButton variant="ghost" className="w-full text-[11px] underline underline-offset-4 opacity-50 hover:opacity-100 sm:text-xs">
-              Prefiro seguir sem câmera
-            </VenusButton>
-          </Link>
+          <button
+            type="button"
+            onClick={handleSkip}
+            className="w-full rounded-full border border-transparent px-4 py-2 text-[11px] uppercase tracking-[0.22em] text-white/42 underline-offset-4 transition-colors hover:text-white/80 hover:underline sm:text-xs"
+          >
+            Prefiro seguir sem câmera
+          </button>
         </div>
       </div>
     </div>

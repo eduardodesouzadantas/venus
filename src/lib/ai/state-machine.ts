@@ -18,7 +18,7 @@ export const CONVERSATION_STATES: Record<ConversationState, ConversationStateCon
   DISCOVERY: {
     state: "DISCOVERY",
     name: "Descoberta",
-    description: "Usuário está explorando, ainda não sabe o que quer",
+    description: "Entrada photo-first, focada em pedir foto cedo e criar antecipação para o primeiro wow",
     defaultTone: "friendly",
     maxResponseLength: 200,
     persuasionLevel: "minimal",
@@ -29,7 +29,7 @@ export const CONVERSATION_STATES: Record<ConversationState, ConversationStateCon
   STYLE_ANALYSIS: {
     state: "STYLE_ANALYSIS",
     name: "Análise de Estilo",
-    description: "Coletando preferências de estilo, perfil visual",
+    description: "Leitura consultiva pós-wow, conectando cor, visagismo e caimento ao resultado visto",
     defaultTone: "consultive",
     maxResponseLength: 300,
     persuasionLevel: "soft",
@@ -173,3 +173,4 @@ export function buildDefaultStrategy(state: ConversationState): ResponseStrategy
     requiredContext: [],
   };
 }
+

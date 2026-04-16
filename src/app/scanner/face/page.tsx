@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { RealCamera } from "@/components/ui/RealCamera";
@@ -10,6 +10,8 @@ import { analyzeColorimetry } from "@/lib/analysis/colorimetry-client";
 
 export default function FaceScannerPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const org = searchParams.get("org");
   const { data, updateData, updateConversation } = useOnboarding();
   const { setUserPhoto } = useUserImage();
 
@@ -47,7 +49,7 @@ export default function FaceScannerPage() {
       });
     }
 
-    router.push("/scanner/body");
+    router.push(org ? `/scanner/body?org=${encodeURIComponent(org)}` : "/scanner/body");
   };
 
   return (

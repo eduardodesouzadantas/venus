@@ -61,6 +61,13 @@ export async function POST(req: NextRequest) {
   const orgId = normalizeText(body.orgId || body.org_id);
   const category = normalizeText(body.category) || "tops";
 
+  console.info("[tryon/auto] request start", {
+    orgId: orgId || null,
+    hasPersonImage: Boolean(personImageUrl),
+    hasGarmentImage: Boolean(garmentImageUrl),
+    category,
+  });
+
   if (!personImageUrl || !garmentImageUrl) {
     logSecurityEvent("warn", "tryon_missing_images", {
       route: "tryon/auto",
@@ -121,6 +128,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (!process.env.FAL_KEY) {
+    console.warn("[tryon/auto] missing FAL_KEY", { orgId: orgId || null });
     return NextResponse.json({ error: "Missing FAL_KEY" }, { status: 500 });
   }
 
@@ -137,6 +145,10 @@ export async function POST(req: NextRequest) {
       logs: true,
       onEnqueue: (id) => {
         requestId = id;
+        console.info("[tryon/auto] provider enqueued", {
+          orgId: orgId || null,
+          requestId,
+        });
       },
     });
 
@@ -159,6 +171,11 @@ export async function POST(req: NextRequest) {
       });
 
       if (generatedImageUrl) {
+        console.info("[tryon/auto] provider completed synchronously", {
+          orgId: orgId || null,
+          requestId: requestId || null,
+          hasImage: true,
+        });
         return NextResponse.json({
           status: "completed",
           generatedImageUrl,
@@ -169,9 +186,14 @@ export async function POST(req: NextRequest) {
     }
 
     if (!requestId) {
+      console.warn("[tryon/auto] provider returned no requestId", { orgId: orgId || null });
       return NextResponse.json({ error: "Failed to enqueue try-on" }, { status: 500 });
     }
 
+    console.info("[tryon/auto] provider processing", {
+      orgId: orgId || null,
+      requestId,
+    });
     return NextResponse.json({
       status: "processing",
       requestId,
@@ -199,6 +221,7 @@ export async function GET(req: NextRequest) {
   }
 
   if (!process.env.FAL_KEY) {
+    console.warn("[tryon/auto] missing FAL_KEY during status poll", { orgId: orgId || null, requestId });
     return NextResponse.json({ error: "Missing FAL_KEY" }, { status: 500 });
   }
 
@@ -233,10 +256,20 @@ export async function GET(req: NextRequest) {
   try {
     const status = await getTryOnStatus(requestId);
     const statusStr = String(status.status);
+    console.info("[tryon/auto] status poll", {
+      orgId: orgId || null,
+      requestId,
+      status: statusStr,
+    });
 
     if (statusStr === "COMPLETED") {
       const result = await getTryOnResult(requestId);
       const generatedImageUrl = result.images[0]?.url || "";
+      console.info("[tryon/auto] status completed", {
+        orgId: orgId || null,
+        requestId,
+        hasImage: Boolean(generatedImageUrl),
+      });
       return NextResponse.json({
         status: "completed",
         generatedImageUrl,
@@ -246,6 +279,10 @@ export async function GET(req: NextRequest) {
     }
 
     if (statusStr === "FAILED") {
+      console.warn("[tryon/auto] status failed", {
+        orgId: orgId || null,
+        requestId,
+      });
       return NextResponse.json({ status: "failed", requestId, orgId: orgId || null });
     }
 
@@ -266,4 +303,3 @@ export async function GET(req: NextRequest) {
     );
   }
 }
-

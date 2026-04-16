@@ -26,22 +26,22 @@ const CTA_TEXT: Record<CTAType, string> = {
 
 const STATE_TONE_OVERRIDES: Record<ConversationState, Partial<Record<ResponseTone, string>>> = {
   DISCOVERY: {
-    friendly: "Olá! Fico feliz em te ajudar a encontrar o look perfeito. Para começar, me conta:",
-    consultive: "Entendo que você está explorando. Para te ajudar melhor, preciso entender algumas coisas:",
-    direct: "Vamos lá! Para indicar o que funciona para você, me responde:",
+    friendly: "Oi! Que bom ter você aqui. Me manda uma foto e eu te mostro rapidinho o que já valoriza sua imagem.",
+    consultive: "Entendi. Primeiro me manda sua foto e eu devolvo o wow com leitura clara e direta.",
+    direct: "Vamos lá! Me envie sua foto e eu te mostro agora o primeiro wow.",
   },
   STYLE_ANALYSIS: {
-    friendly: "Que legal! Vamos entender melhor seu estilo para encontrar as melhores peças.",
-    consultive: "Perfeito. Agora que sei um pouco sobre você, vou te guiar pelas escolhas.",
-    direct: "Com base no que você me contou, vou te mostrar o que funciona.",
+    friendly: "Perfeito. Agora eu te explico por que essa leitura funciona e quais opções seguem na mesma linha.",
+    consultive: "Agora que a foto entrou, eu conecto cor, visagismo e caimento para refinar o wow.",
+    direct: "Com a foto em mãos, eu sigo com a leitura e a próxima direção.",
   },
   TRY_ON_GUIDED: {
-    friendly: "Que experiência legal! Viu como a leitura fica mais clara?",
+    friendly: "Que experiência legal! Viu como a leitura ganha força com o try-on?",
     consultive: "O try-on ajuda a validar a direção visual. Vamos seguir por aqui?",
     direct: "Essa leitura já aponta uma direção clara. Quer ver mais?",
   },
   LOOK_RECOMMENDATION: {
-    friendly: "Olha que look interessante para o seu perfil!",
+    friendly: "Olha que look interesting para o seu perfil!",
     consultive: "Com base no seu estilo, essa proposta faz muito sentido.",
     direct: "Essa é a melhor opção para o que você procura.",
   },
@@ -225,13 +225,13 @@ export function getStatePromptHints(state: ConversationState): string[] {
   hints.push(`Nível de persuasão: ${config.persuasionLevel}`);
   
   if (state === "DISCOVERY") {
-    hints.push("Faça perguntas abertas para entender o usuário");
-    hints.push("Não assuma preferências ainda");
+    hints.push("Abra pedindo foto cedo e criando antecipação");
+    hints.push("Evite perguntas abstratas antes do primeiro wow");
   }
   
   if (state === "STYLE_ANALYSIS") {
-    hints.push("Colete informações de estilo ativamente");
-    hints.push("Conecte preferências a produtos");
+    hints.push("Explique o resultado com base na foto já enviada");
+    hints.push("Conecte cor, visagismo e caimento ao wow entregue");
   }
   
   if (state === "TRY_ON_GUIDED") {

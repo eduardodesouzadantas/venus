@@ -12,12 +12,14 @@ import { AssistedLookStrip } from "@/components/catalog/AssistedLookStrip";
 import { ConversationalCatalogBlock } from "@/components/catalog/ConversationalCatalogBlock";
 import type { LookComposition } from "@/lib/look-composition/engine";
 import { ResultErrorBoundary } from "@/components/result/ResultErrorBoundary";
+import { PremiumFallbackSurface } from "@/components/result/PremiumFallbackSurface";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
+import { trackOnboardingConversionEvent } from "@/lib/onboarding/analytics";
 import { useUserImage } from "@/lib/onboarding/UserImageContext";
 import { syncLeadContext } from "@/lib/lead-context/client";
 import { useTryOn, TRYON_LOADING_MESSAGES } from "@/hooks/useTryOn";
 import { buildResultSurface, hasLegacyTryOnProducts, type ResultSurface } from "@/lib/result/surface";
-import { buildAssistedCatalogProductCards, buildAssistedLookStripItems } from "@/lib/catalog-query/presentation";
+import { buildAssistedCatalogProductCards, buildAssistedLookStripItems, buildAssistedRecommendationSurface } from "@/lib/catalog-query/presentation";
 import { buildCatalogAccessCopy } from "@/lib/catalog-query/presentation";
 import { isValidResultId } from "@/lib/result/id";
 import { decideNextAction } from "@/lib/decision-engine/engine";
@@ -27,6 +29,7 @@ import { ensureTryOnProductId } from "@/lib/tryon/product-id";
 import { classifyTryOnQuality } from "@/lib/tryon/result-quality";
 import { buildVenusResultNarrative, VENUS_STYLIST_NAME } from "@/lib/venus/brand";
 import { buildVenusStylistAudit, type VenusStylistAudit } from "@/lib/venus/audit/engine";
+import { TRYON_PREMIUM_FALLBACK_MESSAGE, TRYON_PREMIUM_REFINED_MESSAGE } from "@/lib/tryon/fallback-copy";
 
 // Categorization logic for the try-on engine
 function inferTryOnCategory(product: any): "tops" | "bottoms" | "one-pieces" {
@@ -44,9 +47,11 @@ function ResultDashboardContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const id = searchParams.get("id");
+  const previewMode = searchParams.get("preview") === "1";
+  const hasValidResultId = Boolean(id && isValidResultId(id));
   const { data: onboardingData } = useOnboarding();
   const { userPhoto } = useUserImage();
-  const { status: tryOnStatus, imageUrl: tryOnImageUrl, error: tryOnError, startTryOn, progress: tryOnProgress } = useTryOn();
+  const { status: tryOnStatus, imageUrl: tryOnImageUrl, error: tryOnError, lateSuccessNotice, startTryOn, progress: tryOnProgress } = useTryOn();
 
   const [surface, setSurface] = React.useState<ResultSurface | null>(null);
   const [persistedTryOn, setPersistedTryOn] = React.useState<any>(null);
@@ -60,6 +65,15 @@ function ResultDashboardContent() {
   const [socialFeedbackNote, setSocialFeedbackNote] = React.useState("");
   const [socialFeedbackStatus, setSocialFeedbackStatus] = React.useState<"idle" | "saving" | "saved" | "error">("idle");
   const [revealStage, setRevealStage] = React.useState(0);
+  const [premiumFallback, setPremiumFallback] = React.useState<{
+    transitionMessage: string;
+    refinementMessage: string;
+    message: string;
+    suggestions: Array<any>;
+    hasMoreOptions: boolean;
+    presentation: ReturnType<typeof buildAssistedRecommendationSurface>;
+  } | null>(null);
+  const premiumFallbackRequestKeyRef = React.useRef<string | null>(null);
   const [tenantContext, setTenantContext] = React.useState<{
     whatsappNumber?: string | null;
     orgSlug?: string | null;
@@ -68,6 +82,7 @@ function ResultDashboardContent() {
   } | null>(null);
   const [pendingTryOnProduct, setPendingTryOnProduct] = React.useState<{ id: string; product_id?: string | null; name?: string | null; photoUrl?: string | null; category?: string | null } | null>(null);
   const [decision, setDecision] = React.useState<DecisionResult | null>(null);
+  const wowShownTrackedRef = React.useRef(false);
 
   // ── Derived values (safe even when surface is null) ──
   const looks = useMemo(() => (surface?.looks && Array.isArray(surface.looks) ? surface.looks : []), [surface]);
@@ -80,6 +95,15 @@ function ResultDashboardContent() {
   const hasLegacyTryOnLooks = hasLegacyTryOnProducts(looks);
   const tryOnAvailable = !!looks[0]?.product_id;
   const primaryTryOnProductId = looks[0]?.product_id || "";
+  const premiumFallbackSurface = useMemo(
+    () =>
+      buildAssistedRecommendationSurface(looks, {
+        limit: 3,
+        sourceLabel: catalogSourceLabel || tenantContext?.branchName || tenantContext?.orgSlug || "Catálogo da loja",
+        explicit: false,
+      }),
+    [looks, catalogSourceLabel, tenantContext?.branchName, tenantContext?.orgSlug]
+  );
 
   const org = useMemo(() => ({
     name: tenantContext?.branchName || tenantContext?.orgSlug || "sua loja",
@@ -189,13 +213,129 @@ function ResultDashboardContent() {
     ? `/scanner/face?org=${encodeURIComponent(tenantContext.orgSlug)}`
     : "/scanner/face";
   const advanceReveal = React.useCallback(() => {
+    if (resolvedOrgId && id) {
+      void trackOnboardingConversionEvent({
+        orgId: resolvedOrgId,
+        savedResultId: id,
+        eventType: "post_wow_cta_clicked",
+        eventMeta: {
+          surface: "result_page",
+          cta: "next_suggestion",
+          reveal_stage: revealStage,
+        },
+      });
+    }
     setRevealStage((current) => Math.min(current + 1, progressiveRevealLimit));
-  }, [progressiveRevealLimit]);
+  }, [progressiveRevealLimit, resolvedOrgId, id, revealStage]);
   const mainCtaLabel =
     tryOnQuality.state === "hero"
       ? stylistAudit?.whatsapp.cta || resultNarrative.primaryCta
       : resultNarrative.primaryCta;
   const secondaryCtaLabel = stylistAudit?.whatsapp.cta || resultNarrative.secondaryCta;
+  const tryOnPrimaryActionLabel = tryOnError || tryOnStatus === "failed" ? "Tentar novamente" : mainCtaLabel;
+
+  React.useEffect(() => {
+    if (tryOnStatus !== "fallback") {
+      premiumFallbackRequestKeyRef.current = null;
+      return;
+    }
+
+    if (!resolvedOrgId || !surface) {
+      return;
+    }
+
+    const requestKey = `${resolvedOrgId}:${id || "no-id"}:${looks.map((look) => look.id).join("|")}`;
+    if (premiumFallbackRequestKeyRef.current === requestKey) {
+      return;
+    }
+
+    premiumFallbackRequestKeyRef.current = requestKey;
+    let cancelled = false;
+
+    const loadPremiumFallback = async () => {
+      try {
+        const response = await fetch("/api/tryon/premium-fallback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            orgId: resolvedOrgId,
+            orgSlug: tenantContext?.orgSlug || null,
+            branchName: tenantContext?.branchName || null,
+            customerName: onboardingData?.contact?.name || null,
+            styleDirection: onboardingData?.intent?.styleDirection || null,
+            imageGoal: onboardingData?.intent?.imageGoal || null,
+            bodyFit: onboardingData?.body?.fit || null,
+            paletteFamily,
+            essenceLabel,
+            viewedLooks: looks.map((look) => look.id),
+            lastLookId: looks[0]?.id || null,
+            messageCount: 0,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`fallback_http_${response.status}`);
+        }
+
+        const payload = (await response.json()) as {
+          transitionMessage: string;
+          refinementMessage: string;
+          message: string;
+          suggestions: Array<any>;
+          hasMoreOptions: boolean;
+          presentation: ReturnType<typeof buildAssistedRecommendationSurface>;
+        };
+
+        if (!cancelled) {
+          setPremiumFallback(payload);
+          console.info("[RESULT_FALLBACK] premium fallback loaded", {
+            resultId: id,
+            orgId: resolvedOrgId,
+            suggestions: payload.suggestions?.length || 0,
+          });
+        }
+      } catch (fallbackError) {
+        if (!cancelled) {
+          console.warn("[RESULT_FALLBACK] premium fallback load failed", {
+            resultId: id,
+            orgId: resolvedOrgId,
+            error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+          });
+          setPremiumFallback((current) =>
+            current || {
+              transitionMessage: TRYON_PREMIUM_FALLBACK_MESSAGE,
+              refinementMessage: TRYON_PREMIUM_REFINED_MESSAGE,
+              message: TRYON_PREMIUM_FALLBACK_MESSAGE,
+              suggestions: [],
+              hasMoreOptions: false,
+              presentation: premiumFallbackSurface,
+            }
+          );
+        }
+      }
+    };
+
+    void loadPremiumFallback();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    essenceLabel,
+    id,
+    looks,
+    onboardingData?.body?.fit,
+    onboardingData?.contact?.name,
+    onboardingData?.intent?.imageGoal,
+    onboardingData?.intent?.styleDirection,
+    paletteFamily,
+    premiumFallbackSurface,
+    resolvedOrgId,
+    surface,
+    tenantContext?.branchName,
+    tenantContext?.orgSlug,
+    tryOnStatus,
+  ]);
 
   React.useEffect(() => {
     if (!surface) return;
@@ -226,6 +366,24 @@ function ResultDashboardContent() {
   }, [surface, id, resolvedOrgId, onboardingData?.tenant?.orgId, tryOnQuality]);
 
   // ── WhatsApp URL (memo, always called) ──
+  React.useEffect(() => {
+    if (loading || !surface || wowShownTrackedRef.current || !resolvedOrgId || !id) {
+      return;
+    }
+
+    wowShownTrackedRef.current = true;
+    void trackOnboardingConversionEvent({
+      orgId: resolvedOrgId,
+      savedResultId: id,
+      eventType: "wow_shown",
+      eventMeta: {
+        surface: "result_page",
+        result_state: tryOnQuality.state,
+        has_artifact: Boolean(displayImageUrl || persistedTryOn?.image_url),
+      },
+    });
+  }, [loading, surface, resolvedOrgId, id, tryOnQuality.state, displayImageUrl, persistedTryOn?.image_url]);
+
   const whatsappUrl = useMemo(() => {
     if (!surface) return "";
     const message = buildWhatsAppHandoffMessage({
@@ -272,7 +430,22 @@ function ResultDashboardContent() {
       return;
     }
 
-    if (!id || !isValidResultId(id)) {
+    if (!hasValidResultId) {
+      if (previewMode) {
+        if (onboardingData?.tenant && !tenantContext) {
+          setTenantContext({
+            whatsappNumber: onboardingData.tenant.whatsappNumber || null,
+            orgSlug: onboardingData.tenant.orgSlug || null,
+            orgId: onboardingData.tenant.orgId || null,
+            branchName: onboardingData.tenant.branchName || null,
+          });
+        }
+
+        setSurface(buildResultSurface(onboardingData, null, null));
+        setLoading(false);
+        return;
+      }
+
       const restartTarget = onboardingData?.tenant?.orgSlug
         ? `/onboarding/chat?org=${encodeURIComponent(onboardingData.tenant.orgSlug)}`
         : "/onboarding/chat";
@@ -339,7 +512,7 @@ function ResultDashboardContent() {
       }
     }
     load();
-  }, [id, onboardingData, redirecting, router, tryOnImageUrl]);
+  }, [hasValidResultId, id, onboardingData, previewMode, redirecting, router, tenantContext, tryOnImageUrl]);
 
   // ── Try-on sync effect (always called) ──
   React.useEffect(() => {
@@ -429,6 +602,19 @@ function ResultDashboardContent() {
   const openWhatsApp = React.useCallback(
     async (url: string) => {
       if (resolvedOrgId && id) {
+        void trackOnboardingConversionEvent({
+          orgId: resolvedOrgId,
+          savedResultId: id,
+          eventType: "post_wow_cta_clicked",
+          eventMeta: {
+            surface: "result_page",
+            cta: "whatsapp",
+            result_state: tryOnQuality.state,
+          },
+        });
+      }
+
+      if (resolvedOrgId && id) {
         void syncLeadContext({
           orgId: resolvedOrgId,
           savedResultId: id,
@@ -448,7 +634,7 @@ function ResultDashboardContent() {
 
       window.open(url, "_blank", "noopener,noreferrer");
     },
-    [resolvedOrgId, id]
+    [resolvedOrgId, id, tryOnQuality.state]
   );
 
   const handleSaveSocialFeedback = React.useCallback(async () => {
@@ -591,6 +777,13 @@ function ResultDashboardContent() {
                     {tryOnQuality.badgeLabel}
                   </span>
                 </div>
+                {lateSuccessNotice && (
+                  <div className="absolute right-6 top-6 rounded-full border border-[#C9A84C]/18 bg-[#C9A84C]/12 px-4 py-2 backdrop-blur-md">
+                    <span className="text-[9px] font-black uppercase tracking-[0.22em] text-[#C9A84C]">
+                      {lateSuccessNotice}
+                    </span>
+                  </div>
+                )}
                 <div className="absolute bottom-6 left-6 right-6">
                   <div className="rounded-[22px] border border-white/10 bg-black/55 px-4 py-3 backdrop-blur-md">
                     <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/45">{stylistAudit?.tryOn.eyebrow || "Por que este look funciona"}</p>
@@ -599,6 +792,51 @@ function ResultDashboardContent() {
                     </p>
                   </div>
                 </div>
+              </div>
+            ) : tryOnStatus === "fallback" ? (
+              <div className="flex h-full w-full flex-col gap-5 overflow-y-auto p-4 sm:p-6">
+                <div className="rounded-[28px] border border-white/8 bg-white/[0.04] p-5 text-left backdrop-blur-md">
+                  <div className="flex items-center gap-2 text-[#C9A84C]">
+                    <Sparkles className="h-4 w-4" />
+                    <p className="text-[10px] font-bold uppercase tracking-[0.32em]">Curadoria premium</p>
+                  </div>
+                  <h3 className="mt-3 font-serif text-2xl text-white">Já consegui identificar sua direção.</h3>
+                  <p className="mt-3 text-[13px] leading-relaxed text-white/70">
+                    Vou te mostrar o que mais valoriza seu estilo enquanto refino sua leitura visual.
+                  </p>
+                  {lateSuccessNotice && (
+                    <p className="mt-3 rounded-full border border-[#C9A84C]/18 bg-[#C9A84C]/10 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.22em] text-[#C9A84C]">
+                      {lateSuccessNotice}
+                    </p>
+                  )}
+                </div>
+                <PremiumFallbackSurface
+                  transitionMessage={premiumFallback?.transitionMessage || TRYON_PREMIUM_FALLBACK_MESSAGE}
+                  refinementMessage={premiumFallback?.refinementMessage || TRYON_PREMIUM_REFINED_MESSAGE}
+                  presentation={premiumFallback?.presentation || premiumFallbackSurface}
+                  suggestions={premiumFallback?.suggestions || []}
+                  orgId={resolvedOrgId}
+                  userPhotoUrl={tryOnPersonImage || undefined}
+                  storeName={tenantContext?.branchName || tenantContext?.orgSlug || "Loja"}
+                  storePhone={tenantContext?.whatsappNumber || org.whatsapp_phone}
+                  customerName={onboardingData?.contact?.name || undefined}
+                  resultUrl={typeof window !== "undefined" && hasValidResultId ? `${window.location.origin}/result?id=${id}` : undefined}
+                  refCode={hasValidResultId ? id || undefined : undefined}
+                  onTryOnStart={(composition) => {
+                    if (composition.anchorPiece.id) {
+                      handleGenerateTryOn(composition.anchorPiece.id);
+                    }
+                  }}
+                  onMoreOptions={() => {
+                    document.getElementById("look-composition-gallery")?.scrollIntoView({ behavior: "smooth" });
+                  }}
+                  onTalkToVenus={() => {
+                    if (whatsappUrl) {
+                      openWhatsApp(whatsappUrl);
+                    }
+                  }}
+                  onSaveLook={() => setShowSaveModal(true)}
+                />
               </div>
             ) : (
               <div className="flex h-full w-full flex-col items-center justify-center p-12 text-center">
@@ -610,6 +848,11 @@ function ResultDashboardContent() {
                     ? "Essa leitura ainda não chegou no ponto ideal. Vamos refazer com uma foto melhor."
                     : "A Venus está pronta para revelar seu primeiro look."}
                 </p>
+                {tryOnError && (
+                  <p className="max-w-sm text-[12px] leading-relaxed text-white/45">
+                    {tryOnError}
+                  </p>
+                )}
                 <VenusButton
                   onClick={() => {
                     if (!tryOnAvailable) {
@@ -625,7 +868,7 @@ function ResultDashboardContent() {
                   disabled={!tryOnAvailable}
                   className="mt-8"
                 >
-                  {tryOnAvailable ? mainCtaLabel : "Leitura indisponível"}
+                  {tryOnAvailable ? tryOnPrimaryActionLabel : "Leitura indisponível"}
                 </VenusButton>
                 {!tryOnAvailable && (
                   <p className="mt-3 text-[11px] leading-relaxed text-white/40">
@@ -782,12 +1025,38 @@ function ResultDashboardContent() {
                       label: explicitCatalogCopy.openLabel,
                       href: catalogLink || "/catalog",
                       target: "_blank",
+                      onClick: () => {
+                        if (resolvedOrgId && id) {
+                          void trackOnboardingConversionEvent({
+                            orgId: resolvedOrgId,
+                            savedResultId: id,
+                            eventType: "post_wow_cta_clicked",
+                            eventMeta: {
+                              surface: "result_page",
+                              cta: "catalog",
+                              catalog_link: catalogLink || "/catalog",
+                            },
+                          });
+                        }
+                      },
                     }
                     : undefined
                 }
                 continueAction={{
                   label: explicitCatalogCopy.continueLabel,
                   onClick: () => {
+                    if (resolvedOrgId && id) {
+                      void trackOnboardingConversionEvent({
+                        orgId: resolvedOrgId,
+                        savedResultId: id,
+                        eventType: "post_wow_cta_clicked",
+                        eventMeta: {
+                          surface: "result_page",
+                          cta: "continue",
+                        },
+                      });
+                    }
+
                     if (whatsappUrl) {
                       openWhatsApp(whatsappUrl);
                     }
@@ -795,12 +1064,38 @@ function ResultDashboardContent() {
                 }}
                 saveAction={{
                   label: explicitCatalogCopy.saveLabel,
-                  onClick: () => setShowSaveModal(true),
+                  onClick: () => {
+                    if (resolvedOrgId && id) {
+                      void trackOnboardingConversionEvent({
+                        orgId: resolvedOrgId,
+                        savedResultId: id,
+                        eventType: "post_wow_cta_clicked",
+                        eventMeta: {
+                          surface: "result_page",
+                          cta: "save",
+                        },
+                      });
+                    }
+
+                    setShowSaveModal(true);
+                  },
                 }}
                 onOpenProduct={() => {
                   document.getElementById("look-composition-gallery")?.scrollIntoView({ behavior: "smooth" });
                 }}
                 onAskOpinion={() => {
+                  if (resolvedOrgId && id) {
+                    void trackOnboardingConversionEvent({
+                      orgId: resolvedOrgId,
+                      savedResultId: id,
+                      eventType: "post_wow_cta_clicked",
+                      eventMeta: {
+                        surface: "result_page",
+                        cta: "opinion",
+                      },
+                    });
+                  }
+
                   if (whatsappUrl) {
                     openWhatsApp(whatsappUrl);
                   }
@@ -834,7 +1129,7 @@ function ResultDashboardContent() {
                 storeName={tenantContext?.branchName || tenantContext?.orgSlug || "Loja"}
                 storePhone={tenantContext?.whatsappNumber || org.whatsapp_phone}
                 customerName={onboardingData?.contact?.name}
-                resultUrl={typeof window !== "undefined" ? `${window.location.origin}/result?id=${id}` : undefined}
+                resultUrl={typeof window !== "undefined" && hasValidResultId ? `${window.location.origin}/result?id=${id}` : undefined}
                 onTryOnStart={(composition: LookComposition) => {
                   // Iniciar try-on com a peça âncora do look
                   if (composition.anchorPiece.id) {
@@ -852,7 +1147,7 @@ function ResultDashboardContent() {
                 looks={looks}
                 surface={surface}
                 resultId={id}
-                resultUrl={typeof window !== "undefined" ? `${window.location.origin}/result?id=${id}` : undefined}
+                resultUrl={typeof window !== "undefined" && hasValidResultId ? `${window.location.origin}/result?id=${id}` : undefined}
                 orgId={resolvedOrgId || null}
                 brandName={tenantContext?.branchName || tenantContext?.orgSlug || "Venus"}
                 appName={VENUS_STYLIST_NAME}

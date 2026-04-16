@@ -8,9 +8,10 @@ import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
 import type { OnboardingData } from "@/types/onboarding";
 import { processAndPersistLead } from "@/lib/recommendation/actions";
 import { RESULT_ID_PATTERN, isValidResultId } from "@/lib/result/id";
+import { buildVenusBodyScannerIntro } from "@/lib/venus/brand";
 
 const PHASES = [
-  "Lendo sua foto...",
+  "Foto recebida. Analisando...",
   "Decifrando proporções e linhas...",
   "Cruzando paleta e presença...",
   "Montando combinações do catálogo...",
@@ -113,6 +114,17 @@ export default function ProcessingPage() {
           router.push(`/result?id=${dbReferenceId}`);
         }
       } catch (e) {
+        if (e instanceof Error && e.message === "TENANT_RESOLUTION_FAILED") {
+          console.warn("[PROCESSING] tenant resolution failed; falling back to preview result", {
+            orgId: data?.tenant?.orgId || null,
+            orgSlug: data?.tenant?.orgSlug || null,
+          });
+          if (!cancelled) {
+            router.replace("/result?preview=1");
+          }
+          return;
+        }
+
         console.error("[PROCESSING] critical persistence failure", e);
         if (!cancelled) {
           setError(e instanceof Error ? e.message : "Não foi possível salvar seu resultado.");
@@ -177,10 +189,10 @@ export default function ProcessingPage() {
 
       <div className="z-10 w-full max-w-[300px] text-center">
         <Heading as="h4" className="mb-2 font-serif text-base tracking-widest text-[#C9A84C] transition-opacity duration-300 sm:text-lg">
-          VENUS ENGINE CORE
+          VENUS STYLIST
         </Heading>
         <Text className="text-sm leading-relaxed text-white/70">
-          A Venus está cruzando foto, corpo, paleta e catálogo para devolver uma curadoria que pareça feita por stylist.
+          {buildVenusBodyScannerIntro()}
         </Text>
         <div className="relative mt-4 h-10 w-full">
           {PHASES.map((phase, i) => (

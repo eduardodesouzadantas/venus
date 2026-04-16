@@ -19,6 +19,7 @@ type LeadContextSyncInput = {
   whatsappContext?: Record<string, unknown> | null;
   lastAction?: string | null;
   lastActionOutcome?: string | null;
+  lastActivityAt?: string | null;
   actionHistory?: unknown[] | null;
   eventMeta?: Record<string, unknown> | null;
 };

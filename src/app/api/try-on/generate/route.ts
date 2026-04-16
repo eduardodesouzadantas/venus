@@ -27,7 +27,18 @@ export async function POST(request: Request) {
     benefitLine?: string;
   };
 
+  console.info("[try-on/generate] request start", {
+    hasUserPhoto: Boolean(input.userPhotoUrl),
+    hasLookImage: Boolean(input.lookImageUrl),
+    hasLookName: Boolean(input.lookName),
+  });
+
   if (!input.userPhotoUrl || !input.lookImageUrl || !input.lookName) {
+    console.warn("[try-on/generate] missing required fields", {
+      hasUserPhoto: Boolean(input.userPhotoUrl),
+      hasLookImage: Boolean(input.lookImageUrl),
+      hasLookName: Boolean(input.lookName),
+    });
     return Response.json(
       { error: "Missing userPhotoUrl, lookImageUrl or lookName" },
       { status: 400 }
@@ -53,6 +64,13 @@ export async function POST(request: Request) {
       request.url
     );
 
+    console.info("[try-on/generate] request completed", {
+      providerUsed: result.providerUsed || null,
+      modelUsed: result.modelUsed || null,
+      fallbackUsed: result.fallbackUsed ?? null,
+      hasImageData: Boolean(result.imageDataUrl),
+    });
+
     return Response.json(
       {
         imageDataUrl: result.imageDataUrl,
@@ -70,6 +88,9 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to generate try-on image";
+    console.warn("[try-on/generate] request failed", {
+      error: message,
+    });
     return Response.json({ error: message }, { status: 502 });
   }
 }

@@ -10,7 +10,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { extractLeadSignalsFromSavedResultPayload, persistSavedResultAndLead } from "@/lib/leads";
 import { buildLeadContextProfileFromOnboarding, upsertLeadContextByLeadId } from "@/lib/lead-context";
 import { decideNextAction } from "@/lib/decision-engine";
-import { fetchTenantBySlug, isTenantActive, normalizeTenantSlug, resolveAppTenantOrg } from "@/lib/tenant/core";
+import { fetchTenantById, fetchTenantBySlug, isTenantActive, normalizeTenantSlug, resolveAppTenantOrg } from "@/lib/tenant/core";
 import { generateVisualProfileAnalysis } from "@/lib/analysis/visual-profile";
 import {
   createProcessAndPersistLeadIdempotencyKey,
@@ -31,6 +31,10 @@ import {
 
 function generateHeuristicFallback(userData: OnboardingData, products: Product[]): ResultPayload {
   return buildCatalogAwareFallbackResult(userData, products);
+}
+
+function normalizeText(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 export async function generateEngineResult(
@@ -109,8 +113,10 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
   try {
     const supabase = createAdminClient();
     const startedAtMs = Date.now();
+    const explicitOrgId = normalizeText(userData.tenant?.orgId);
     const explicitOrgSlug = normalizeTenantSlug(userData.tenant?.orgSlug);
     console.info("[SAVED_RESULTS] processAndPersistLead start", {
+      explicitOrgId,
       explicitOrgSlug,
       hasContact: Boolean(userData.contact?.phone || userData.contact?.email),
       hasScannerPhotos: Boolean(userData.scanner?.facePhoto || userData.scanner?.bodyPhoto),
@@ -118,16 +124,27 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
       hasServiceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
       deploymentEnv: process.env.VERCEL_ENV || process.env.NODE_ENV || null,
     });
-    const explicitTenant = explicitOrgSlug ? await fetchTenantBySlug(supabase, explicitOrgSlug) : null;
-    const resolvedTenantResult = explicitOrgSlug
-      ? explicitTenant?.org && isTenantActive(explicitTenant.org)
-        ? explicitTenant
-        : null
-      : await resolveAppTenantOrg(supabase);
+    const explicitTenantById = explicitOrgId ? await fetchTenantById(supabase, explicitOrgId) : null;
+    const explicitTenantBySlug = explicitOrgSlug ? await fetchTenantBySlug(supabase, explicitOrgSlug) : null;
+
+    const resolvedTenantResult =
+      (explicitTenantById?.org && isTenantActive(explicitTenantById.org)
+        ? explicitTenantById
+        : null) ||
+      (explicitTenantBySlug?.org && isTenantActive(explicitTenantBySlug.org)
+        ? explicitTenantBySlug
+        : null) ||
+      (explicitOrgSlug || explicitOrgId
+        ? await resolveAppTenantOrg(supabase, {
+            preferredSlug: explicitOrgSlug || null,
+            allowSingleActiveFallback: true,
+          })
+        : await resolveAppTenantOrg(supabase));
 
     if (!resolvedTenantResult?.org) {
       const error = new Error("TENANT_RESOLUTION_FAILED");
-      console.error("[SAVED_RESULTS] unable to resolve canonical tenant for persisted result", {
+      console.warn("[SAVED_RESULTS] unable to resolve canonical tenant for persisted result", {
+        explicitOrgId,
         explicitOrgSlug,
         userPhone: userData.contact?.phone || null,
         userEmail: userData.contact?.email || null,

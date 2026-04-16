@@ -142,6 +142,8 @@ const {
 
 require("./catalog-query/presentation.test.ts");
 require("./assisted-recommendation.presentation.test.ts");
+require("./onboarding/public-surface.test.ts");
+require("./onboarding/wow-surface.test.ts");
 require("./security/cross-tenant.test.ts");
 
 const sampleOnboarding = {
@@ -3836,6 +3838,118 @@ const FRONTEND_ORG_ID = "frontend-org";
     assert.ok(!processingSource.includes('router.push("/result?id=MOCK_DB_FAIL")'));
   });
 
+  await runAsync("scenario 2b - processAndPersistLead resolves tenant by orgId when slug is absent", async () => {
+    const onboarding = {
+      contact: { name: "Cliente", phone: "+5511999999999", email: "cliente@exemplo.com" },
+      tenant: { orgId: "org-123" },
+      scanner: { facePhoto: "data:image/png;base64,aaa", bodyPhoto: "data:image/png;base64,bbb" },
+      intent: { imageGoal: "Autoridade", styleDirection: "Executiva", satisfaction: 9 },
+      lifestyle: {},
+      colors: {},
+      body: {},
+    };
+
+    const actions = await withMockedModules({
+      "server-only": {} ,
+      "@/lib/supabase/admin": {
+        createAdminClient: () => ({
+          from(table) {
+            if (table === "saved_results") {
+              return {
+                select() {
+                  return {
+                    eq() {
+                      return {
+                        eq() {
+                          return {
+                            maybeSingle: async () => ({ data: { id: "result-1" }, error: null }),
+                          };
+                        },
+                        maybeSingle: async () => ({ data: { id: "result-1" }, error: null }),
+                      };
+                    },
+                  };
+                },
+              };
+            }
+
+            if (table === "tenant_events") {
+              return { insert: async () => ({ error: null }) };
+            }
+
+            return {
+              select() {
+                return {
+                  eq() {
+                    return { maybeSingle: async () => ({ data: null, error: null }) };
+                  },
+                };
+              },
+            };
+          },
+        }),
+      },
+      "@/lib/tenant/core": {
+        fetchTenantById: async (supabase, id) => ({
+          org: { id, slug: "maison-elite", status: "active", kill_switch: false, plan_id: "starter" },
+          error: null,
+        }),
+        fetchTenantBySlug: async () => ({ org: null, error: null }),
+        isTenantActive: () => true,
+        normalizeTenantSlug: (value) => (value || "").trim(),
+        resolveAppTenantOrg: async () => ({ org: null, source: "none" }),
+      },
+      "@/lib/ai": {
+        generateOpenAIRecommendation: async () => {
+          throw new Error("should_not_run");
+        },
+      },
+      "@/lib/ai/result-normalizer": {
+        buildCatalogAwareFallbackResult: () => ({}),
+      },
+      "@/lib/leads": {
+        extractLeadSignalsFromSavedResultPayload: () => ({ intentScore: 0 }),
+        persistSavedResultAndLead: async () => ({ id: "result-1" }),
+      },
+      "@/lib/lead-context": {
+        buildLeadContextProfileFromOnboarding: () => ({}),
+        upsertLeadContextByLeadId: async () => null,
+      },
+      "@/lib/decision-engine": {
+        decideNextAction: () => ({ chosenAction: "WAIT", reason: "test", adaptiveConfidence: 0.5, weightAdjustments: {} }),
+      },
+      "@/lib/reliability/idempotency": {
+        createProcessAndPersistLeadIdempotencyKey: () => "key",
+        stripOnboardingBinaryArtifacts: (value) => value,
+      },
+      "@/lib/reliability/observability": {
+        captureOperationalTiming: () => ({ duration_ms: 0, started_at: "", completed_at: "" }),
+        formatOperationalReason: () => "reason",
+        recordOperationalTenantEvent: async () => null,
+      },
+      "@/lib/reliability/processing": {
+        completeProcessingReservation: async () => null,
+        createProcessingOwnerToken: () => "owner",
+        failProcessingReservation: async () => null,
+        reserveProcessingReservation: async () => ({ acquired: false, should_wait: false, status: "busy", saved_result_id: null }),
+        waitForProcessingReservation: async () => ({ acquired: false, should_wait: false, status: "busy", saved_result_id: null }),
+      },
+      "@/lib/analysis/visual-profile": {
+        generateVisualProfileAnalysis: async () => ({}),
+      },
+      "@/lib/catalog": {
+        getB2BProducts: async () => [],
+      },
+    }, async () => {
+      return loadFresh("../src/lib/recommendation/actions.ts");
+    });
+
+    await assert.doesNotReject(async () => {
+      const resultId = await actions.processAndPersistLead(onboarding);
+      assert.equal(resultId, "result-1");
+    });
+  });
+
   await runAsync("scenario 3 - invalid result ids are rejected immediately", async () => {
     const resultIdModule = loadFresh("../src/lib/result/id.ts");
 
@@ -3967,6 +4081,83 @@ const FRONTEND_ORG_ID = "frontend-org";
     assert.equal(capturedIdentity.orgId, VALID_ORG_ID);
     assert.equal(capturedIdentity.savedResultId, VALID_RESULT_ID);
     assert.notEqual(capturedIdentity.orgId, FRONTEND_ORG_ID);
+  });
+
+  await runAsync("lead-context route records onboarding conversion events in tenant_events", async () => {
+    const insertedEvents = [];
+
+    const supabase = {
+      from(table) {
+        if (table === "tenant_events") {
+          return {
+            insert: async (row) => {
+              insertedEvents.push(row);
+              return { error: null };
+            },
+          };
+        }
+
+        return {
+          select() {
+            return this;
+          },
+          eq() {
+            return this;
+          },
+          maybeSingle: async () => ({ data: null, error: null }),
+        };
+      },
+    };
+
+    const response = await withMockedModules({
+      "@/lib/supabase/admin": {
+        createAdminClient: () => supabase,
+      },
+      "@/lib/lead-context": {
+        loadLeadContextByIdentity: async () => ({
+          lead: { id: "lead-1", org_id: "org-1", intent_score: 3 },
+          context: {
+            updated_at: new Date().toISOString(),
+            intent_score: 3,
+          },
+        }),
+        updateLeadContextIntent: async () => ({ ok: true }),
+        updateLeadContextProducts: async () => ({ ok: true }),
+        updateLeadContextTryOn: async () => ({ ok: true }),
+        upsertLeadContext: async () => ({ ok: true }),
+        updateIntentScore: (eventType, currentScore) => currentScore + (eventType === "photo_sent" ? 2 : 0),
+      },
+      "@/lib/gamification/events": {
+        processGamificationTriggerEvent: async () => ({ processed: false }),
+      },
+      "@/lib/decision-engine/learning": {
+        recordDecisionOutcome: async () => ({ ok: true }),
+      },
+    }, async () => {
+      const route = loadFresh("../src/app/api/lead-context/route.ts");
+      return route.POST(
+        new Request("https://example.com/api/lead-context", {
+          method: "POST",
+          body: JSON.stringify({
+            orgId: "org-1",
+            leadId: "lead-1",
+            eventType: "photo_sent",
+            timestamp: "2026-04-15T12:00:00.000Z",
+            eventMeta: {
+              surface: "onboarding_chat",
+              cta: "send_photo",
+            },
+          }),
+        })
+      );
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(insertedEvents.length, 1);
+    assert.equal(insertedEvents[0].event_type, "photo_sent");
+    assert.equal(insertedEvents[0].payload.event_meta.surface, "onboarding_chat");
+    assert.equal(insertedEvents[0].payload.action, "UPLOAD_PHOTO");
+    assert.equal(insertedEvents[0].payload.outcome, "PHOTO_SENT");
   });
 
   await runAsync("scenario 5 - regression scan keeps dangerous sentinel navigation out", async () => {

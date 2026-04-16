@@ -6,8 +6,12 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { VenusAvatar } from "@/components/venus/VenusAvatar";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
+import { trackOnboardingConversionEvent } from "@/lib/onboarding/analytics";
+import { isOnboardingWowSurfaceEnabled } from "@/lib/onboarding/feature-flags";
+import { buildOnboardingWowCopy } from "@/lib/onboarding/wow-surface";
 import { defaultOnboardingData, type OnboardingData } from "@/types/onboarding";
 import { buildVenusStylistIntro } from "@/lib/venus/brand";
+import { PremiumWowFirstChatContent } from "@/components/onboarding/PremiumWowFirstChatContent";
 
 type ChatRole = "venus" | "client";
 
@@ -214,7 +218,279 @@ function ChoiceChip({
   );
 }
 
-function ChatContent() {
+function WowActionButton({
+  label,
+  variant,
+  onClick,
+  disabled,
+}: {
+  label: string;
+  variant: "primary" | "secondary";
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={[
+        "inline-flex min-h-12 items-center justify-center rounded-full px-5 text-[10px] font-black uppercase tracking-[0.24em] transition-transform active:scale-[0.98]",
+        variant === "primary"
+          ? "border border-[#C9A84C]/25 bg-[linear-gradient(180deg,#F1D77A_0%,#C9A84C_100%)] text-[#0a0a0a] shadow-[0_18px_40px_rgba(212,175,55,0.18)]"
+          : "border border-white/10 bg-white/[0.05] text-white/82",
+        disabled ? "cursor-not-allowed opacity-50" : "",
+      ].join(" ")}
+    >
+      {label}
+    </button>
+  );
+}
+
+export function WowFirstChatContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const orgSlug = searchParams.get("org") || "";
+  const { data, updateData, journey, isJourneyLoaded } = useOnboarding();
+  const result = data ?? defaultOnboardingData;
+  const resolvedOrgId = result.tenant?.orgId || journey?.onboardingSeed?.tenant?.orgId || "";
+  const resolvedOrgSlug = result.tenant?.orgSlug || journey?.onboardingSeed?.tenant?.orgSlug || orgSlug || "";
+  const orgLabel = result.tenant?.branchName || result.tenant?.orgSlug || orgSlug || "sua loja";
+  const copy = useMemo(() => buildOnboardingWowCopy(orgLabel), [orgLabel]);
+
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: "intro",
+      role: "venus",
+      text: copy.intro,
+    },
+  ]);
+  const [isRouting, setIsRouting] = useState(false);
+  const [showFollowUp, setShowFollowUp] = useState(false);
+  const [showAnalyzing, setShowAnalyzing] = useState(false);
+
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const followUpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const routeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasTrackedIntroRef = useRef(false);
+  const nextHref = useMemo(() => (orgSlug ? `/scanner/opt-in?org=${encodeURIComponent(orgSlug)}` : "/scanner/opt-in"), [orgSlug]);
+  const skipHref = useMemo(() => (orgSlug ? `/processing?org=${encodeURIComponent(orgSlug)}` : "/processing"), [orgSlug]);
+
+  useEffect(() => {
+    if (!isJourneyLoaded || !journey) {
+      return;
+    }
+
+    if (!journey.skipOnboarding) {
+      return;
+    }
+
+    const target = journey.mode === "continue" ? journey.resumeRoute || journey.entryRoute : journey.entryRoute;
+    if (!target || target === "/onboarding/chat" || target.startsWith("/onboarding/chat?")) {
+      return;
+    }
+
+    router.replace(target);
+  }, [isJourneyLoaded, journey, router]);
+
+  useEffect(() => {
+    if (hasTrackedIntroRef.current || !resolvedOrgId) {
+      return;
+    }
+
+    hasTrackedIntroRef.current = true;
+    void trackOnboardingConversionEvent({
+      orgId: resolvedOrgId,
+      eventType: "first_message_shown",
+      eventMeta: {
+        surface: "onboarding_chat",
+        variant: "wow_first",
+        org_slug: resolvedOrgSlug || null,
+      },
+    });
+  }, [resolvedOrgId, resolvedOrgSlug]);
+
+  useEffect(() => {
+    followUpTimerRef.current = setTimeout(() => {
+      setShowFollowUp(true);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: "follow-up",
+          role: "venus",
+          text: copy.followUp,
+        },
+      ]);
+    }, 3600);
+
+    return () => {
+      if (followUpTimerRef.current) clearTimeout(followUpTimerRef.current);
+      if (routeTimerRef.current) clearTimeout(routeTimerRef.current);
+    };
+  }, [copy.followUp]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages, showAnalyzing, isRouting]);
+
+  const routeWithDelay = (path: string, callback?: () => void) => {
+    setIsRouting(true);
+    setShowAnalyzing(true);
+    if (followUpTimerRef.current) clearTimeout(followUpTimerRef.current);
+
+    routeTimerRef.current = setTimeout(() => {
+      callback?.();
+      router.push(path);
+    }, 650);
+  };
+
+  const handleSendPhoto = () => {
+    if (isRouting || !resolvedOrgId) return;
+
+    updateData("scanner", { skipped: false });
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: "client-send-photo",
+        role: "client",
+        text: copy.sendPhotoLabel,
+      },
+    ]);
+    void trackOnboardingConversionEvent({
+      orgId: resolvedOrgId,
+      eventType: "photo_sent",
+      eventMeta: {
+        surface: "onboarding_chat",
+        cta: "send_photo",
+        org_slug: resolvedOrgSlug || null,
+      },
+    });
+    routeWithDelay(nextHref);
+  };
+
+  const handleContinueWithoutPhoto = () => {
+    if (isRouting || !resolvedOrgId) return;
+
+    updateData("scanner", { skipped: true });
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: "client-skip-photo",
+        role: "client",
+        text: copy.continueLabel,
+      },
+    ]);
+    void trackOnboardingConversionEvent({
+      orgId: resolvedOrgId,
+      eventType: "photo_not_sent",
+      eventMeta: {
+        surface: "onboarding_chat",
+        cta: "continue_without_photo",
+        org_slug: resolvedOrgSlug || null,
+      },
+    });
+    routeWithDelay(skipHref);
+  };
+
+  return (
+    <div className="relative flex min-h-screen flex-col overflow-hidden bg-[#090909] text-white">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute left-[-12%] top-[-8%] h-72 w-72 rounded-full bg-[#C9A84C]/10 blur-[120px]" />
+        <div className="absolute right-[-8%] top-[10%] h-64 w-64 rounded-full bg-white/5 blur-[120px]" />
+        <div className="absolute bottom-[-10%] left-[18%] h-80 w-80 rounded-full bg-[#C9A84C]/6 blur-[130px]" />
+      </div>
+
+      <header className="relative z-10 flex items-center gap-3 px-4 pb-4 pt-4 sm:px-6">
+        <VenusAvatar size={42} animated />
+        <div className="space-y-0.5">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.38em] text-[#C9A84C]">Venus Stylist</div>
+          <div className="text-[11px] text-white/42">Primeiro wow em uma única decisão</div>
+        </div>
+      </header>
+
+      <main className="relative z-10 flex-1 px-4 pb-40 pt-3 sm:px-6">
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+          <AnimatePresence initial={false}>
+            {messages.map((message) => (
+              <motion.div
+                key={message.id}
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.28, ease: "easeOut" }}
+              >
+                <MessageBubble message={message} />
+              </motion.div>
+            ))}
+          </AnimatePresence>
+
+          {showAnalyzing ? (
+            <div className="flex items-start gap-3">
+              <div className="mt-1 shrink-0">
+                <VenusAvatar size={34} animated />
+              </div>
+              <div className="w-full rounded-[26px] border border-white/10 bg-white/[0.055] px-5 py-4 text-sm text-white/82 shadow-[0_18px_50px_rgba(0,0,0,0.4)] backdrop-blur-xl">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.34em] text-[#C9A84C]">Analisando</p>
+                <p className="mt-2 text-[15px] leading-7 text-white/90">{copy.sending}</p>
+                <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/8">
+                  <div className="h-full w-2/3 animate-pulse rounded-full bg-[linear-gradient(90deg,#F1D77A_0%,#C9A84C_100%)]" />
+                </div>
+                <p className="mt-3 text-[13px] leading-6 text-white/60">{copy.analyzing}</p>
+              </div>
+            </div>
+          ) : null}
+
+          <div ref={messagesEndRef} />
+        </div>
+      </main>
+
+      <div className="relative z-10 border-t border-white/8 bg-[#090909]/96 backdrop-blur-2xl">
+        <div className="mx-auto w-full max-w-3xl px-4 py-4 sm:px-6">
+          <div className="rounded-[30px] border border-white/10 bg-white/[0.045] px-4 py-4 shadow-[0_18px_50px_rgba(0,0,0,0.24)]">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.34em] text-[#C9A84C]">Leitura inicial</p>
+            <p className="mt-2 text-[15px] leading-7 text-white/90">{copy.consultiveNote}</p>
+            <p className="mt-2 text-[13px] leading-6 text-white/50">Sem formulário. Sem etapas escondidas. Só direção.</p>
+
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+              <WowActionButton
+                label={copy.sendPhotoLabel}
+                variant="primary"
+                disabled={isRouting}
+                onClick={handleSendPhoto}
+              />
+              <WowActionButton
+                label={copy.continueLabel}
+                variant="secondary"
+                disabled={isRouting}
+                onClick={handleContinueWithoutPhoto}
+              />
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-white/54">
+                Foto cedo
+              </span>
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-white/54">
+                Wow rápido
+              </span>
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-white/54">
+                Continuidade consultiva
+              </span>
+            </div>
+          </div>
+
+          {showFollowUp ? (
+            <div className="mt-3 rounded-[26px] border border-white/8 bg-white/[0.03] px-4 py-3 text-[13px] leading-6 text-white/64">
+              {copy.followUp}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LegacyChatContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const orgSlug = searchParams.get("org") || "";
@@ -530,6 +806,18 @@ function ChatContent() {
       </div>
     </div>
   );
+}
+
+function ChatContent() {
+  const { data, journey } = useOnboarding();
+  const searchParams = useSearchParams();
+  const orgSlug = searchParams.get("org") || data?.tenant?.orgSlug || journey?.onboardingSeed?.tenant?.orgSlug || "";
+  const isWowPilot = isOnboardingWowSurfaceEnabled({
+    orgSlug: orgSlug || null,
+    orgId: data?.tenant?.orgId || journey?.onboardingSeed?.tenant?.orgId || null,
+  });
+
+  return isWowPilot ? <PremiumWowFirstChatContent /> : <LegacyChatContent />;
 }
 
 export default function OnboardingChatPage() {

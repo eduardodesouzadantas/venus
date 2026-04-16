@@ -61,6 +61,11 @@ export type LeadContextPatch = {
 };
 
 export type LeadIntentEventType =
+  | "first_message_shown"
+  | "photo_sent"
+  | "photo_not_sent"
+  | "wow_shown"
+  | "post_wow_cta_clicked"
   | "tryon_generated"
   | "variation_requested"
   | "whatsapp_clicked"
@@ -106,6 +111,11 @@ function isMissingLeadContextTableError(error: unknown) {
 }
 
 const INTENT_SCORE_DELTAS: Record<LeadIntentEventType, number> = {
+  first_message_shown: 0,
+  photo_sent: 2,
+  photo_not_sent: -1,
+  wow_shown: 1,
+  post_wow_cta_clicked: 2,
   tryon_generated: 2,
   variation_requested: 1,
   whatsapp_clicked: 3,

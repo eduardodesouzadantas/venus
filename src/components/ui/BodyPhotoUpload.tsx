@@ -13,9 +13,11 @@ export function BodyPhotoUpload({ onPhotoSelected, onUseCamera }: BodyPhotoUploa
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [selectedImage, setSelectedImage] = React.useState<string | null>(null);
   const [isPreviewMode, setIsPreviewMode] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
+    setError(null);
     if (!file) return;
 
     const reader = new FileReader();
@@ -24,18 +26,30 @@ export function BodyPhotoUpload({ onPhotoSelected, onUseCamera }: BodyPhotoUploa
       setSelectedImage(result);
       setIsPreviewMode(true);
     };
+    reader.onerror = () => {
+      setError("Não consegui ler essa foto. Tente outra imagem ou use a câmera.");
+      setSelectedImage(null);
+      setIsPreviewMode(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    };
     reader.readAsDataURL(file);
   };
 
   const handleConfirm = () => {
     if (selectedImage) {
       onPhotoSelected(selectedImage);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     }
   };
 
   const handleRetake = () => {
     setSelectedImage(null);
     setIsPreviewMode(false);
+    setError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -115,7 +129,8 @@ export function BodyPhotoUpload({ onPhotoSelected, onUseCamera }: BodyPhotoUploa
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/jpeg,image/png,image/webp"
+            accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+            capture="environment"
             onChange={handleFileSelect}
             className="hidden"
           />
@@ -144,6 +159,8 @@ export function BodyPhotoUpload({ onPhotoSelected, onUseCamera }: BodyPhotoUploa
             <Camera className="h-4 w-4" />
             Abrir câmera
           </button>
+
+          {error ? <p className="text-center text-xs text-[#ffb6a8]">{error}</p> : null}
         </div>
       </div>
 
