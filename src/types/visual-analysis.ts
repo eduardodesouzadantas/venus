@@ -1,4 +1,6 @@
-export type VisualAnalysisStyleDirection = "Masculina" | "Feminina" | "Neutra";
+import type { StyleDirectionPreference } from "@/lib/style-direction";
+
+export type VisualAnalysisStyleDirection = StyleDirectionPreference;
 
 export interface VisualAnalysisColor {
   hex: string;

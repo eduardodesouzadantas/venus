@@ -1,5 +1,6 @@
 import type { LookData } from "@/types/result";
 import type { ResultSurface } from "@/lib/result/surface";
+import { getStyleDirectionToneProfile, normalizeStyleDirectionPreference } from "@/lib/style-direction";
 
 export interface ShareableLookCardVariation {
   label: string;
@@ -20,6 +21,7 @@ export interface ShareableLookCardModel {
   variations: ShareableLookCardVariation[];
   footerNote: string;
   brandNote: string;
+  poweredByLabel: string;
 }
 
 export interface ShareableLookCardInput {
@@ -32,6 +34,7 @@ export interface ShareableLookCardInput {
   brandName?: string | null;
   appName?: string | null;
   orgName?: string | null;
+  storeHandle?: string | null;
   customerName?: string | null;
   userImageUrl?: string | null;
   tryOnImageUrl?: string | null;
@@ -47,6 +50,7 @@ const trimSentence = (value: string) => normalizeText(value).replace(/[.?!\s]+$/
 const toLowerSentence = (value: string) => trimSentence(value).toLowerCase();
 
 function buildShareStyleName(surface: ResultSurface, look: LookData) {
+  const preference = normalizeStyleDirectionPreference(surface.essence.styleDirection);
   const cue = [
     surface.hero.dominantStyle,
     surface.essence.label,
@@ -60,12 +64,24 @@ function buildShareStyleName(surface: ResultSurface, look: LookData) {
     .join(" ")
     .toLowerCase();
 
+  if (preference === "Feminina") {
+    return getStyleDirectionToneProfile(preference).title;
+  }
+
+  if (preference === "Masculina") {
+    return getStyleDirectionToneProfile(preference).title;
+  }
+
+  if (preference === "Streetwear" || preference === "Casual" || preference === "Social") {
+    return getStyleDirectionToneProfile(preference).title;
+  }
+
   if (cue.includes("autor") || cue.includes("leader") || cue.includes("execut") || cue.includes("firme")) {
     return "Autoridade limpa";
   }
 
-  if (cue.includes("soft") || cue.includes("femin") || cue.includes("leve") || cue.includes("delic") || cue.includes("romant")) {
-    return "Soft power feminino";
+  if (cue.includes("soft") || cue.includes("leve") || cue.includes("delic") || cue.includes("romant")) {
+    return "Força visual limpa";
   }
 
   if (cue.includes("urb") || cue.includes("city") || cue.includes("office") || cue.includes("trabalho") || cue.includes("cotidiano")) {
@@ -96,6 +112,7 @@ function buildVariationReason(look: LookData) {
 export function buildShareableLookCardModel(input: ShareableLookCardInput): ShareableLookCardModel {
   const brandName = normalizeText(input.brandName) || BRAND_DEFAULT;
   const appName = normalizeText(input.appName) || APP_DEFAULT;
+  const storeHandle = normalizeText(input.storeHandle);
   const customerName = normalizeText(input.customerName);
   const styleName = buildShareStyleName(input.surface, input.look);
   const mainLookName = normalizeText(input.look.name) || "Look recomendado";
@@ -151,7 +168,8 @@ export function buildShareableLookCardModel(input: ShareableLookCardInput): Shar
     }));
 
   const footerNote = resultUrl ? "Qual voce escolheria? Teste e compartilhe" : "Qual voce escolheria?";
-  const brandNote = `${brandName} - ${appName}`;
+  const brandNote = `${brandName}${storeHandle ? ` • @${storeHandle.replace(/^@+/, "")}` : ""}`;
+  const poweredByLabel = `Powered by InovaCortex`;
 
   return {
     styleName,
@@ -165,6 +183,7 @@ export function buildShareableLookCardModel(input: ShareableLookCardInput): Shar
     variations,
     footerNote,
     brandNote,
+    poweredByLabel,
   };
 }
 
@@ -368,7 +387,7 @@ async function renderShareCardBlob(input: ShareableLookCardInput, model: Shareab
   ctx.fillText(model.brandNote, topBarX + 26, topBarY + 31);
   ctx.fillStyle = "rgba(255,255,255,0.68)";
   ctx.font = "500 17px Arial, sans-serif";
-  ctx.fillText("Resultado pronto para postar", topBarX + 26, topBarY + 56);
+  ctx.fillText(model.poweredByLabel, topBarX + 26, topBarY + 56);
 
   roundRect(ctx, 780, topBarY, 252, 58, 22);
   ctx.fillStyle = "rgba(0,0,0,0.38)";
@@ -459,7 +478,9 @@ async function renderShareCardBlob(input: ShareableLookCardInput, model: Shareab
   ctx.font = "600 18px Arial, sans-serif";
   ctx.fillText(model.footerNote, 48, 1338);
   ctx.fillStyle = "rgba(212,175,55,0.92)";
-  ctx.fillText(model.brandNote, 790, 1338);
+  ctx.textAlign = "right";
+  ctx.fillText(model.poweredByLabel, width - 48, 1338);
+  ctx.textAlign = "left";
 
   return await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => {

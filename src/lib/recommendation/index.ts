@@ -1,18 +1,16 @@
 import { OnboardingData } from "@/types/onboarding";
 import { ResultPayload, LookData } from "@/types/result";
+import { normalizeStyleDirectionPreference } from "@/lib/style-direction";
 
 function normalizeText(value: unknown): string {
   return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
 }
 
-function normalizeDirection(value: string | undefined): "Masculina" | "Feminina" | "Neutra" {
-  const text = normalizeText(value).toLowerCase();
-  if (text.includes("femin")) return "Feminina";
-  if (text.includes("mascul")) return "Masculina";
-  return "Neutra";
+function normalizeDirection(value: string | undefined) {
+  return normalizeStyleDirectionPreference(value);
 }
 
-function buildDirectionTags(direction: "Masculina" | "Feminina" | "Neutra") {
+function buildDirectionTags(direction: ReturnType<typeof normalizeDirection>) {
   if (direction === "Masculina") {
     return {
       dominantStyle: "Linha masculina precisa",
@@ -30,6 +28,36 @@ function buildDirectionTags(direction: "Masculina" | "Feminina" | "Neutra") {
       secondLook: "Blusa limpa",
       thirdLook: "Calça de cintura alta",
       accessory: "Metal delicado",
+    };
+  }
+
+  if (direction === "Streetwear") {
+    return {
+      dominantStyle: "Linha streetwear precisa",
+      firstLook: "Base urbana",
+      secondLook: "Camada leve",
+      thirdLook: "Peça de contraste",
+      accessory: "Acessório de presença",
+    };
+  }
+
+  if (direction === "Casual") {
+    return {
+      dominantStyle: "Linha casual precisa",
+      firstLook: "Base limpa",
+      secondLook: "Camada versátil",
+      thirdLook: "Peça de equilíbrio",
+      accessory: "Acessório discreto",
+    };
+  }
+
+  if (direction === "Social") {
+    return {
+      dominantStyle: "Linha social precisa",
+      firstLook: "Base elegante",
+      secondLook: "Camada refinada",
+      thirdLook: "Peça de destaque",
+      accessory: "Metal polido",
     };
   }
 
@@ -63,7 +91,7 @@ export async function generateResultMock(data: OnboardingData): Promise<ResultPa
       type: "Híbrido Seguro",
       items: [
         { id: "i1", brand: "Seu Acervo", name: directionTags.firstLook, photoUrl: "" },
-        { id: "i2", brand: "Oficina Reserva", name: direction === "Feminina" ? "Blazer leve" : "Sobretudo modal", photoUrl: "" },
+        { id: "i2", brand: "Oficina Reserva", name: direction === "Feminina" ? "Blazer leve" : direction === "Streetwear" ? "Jaqueta urbana" : "Sobretudo modal", photoUrl: "" },
       ],
       accessories: [directionTags.accessory],
       explanation: `A leitura respeita a linha ${direction.toLowerCase()} e usa o fit ${fit} como base de coerência.`,
@@ -76,7 +104,7 @@ export async function generateResultMock(data: OnboardingData): Promise<ResultPa
       type: "Híbrido Premium",
       items: [
         { id: "i3", brand: "Seu Acervo", name: directionTags.secondLook, photoUrl: "" },
-        { id: "i4", brand: "B2B Brand", name: direction === "Feminina" ? "Sandália de impacto" : "Tricot premium gola alta", photoUrl: "" },
+        { id: "i4", brand: "B2B Brand", name: direction === "Feminina" ? "Sandália de impacto" : direction === "Social" ? "Camisa de presença" : "Tricot premium gola alta", photoUrl: "" },
         { id: "i5", brand: "Vert", name: "Acabamento monocromático", photoUrl: "" },
       ],
       accessories: [directionTags.accessory, `Micro-jóias em ${metal}`],

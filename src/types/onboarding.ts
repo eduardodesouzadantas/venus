@@ -1,5 +1,7 @@
+import type { StyleDirectionPreference } from "@/lib/style-direction";
+
 export interface OnboardingConversationData {
-  line: "masculina" | "feminina" | "neutra" | "";
+  line: string;
   imageGoal: string;
   styleDirection: string;
   avoidColorNote: string;
@@ -24,7 +26,7 @@ export interface ColorimetryAnalysisData {
 
 export interface OnboardingData {
   intent: {
-    styleDirection: "Masculina" | "Feminina" | "Neutra" | "";
+    styleDirection: StyleDirectionPreference | "";
     imageGoal: string;
     satisfaction: number;
     mainPain: string;

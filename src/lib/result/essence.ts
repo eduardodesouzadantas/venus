@@ -1,5 +1,12 @@
 ﻿import type { OnboardingData } from "@/types/onboarding";
 
+import {
+  getStyleDirectionDisplayLabel,
+  getStyleDirectionNarrativeLabel,
+  normalizeStyleDirectionPreference,
+  type StyleDirectionPreference,
+} from "@/lib/style-direction";
+
 export type EssenceKey = "authority" | "elegance" | "presence" | "creative" | "discretion";
 
 export type EssenceProfile = {
@@ -8,7 +15,7 @@ export type EssenceProfile = {
   summary: string;
   confidenceLabel: string;
   keySignals: string[];
-  styleDirection: "Masculina" | "Feminina" | "Neutra";
+  styleDirection: StyleDirectionPreference;
   lookNames: [string, string, string];
   toAvoid: string[];
 };
@@ -92,13 +99,6 @@ const PURCHASE_BEHAVIOR_LABELS: Record<string, string> = {
   "compro por impulso": "ritmo de compra mais impulsivo",
 };
 
-function normalizeStyleDirection(value: unknown): "Masculina" | "Feminina" | "Neutra" {
-  const text = matchText(normalizeText(value));
-  if (text.includes("femin")) return "Feminina";
-  if (text.includes("mascul")) return "Masculina";
-  return "Neutra";
-}
-
 function normalizeText(value: unknown): string {
   return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
 }
@@ -124,7 +124,7 @@ function scoreArchetype(
   fit: string,
   faceLines: string,
   metal: string,
-  styleDirection: "Masculina" | "Feminina" | "Neutra",
+  styleDirection: StyleDirectionPreference,
 ): number {
   const goalText = matchText(goal);
   const painText = matchText(mainPain);
@@ -194,6 +194,18 @@ function scoreArchetype(
     if (key === "elegance" || key === "presence") score += 1;
   }
 
+  if (directionText.includes("street")) {
+    if (key === "presence" || key === "creative") score += 1;
+  }
+
+  if (directionText.includes("casual")) {
+    if (key === "elegance" || key === "discretion") score += 1;
+  }
+
+  if (directionText.includes("social")) {
+    if (key === "elegance" || key === "presence") score += 1;
+  }
+
   return score;
 }
 
@@ -206,7 +218,7 @@ function chooseEssenceKey(
   fit: string,
   faceLines: string,
   metal: string,
-  styleDirection: "Masculina" | "Feminina" | "Neutra",
+  styleDirection: StyleDirectionPreference,
 ): { key: EssenceKey; gap: number } {
   const keys: EssenceKey[] = [
     "authority",
@@ -243,7 +255,7 @@ function buildSummary(
   fit: string,
   faceLines: string,
   metal: string,
-  styleDirection: "Masculina" | "Feminina" | "Neutra",
+  styleDirection: StyleDirectionPreference,
 ): string {
   const config = ESSENCE_CONFIG[key];
   const goalText = normalizeText(goal).toLowerCase() || "sua intenção";
@@ -256,14 +268,14 @@ function buildSummary(
   const fitText = normalizeText(fit).toLowerCase() || "caimento natural";
   const faceText = normalizeText(faceLines).toLowerCase() || "traços próprios";
   const metalText = normalizeText(metal).toLowerCase() || "metais neutros";
-  const directionText = normalizeStyleDirection(styleDirection);
+  const directionText = getStyleDirectionNarrativeLabel(styleDirection);
 
   const envLine = env.length > 0 ? `Seu contexto puxa para ${env.join(" e ")}.` : "Seu contexto ainda está sendo refinado.";
   const behaviorLine = dna || behavior ? `O ritmo de compra tende a ser ${dna || behavior}.` : "";
   const directionLine =
-    directionText === "Neutra"
-      ? "A linha de styling ainda não foi fechada; a curadoria vai manter a leitura mais neutra até a direção ficar explícita."
-      : `A linha escolhida foi ${directionText.toLowerCase()}, então a curadoria evita misturar peças fora dessa direção.`;
+    directionText === "linha neutra"
+      ? "A direção ainda não foi fechada; a curadoria vai manter a leitura neutra até a preferência ficar explícita."
+      : `A preferência declarada foi ${getStyleDirectionDisplayLabel(styleDirection).toLowerCase()}, então a curadoria evita misturar peças fora dessa direção.`;
 
   switch (key) {
     case "authority":
@@ -287,7 +299,7 @@ function buildSignals(
   fit: string,
   faceLines: string,
   metal: string,
-  styleDirection: "Masculina" | "Feminina" | "Neutra",
+  styleDirection: StyleDirectionPreference,
 ): string[] {
   const signalSet = new Set<string>();
   const goalText = normalizeText(goal);
@@ -299,14 +311,14 @@ function buildSignals(
   const fitText = normalizeText(fit);
   const faceText = normalizeText(faceLines);
   const metalText = normalizeText(metal);
-  const directionText = normalizeStyleDirection(styleDirection);
+  const directionText = getStyleDirectionDisplayLabel(styleDirection);
 
   if (dna) signalSet.add(dna);
   if (behavior) signalSet.add(behavior);
   if (fitText) signalSet.add(`Caimento ${fitText}`);
   if (faceText) signalSet.add(`Traços ${faceText}`);
   if (metalText) signalSet.add(`Metal ${metalText}`);
-  if (directionText) signalSet.add(`Linha ${directionText}`);
+  if (directionText) signalSet.add(`Direção ${directionText}`);
 
   return [...signalSet].filter(Boolean).slice(0, 4);
 }
@@ -314,7 +326,7 @@ function buildSignals(
 export function deriveEssenceProfile(data: OnboardingData): EssenceProfile {
   const goal = normalizeText(data.intent.imageGoal) || "Elegância";
   const mainPain = normalizeText(data.intent.mainPain) || "ruído visual";
-  const styleDirection = normalizeStyleDirection(data.intent.styleDirection);
+  const styleDirection = normalizeStyleDirectionPreference(data.intent.styleDirection);
   const environments = data.lifestyle.environments;
   const purchaseDna = normalizeText(data.lifestyle.purchaseDna);
   const purchaseBehavior = normalizeText(data.lifestyle.purchaseBehavior);

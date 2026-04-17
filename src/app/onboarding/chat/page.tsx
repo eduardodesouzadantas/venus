@@ -6,6 +6,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { VenusAvatar } from "@/components/venus/VenusAvatar";
 import { TenantResolutionFallbackScreen } from "@/components/onboarding/public-surface";
+import { VenusLoadingScreen } from "@/components/ui/VenusLoadingScreen";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
 import { trackOnboardingConversionEvent } from "@/lib/onboarding/analytics";
 import { isOnboardingWowSurfaceEnabled } from "@/lib/onboarding/feature-flags";
@@ -15,6 +16,7 @@ import { buildVenusStylistIntro } from "@/lib/venus/brand";
 import { PremiumWowFirstChatContent } from "@/components/onboarding/PremiumWowFirstChatContent";
 import { normalizeTenantSlug } from "@/lib/tenant/core";
 import { resolveVenusTenantBrand } from "@/lib/venus/brand";
+import { STYLE_DIRECTION_VALUES, type StyleDirectionPreference } from "@/lib/style-direction";
 
 type ChatRole = "venus" | "client";
 
@@ -64,13 +66,13 @@ const CHAT_STEPS: ChatStep[] = [
   {
     key: "line",
     kind: "single",
-    prompt: "Antes de tudo, qual linha sustenta sua imagem?",
+    prompt: "Antes de tudo, qual direção de estilo você quer declarar?",
     placeholder: "Digite ou toque em uma opção.",
-    options: [
-      { label: "Feminina", value: "Feminina", conversationValue: "feminina" },
-      { label: "Masculina", value: "Masculina", conversationValue: "masculina" },
-      { label: "Neutra", value: "Neutra", conversationValue: "neutra" },
-    ],
+    options: STYLE_DIRECTION_VALUES.map((value) => ({
+      label: value,
+      value,
+      conversationValue: value.toLowerCase(),
+    })),
   },
   {
     key: "imageGoal",
@@ -133,8 +135,8 @@ function buildStepPrompt(stepKey: ChatStep["key"], data: OnboardingData) {
   switch (stepKey) {
     case "line":
       return safeData.colorimetry?.justification
-        ? `Pelo que eu já leio em você, ${visionCue}. Você quer que essa imagem imponha autoridade, entregue elegância ou fique mais neutra?`
-        : "Antes de tudo, qual linha sustenta sua imagem?";
+        ? `Pelo que eu já leio em você, ${visionCue}. Qual direção de estilo você quer declarar para eu calibrar a leitura?`
+        : "Antes de tudo, qual direção de estilo você quer declarar?";
     case "imageGoal":
       return safeData.colorimetry?.justification
         ? "Agora eu quero afinar a intenção: o que a roupa precisa fazer pela sua presença quando alguém te vê?"
@@ -627,8 +629,8 @@ function LegacyChatContent() {
     ]);
 
     if (currentStep.key === "line") {
-      updateData("intent", { styleDirection: option.value as "Masculina" | "Feminina" | "Neutra" | "" });
-      updateConversation({ line: option.conversationValue as "masculina" | "feminina" | "neutra" });
+      updateData("intent", { styleDirection: option.value as StyleDirectionPreference });
+      updateConversation({ line: option.conversationValue });
     } else if (currentStep.key === "imageGoal") {
       updateData("intent", { imageGoal: option.value });
       updateConversation({ imageGoal: option.conversationValue });
@@ -920,7 +922,7 @@ function ChatContent() {
 
 export default function OnboardingChatPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#0a0a0a]" />}>
+    <Suspense fallback={<VenusLoadingScreen title="Abrindo o chat da Venus" subtitle="Carregando a experiência premium da sua loja." />}>
       <ChatContent />
     </Suspense>
   );

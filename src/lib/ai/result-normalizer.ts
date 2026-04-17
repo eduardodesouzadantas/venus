@@ -3,6 +3,12 @@ import type { LookData, LookItem, ResultPayload } from "@/types/result";
 import type { Product } from "@/lib/catalog";
 import { deriveCatalogStylistProfile } from "@/lib/catalog/stylist-profile";
 import { deriveEssenceProfile } from "@/lib/result/essence";
+import {
+  getStyleDirectionCatalogSignals,
+  getStyleDirectionDisplayLabel,
+  normalizeStyleDirectionPreference,
+  type StyleDirectionPreference,
+} from "@/lib/style-direction";
 
 type LookBlueprint = {
   name: string;
@@ -15,7 +21,7 @@ type LookBlueprint = {
 type ProfileSignals = {
   goal: string;
   goalKey: string;
-  styleDirection: "Masculina" | "Feminina" | "Neutra";
+  styleDirection: StyleDirectionPreference;
   satisfaction: number;
   mainPain: string;
   favoriteColors: string[];
@@ -161,23 +167,24 @@ function normalizeMetal(value: string | undefined): "Dourado" | "Prateado" {
   return normalized.includes("dour") ? "Dourado" : "Prateado";
 }
 
-function normalizeStyleDirection(value: string | undefined): "Masculina" | "Feminina" | "Neutra" {
-  const normalized = matchText(value || "");
-  if (normalized.includes("femin")) return "Feminina";
-  if (normalized.includes("mascul")) return "Masculina";
-  return "Neutra";
-}
-
 function isDirectionCompatible(
   productDirection: "Masculina" | "Feminina" | "Neutra",
   targetDirection: ProfileSignals["styleDirection"],
+  productSignals: string[] = [],
 ): boolean {
-  if (targetDirection === "Masculina") {
+  const preference = normalizeStyleDirectionPreference(targetDirection);
+  const signalText = matchText(productSignals.join(" "));
+
+  if (preference === "Masculina") {
     return productDirection === "Masculina" || productDirection === "Neutra";
   }
 
-  if (targetDirection === "Feminina") {
+  if (preference === "Feminina") {
     return productDirection === "Feminina" || productDirection === "Neutra";
+  }
+
+  if (preference === "Streetwear" || preference === "Casual" || preference === "Social") {
+    return productDirection === "Neutra" || getStyleDirectionCatalogSignals(preference).some((keyword) => signalText.includes(keyword));
   }
 
   return productDirection === "Neutra";
@@ -211,10 +218,10 @@ function buildOnboardingPalette(
   >,
 ): ResultPayload["palette"] {
   const primaryName = profile.favoriteColors[0] || profile.goal;
-  const supportName = profile.favoriteColors[1] || (profile.styleDirection === "Feminina" ? "off white" : "grafite");
+  const supportName = profile.favoriteColors[1] || (normalizeStyleDirectionPreference(profile.styleDirection) === "Feminina" ? "off white" : "grafite");
   const accentName = profile.favoriteColors[2] || (profile.goalKey === "Autoridade" ? "marinho" : profile.goalKey === "Criatividade" ? "vinho profundo" : "grafite");
   const avoided = profile.avoidColors.length > 0 ? profile.avoidColors.join(", ") : "cores de ruído";
-  const directionLabel = profile.styleDirection.toLowerCase();
+  const directionLabel = getStyleDirectionDisplayLabel(profile.styleDirection).toLowerCase();
   const metalLabel = profile.metal === "Dourado" ? "metais quentes" : "metais frios";
   const colorimetryLabel = [profile.colorSeason, profile.undertone, profile.skinTone].filter(Boolean).join(" • ");
 
@@ -234,7 +241,7 @@ function buildOnboardingPalette(
 function getProfileSignals(userData: OnboardingData) {
   const goal = compactText(userData.intent.imageGoal, "Elegância", 40);
   const goalKey = pickGoalKey(goal);
-  const styleDirection = normalizeStyleDirection(userData.intent.styleDirection || "");
+  const styleDirection = normalizeStyleDirectionPreference(userData.intent.styleDirection || "");
   const fit = compactText(userData.body.fit, "Slim", 24);
   const faceLines = compactText(userData.body.faceLines, "Marcantes", 24);
   const hairLength = compactText(userData.body.hairLength, "Médio", 24);
@@ -425,22 +432,47 @@ function looksGeneric(value: unknown): boolean {
 }
 
 function scoreDirectionMatch(text: string, direction: ProfileSignals["styleDirection"]): number {
+  const preference = normalizeStyleDirectionPreference(direction);
   const masculineSignals = ["mascul", "homem", "men", "male"];
   const feminineSignals = ["femin", "mulher", "women", "woman"];
-  const neutralSignals = ["neutro", "unissex", "unisex", "genderless"];
+  const neutralSignals = ["neutro", "unissex", "unisex", "genderless", "minimal"];
+  const streetSignals = ["street", "urb", "urbano", "atitude", "oversized"];
+  const casualSignals = ["casual", "dia a dia", "daily", "conforto"];
+  const socialSignals = ["social", "evento", "soir", "evening", "jantar"];
   const hasMasculine = masculineSignals.some((keyword) => text.includes(keyword));
   const hasFeminine = feminineSignals.some((keyword) => text.includes(keyword));
   const hasNeutral = neutralSignals.some((keyword) => text.includes(keyword));
+  const hasStreet = streetSignals.some((keyword) => text.includes(keyword));
+  const hasCasual = casualSignals.some((keyword) => text.includes(keyword));
+  const hasSocial = socialSignals.some((keyword) => text.includes(keyword));
 
-  if (direction === "Masculina") {
+  if (preference === "Masculina") {
     if (hasMasculine) return 16;
     if (hasFeminine) return -28;
     return 0;
   }
 
-  if (direction === "Feminina") {
+  if (preference === "Feminina") {
     if (hasFeminine) return 16;
     if (hasMasculine) return -28;
+    return 0;
+  }
+
+  if (preference === "Streetwear") {
+    if (hasStreet || hasNeutral) return 12;
+    if (hasFeminine) return -4;
+    return 0;
+  }
+
+  if (preference === "Casual") {
+    if (hasCasual || hasNeutral) return 10;
+    if (hasFeminine || hasMasculine) return -2;
+    return 0;
+  }
+
+  if (preference === "Social") {
+    if (hasSocial || hasNeutral) return 12;
+    if (hasMasculine || hasFeminine) return -2;
     return 0;
   }
 
@@ -472,8 +504,8 @@ function scoreProduct(product: Product, blueprint: LookBlueprint, profile: Profi
 
   score += scoreDirectionMatch(text, profile.styleDirection);
 
-  if (stylist.direction === profile.styleDirection) score += 8;
-  if (stylist.direction !== "Neutra" && profile.styleDirection === "Neutra") score += 2;
+  if (normalizeStyleDirectionPreference(stylist.direction) === normalizeStyleDirectionPreference(profile.styleDirection)) score += 8;
+  if (stylist.direction !== "Neutra" && normalizeStyleDirectionPreference(profile.styleDirection) === "Sem preferência") score += 2;
   if (stylist.visualWeight === "Alta" && blueprint.type !== "Expansão Direcionada") score += 3;
   if (stylist.visualWeight === "Pontual" && blueprint.type === "Expansão Direcionada") score += 4;
   if (stylist.formality === "Alta" && blueprint.type === "Híbrido Premium") score += 4;
@@ -806,7 +838,14 @@ function formatCatalogProductLine(product: Product): string {
 
 export function filterCatalogForRecommendation(catalog: Product[], userData: OnboardingData): Product[] {
   const profile = getProfileSignals(userData);
-  return catalog.filter((product) => isDirectionCompatible(deriveCatalogStylistProfile(product).direction, profile.styleDirection));
+  return catalog.filter((product) => {
+    const stylist = deriveCatalogStylistProfile(product);
+    return isDirectionCompatible(
+      stylist.direction,
+      profile.styleDirection,
+      [stylist.summary, stylist.authorityRationale, stylist.conversionCopy, ...stylist.styleTags, ...stylist.useCases],
+    );
+  });
 }
 
 export function summarizeOnboardingProfile(userData: OnboardingData): string {

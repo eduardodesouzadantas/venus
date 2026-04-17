@@ -10,6 +10,7 @@ import { useUserImage } from "@/lib/onboarding/UserImageContext";
 import { SimulatedCamera } from "./SimulatedCamera";
 import { readMerchantBenefitProgram } from "@/lib/social/merchant-benefits";
 import { buildTryOnPosterFile } from "@/lib/social/tryon";
+import { getStyleDirectionDisplayLabel } from "@/lib/style-direction";
 
 interface TryOnModalProps {
   isOpen: boolean;
@@ -49,7 +50,7 @@ export function TryOnModal({ isOpen, onClose, imageUrl, name, brandName, appName
   const [generationSource, setGenerationSource] = useState<string>("");
   const [generationAttempts, setGenerationAttempts] = useState<number>(0);
 
-  const styleDirection = onboardingData.intent.styleDirection || "Neutra";
+  const styleDirection = getStyleDirectionDisplayLabel(onboardingData.intent.styleDirection || "Sem preferência");
   const resolvedLookDescription = lookDescription || name;
   const profileSignal = [
     onboardingData.lifestyle.purchaseDna,

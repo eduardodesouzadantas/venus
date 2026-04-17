@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { VenusAvatar } from '@/components/venus/VenusAvatar';
+import { VenusLoadingScreen } from '@/components/ui/VenusLoadingScreen';
 
 function SplashContent() {
   const router = useRouter();
@@ -111,7 +112,7 @@ function SplashContent() {
 
 export default function SplashPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#0a0a0a]" />}>
+    <Suspense fallback={<VenusLoadingScreen title="Abrindo a Venus" subtitle="Carregando a entrada premium da sua experiência." />}>
       <SplashContent />
     </Suspense>
   );

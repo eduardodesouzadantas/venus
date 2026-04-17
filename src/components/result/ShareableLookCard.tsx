@@ -31,6 +31,7 @@ type ShareableLookCardProps = {
   brandName?: string | null;
   appName?: string | null;
   orgName?: string | null;
+  storeHandle?: string | null;
   customerName?: string | null;
   userImageUrl?: string | null;
   tryOnImageUrl?: string | null;
@@ -56,6 +57,7 @@ export function ShareableLookCard({
   brandName,
   appName,
   orgName,
+  storeHandle,
   customerName,
   userImageUrl,
   tryOnImageUrl,
@@ -77,11 +79,12 @@ export function ShareableLookCard({
       brandName,
       appName,
       orgName,
+      storeHandle,
       customerName,
       userImageUrl,
       tryOnImageUrl,
     }),
-    [look, looks, surface, resultId, resultUrl, orgId, brandName, appName, orgName, customerName, userImageUrl, tryOnImageUrl]
+    [look, looks, surface, resultId, resultUrl, orgId, brandName, appName, orgName, storeHandle, customerName, userImageUrl, tryOnImageUrl]
   );
 
   const shareTexts = React.useMemo(() => buildShareCardTexts(shareInput), [shareInput]);

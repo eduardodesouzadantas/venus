@@ -30,6 +30,8 @@ import { classifyTryOnQuality } from "@/lib/tryon/result-quality";
 import { buildVenusResultNarrative, VENUS_STYLIST_NAME } from "@/lib/venus/brand";
 import { buildVenusStylistAudit, type VenusStylistAudit } from "@/lib/venus/audit/engine";
 import { TRYON_PREMIUM_FALLBACK_MESSAGE, TRYON_PREMIUM_REFINED_MESSAGE } from "@/lib/tryon/fallback-copy";
+import { getStyleDirectionDisplayLabel, normalizeStyleDirectionPreference } from "@/lib/style-direction";
+import { VenusLoadingScreen } from "@/components/ui/VenusLoadingScreen";
 
 // Categorization logic for the try-on engine
 function inferTryOnCategory(product: any): "tops" | "bottoms" | "one-pieces" {
@@ -150,8 +152,9 @@ function ResultDashboardContent() {
         reason: tryOnQuality.reason,
         hasArtifact: hasTryOnArtifact,
         hasLegacy: hasLegacyTryOnLooks,
+        styleDirection: onboardingData?.intent?.styleDirection || null,
       }),
-    [tryOnQuality.state, tryOnQuality.reason, hasTryOnArtifact, hasLegacyTryOnLooks]
+    [tryOnQuality.state, tryOnQuality.reason, hasTryOnArtifact, hasLegacyTryOnLooks, onboardingData?.intent?.styleDirection]
   );
   const stylistAudit = useMemo<VenusStylistAudit | null>(() => {
     if (!surface) return null;
@@ -227,11 +230,7 @@ function ResultDashboardContent() {
     }
     setRevealStage((current) => Math.min(current + 1, progressiveRevealLimit));
   }, [progressiveRevealLimit, resolvedOrgId, id, revealStage]);
-  const mainCtaLabel =
-    tryOnQuality.state === "hero"
-      ? stylistAudit?.whatsapp.cta || resultNarrative.primaryCta
-      : resultNarrative.primaryCta;
-  const secondaryCtaLabel = stylistAudit?.whatsapp.cta || resultNarrative.secondaryCta;
+  const mainCtaLabel = resultNarrative.primaryCta;
   const tryOnPrimaryActionLabel = tryOnError || tryOnStatus === "failed" ? "Tentar novamente" : mainCtaLabel;
 
   React.useEffect(() => {
@@ -384,6 +383,21 @@ function ResultDashboardContent() {
     });
   }, [loading, surface, resolvedOrgId, id, tryOnQuality.state, displayImageUrl, persistedTryOn?.image_url]);
 
+  React.useEffect(() => {
+    if (!surface || !displayImageUrl || tryOnQuality.state === "hero") {
+      return;
+    }
+
+    console.warn("[TRYON_QUALITY_LOW]", {
+      resultId: id,
+      orgId: resolvedOrgId || onboardingData?.tenant?.orgId || null,
+      styleDirection: getStyleDirectionDisplayLabel(onboardingData?.intent?.styleDirection || "Sem preferência"),
+      state: tryOnQuality.state,
+      score: tryOnQuality.score,
+      reason: tryOnQuality.reason,
+    });
+  }, [displayImageUrl, id, onboardingData?.intent?.styleDirection, onboardingData?.tenant?.orgId, resolvedOrgId, surface, tryOnQuality]);
+
   const whatsappUrl = useMemo(() => {
     if (!surface) return "";
     const message = buildWhatsAppHandoffMessage({
@@ -473,7 +487,7 @@ function ResultDashboardContent() {
             if (recoveryPayload.lastTryOn) setPersistedTryOn(recoveryPayload.lastTryOn);
 
             const fallbackAnalysis = recoveryPayload.analysis || {
-              essence: { label: onboardingData?.intent?.styleDirection || "Sua Essência", reason: "Sincronia baseada no seu perfil pessoal." },
+              essence: { label: getStyleDirectionDisplayLabel(onboardingData?.intent?.styleDirection) || "Sua Essência", reason: "Sincronia baseada no seu perfil pessoal." },
               palette: { family: "Personalizada", colors: [] },
               looks: [],
             };
@@ -674,23 +688,19 @@ function ResultDashboardContent() {
 
   if (redirecting) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a]">
-        <div className="flex flex-col items-center gap-4 text-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#C9A84C] border-t-transparent" />
-          <p className="font-mono text-[9px] tracking-[0.2em] text-[#C9A84C]">AJUSTANDO SUA LEITURA...</p>
-        </div>
-      </div>
+      <VenusLoadingScreen
+        title="A Venus está ajustando sua leitura"
+        subtitle="Carregando a próxima etapa sem interromper a experiência premium."
+      />
     );
   }
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a]">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#C9A84C] border-t-transparent" />
-          <p className="font-mono text-[9px] tracking-[0.2em] text-[#C9A84C]">A VENUS ESTÁ PREPARANDO SUA LEITURA...</p>
-        </div>
-      </div>
+      <VenusLoadingScreen
+        title="A Venus está preparando sua leitura"
+        subtitle="Aguarde um instante enquanto os dados da curadoria são hidratados com segurança."
+      />
     );
   }
 
@@ -1152,6 +1162,7 @@ function ResultDashboardContent() {
                 brandName={tenantContext?.branchName || tenantContext?.orgSlug || "Venus"}
                 appName={VENUS_STYLIST_NAME}
                 orgName={tenantContext?.orgSlug || tenantContext?.branchName || null}
+                storeHandle={tenantContext?.orgSlug || null}
                 customerName={onboardingData?.contact?.name || null}
                 userImageUrl={tryOnPersonImage || null}
                 tryOnImageUrl={displayImageUrl || persistedTryOn?.image_url || null}
@@ -1297,7 +1308,7 @@ function ResultDashboardContent() {
 
 export default function ResultDashboardPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#0a0a0a]" />}>
+    <Suspense fallback={<VenusLoadingScreen title="Abrindo seu resultado" subtitle="Carregando a leitura premium do resultado final." />}>
       <ResultErrorBoundary>
         <ResultDashboardContent />
       </ResultErrorBoundary>

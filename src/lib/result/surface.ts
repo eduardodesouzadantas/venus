@@ -2,6 +2,7 @@
 import type { LookData, ResultPayload } from "@/types/result";
 import type { VisualAnalysisPayload } from "@/types/visual-analysis";
 import { deriveEssenceProfile, type EssenceProfile } from "@/lib/result/essence";
+import { getStyleDirectionDisplayLabel } from "@/lib/style-direction";
 
 type GoalKey = "Autoridade" | "Elegância" | "Atração" | "Criatividade" | "Discrição sofisticada";
 
@@ -160,7 +161,7 @@ function buildPaletteHex(name: string, fallbackHex: string): string {
 function buildPaletteFromOnboarding(data: OnboardingData, essence: EssenceProfile): ResultPayload["palette"] {
   const favoriteColors = (data?.colors?.favoriteColors || []).map((value) => normalizeText(value)).filter(Boolean);
   const avoidColors = (data?.colors?.avoidColors || []).map((value) => normalizeText(value)).filter(Boolean);
-  const directionLabel = normalizeText(data?.intent?.styleDirection) || essence.styleDirection;
+  const directionLabel = getStyleDirectionDisplayLabel(data?.intent?.styleDirection || essence.styleDirection);
   const goalLabel = normalizeText(data?.intent?.imageGoal) || essence.label;
   const metalLabel = normalizeText(data?.colors?.metal) || "Prateado";
   const colorSeason = normalizeText(data?.colorimetry?.colorSeason || (data as any)?.colorSeason);
@@ -174,7 +175,7 @@ function buildPaletteFromOnboarding(data: OnboardingData, essence: EssenceProfil
 
   return {
     family: `${goalLabel} • ${directionLabel}`,
-    description: `Favorece ${favoriteColors.join(", ") || "as cores escolhidas"} e evita ${avoidColors.join(", ") || "cores de ruído"}, sustentando ${goalLabel.toLowerCase()} com leitura alinhada à linha ${directionLabel.toLowerCase()}${colorimetryNotes ? ` e à colorimetria ${colorimetryNotes.toLowerCase()}` : ""}.`,
+    description: `Favorece ${favoriteColors.join(", ") || "as cores escolhidas"} e evita ${avoidColors.join(", ") || "cores de ruído"}, sustentando ${goalLabel.toLowerCase()} com leitura alinhada à direção ${directionLabel.toLowerCase()}${colorimetryNotes ? ` e à colorimetria ${colorimetryNotes.toLowerCase()}` : ""}.`,
     colors: [
       { hex: buildPaletteHex(primary, "#1E3A8A"), name: primary },
       { hex: buildPaletteHex(support, "#F8FAFC"), name: support },
@@ -226,12 +227,12 @@ function buildDiagnostic(goal: string, mainPain: string, fit: string, faceLines:
   const painLabel = normalizeText(mainPain) || "ruído visual";
   const fitLabel = normalizeText(fit) || "Slim";
   const faceLabel = normalizeText(faceLines) || "Marcantes";
-  const directionLabel = essence.styleDirection;
+  const directionLabel = getStyleDirectionDisplayLabel(essence.styleDirection);
 
   return {
-    currentPerception: `Seu perfil pede menos ruído e mais estrutura. Hoje o ponto sensível é ${painLabel.toLowerCase()} e o caimento ${fitLabel.toLowerCase()}, mas a leitura já aponta para ${essence.label.toLowerCase()} na linha ${directionLabel.toLowerCase()}.`,
+    currentPerception: `Seu perfil pede menos ruído e mais estrutura. Hoje o ponto sensível é ${painLabel.toLowerCase()} e o caimento ${fitLabel.toLowerCase()}, mas a leitura já aponta para ${essence.label.toLowerCase()} na direção ${directionLabel.toLowerCase()}.`,
     desiredGoal: `Projetar ${goalLabel.toLowerCase()} de um jeito mais limpo, pessoal e consistente com colorimetria e visagismo alinhados.`,
-    gapSolution: `Usar o catálogo real como eixo e sustentar ${goalLabel.toLowerCase()} com peças coerentes para seu rosto ${faceLabel.toLowerCase()}, sem perder a essência ${essence.label.toLowerCase()} nem a linha ${directionLabel.toLowerCase()}.`,
+    gapSolution: `Usar o catálogo real como eixo e sustentar ${goalLabel.toLowerCase()} com peças coerentes para seu rosto ${faceLabel.toLowerCase()}, sem perder a essência ${essence.label.toLowerCase()} nem a direção ${directionLabel.toLowerCase()}.`,
   };
 }
 
@@ -259,7 +260,7 @@ function buildHero(goalKey: GoalKey, goal: string, fit: string, essence: Essence
 
   return {
     dominantStyle: `${essence.label} • ${dominantStyle}`,
-    subtitle: `Sua leitura cruza ${normalizeText(goal).toLowerCase() || "elegância"} com fit ${normalizeText(fit).toLowerCase() || "slim"}, rotina real e um eixo de ${essence.label.toLowerCase()} na linha ${essence.styleDirection.toLowerCase()}.`,
+    subtitle: `Sua leitura cruza ${normalizeText(goal).toLowerCase() || "elegância"} com fit ${normalizeText(fit).toLowerCase() || "slim"}, rotina real e um eixo de ${essence.label.toLowerCase()} na direção ${getStyleDirectionDisplayLabel(essence.styleDirection).toLowerCase()}.`,
     coverImageUrl: "",
   };
 }

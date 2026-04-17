@@ -1,6 +1,7 @@
 import "server-only";
 
 import OpenAI, { toFile } from "openai";
+import { getStyleDirectionDisplayLabel, normalizeStyleDirectionPreference } from "@/lib/style-direction";
 
 export interface TryOnGenerationInput {
   userPhotoUrl: string;
@@ -99,7 +100,7 @@ const getGeminiApiKey = () => process.env.GEMINI_API_KEY?.trim() || process.env.
 const buildPrompt = (input: TryOnGenerationInput) => {
   const brandName = input.brandName || DEFAULT_BRAND;
   const appName = input.appName || DEFAULT_APP;
-  const styleDirection = input.styleDirection || "Neutra";
+  const styleDirection = normalizeStyleDirectionPreference(input.styleDirection || "Sem preferência");
   const imageGoal = input.imageGoal || "uma imagem mais assertiva e desejável";
   const essenceLabel = input.essenceLabel || "essência captada";
   const essenceSummary = input.essenceSummary || "a proposta ficou mais coerente com a pessoa";
@@ -113,7 +114,7 @@ const buildPrompt = (input: TryOnGenerationInput) => {
     "Use the second image as the outfit reference. The final image must show the same person wearing the look, not a collage, not a split screen, not a mannequin, and not a poster overlay.",
     "Keep the garment silhouette, fabric feel, colors and general styling of the outfit reference, while adapting it naturally to the person's body.",
     "Compose the person as the main subject, with the look fully visible and believable on the body. The frame should feel like a premium fashion portrait, not a sticker or cutout.",
-    "Style direction: " + styleDirection + ". Respect this direction strictly and do not mix in pieces or cues from the opposite direction.",
+    "Style direction preference: " + getStyleDirectionDisplayLabel(styleDirection) + ". Respect this preference strictly and do not introduce cues from a different direction.",
     "Mood: high-ticket, premium, sophisticated, confident, believable, luxury editorial.",
     "Lighting: clean studio fashion lighting with subtle contrast and dark elegant background.",
     "Frame: vertical editorial portrait, centered composition, enough room to read the outfit clearly on screen.",

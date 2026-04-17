@@ -7,8 +7,9 @@ import { PillSelector } from "@/components/ui/PillSelector";
 import { EmotionalSlider } from "@/components/ui/EmotionalSlider";
 import { BottomNav } from "@/components/ui/BottomNav";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
+import { STYLE_DIRECTION_VALUES, type StyleDirectionPreference } from "@/lib/style-direction";
 
-const STYLE_DIRECTIONS = ["Masculina", "Feminina", "Neutra"];
+const STYLE_DIRECTIONS: string[] = [...STYLE_DIRECTION_VALUES];
 const SATISFACTION_LABELS: Record<number, string> = {
   0: "Ainda me perco",
   2: "Quero direção",
@@ -80,10 +81,10 @@ export default function IntentPage() {
                 <Text className="text-sm text-white/55">Essa escolha guia a leitura para a direção certa antes de cruzar cor, corpo e rotina.</Text>
               </div>
             </div>
-            <PillSelector
+              <PillSelector
               options={STYLE_DIRECTIONS}
               selected={styleDirection ? [styleDirection] : []}
-              onChange={(sel) => updateData("intent", { styleDirection: (sel[0] as "Masculina" | "Feminina" | "Neutra" | "") || "" })}
+              onChange={(sel) => updateData("intent", { styleDirection: (sel[0] as StyleDirectionPreference | "") || "" })}
             />
           </div>
         </GlassContainer>

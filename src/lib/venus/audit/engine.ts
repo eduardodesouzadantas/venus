@@ -143,6 +143,7 @@ export function buildVenusStylistAudit({
     reason: tryOnQuality.reason,
     hasArtifact: tryOnQuality.showBeforeAfter || tryOnQuality.showWhatsappCta,
     hasLegacy: surface.looks.length > 0 && surface.looks.every((look) => !normalizeText(look.product_id)),
+    styleDirection: onboardingData?.intent?.styleDirection || null,
   });
 
   const topLook = surface.looks[0] || null;
@@ -197,7 +198,7 @@ export function buildVenusStylistAudit({
       ? "Continuar com minha stylist"
       : tryOnQuality.state === "preview"
         ? "Refinar com Venus Stylist"
-        : "Tirar nova foto";
+        : "Ver minha curadoria";
 
   return {
     opening: {
@@ -277,4 +278,3 @@ export function getStoreBoundBuyNowLooks(surface: ResultSurface) {
 }
 
 export type { BuildVenusStylistAuditInput };
-

@@ -4,6 +4,10 @@ import OpenAI from "openai";
 import type { OnboardingData } from "@/types/onboarding";
 import type { VisualAnalysisPayload, VisualAnalysisStyleDirection } from "@/types/visual-analysis";
 import { deriveEssenceProfile } from "@/lib/result/essence";
+import {
+  getStyleDirectionDisplayLabel,
+  normalizeStyleDirectionPreference,
+} from "@/lib/style-direction";
 
 function normalizeText(value: unknown): string {
   return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
@@ -14,13 +18,6 @@ function compactText(value: unknown, fallback: string, maxLength: number): strin
   if (!text) return fallback;
   if (text.length > maxLength) return `${text.slice(0, maxLength - 1).trimEnd()}...`;
   return text;
-}
-
-function normalizeStyleDirection(value: unknown): VisualAnalysisStyleDirection {
-  const text = normalizeText(value).toLowerCase();
-  if (text.includes("femin")) return "Feminina";
-  if (text.includes("mascul")) return "Masculina";
-  return "Neutra";
 }
 
 function matchText(value: string): string {
@@ -72,7 +69,10 @@ function buildOnboardingPaletteColors(data: OnboardingData, essenceKey: string):
   const favoriteColors = data.colors.favoriteColors.map((value) => normalizeText(value)).filter(Boolean);
   const first = favoriteColors[0] || (essenceKey === "authority" ? "Marinho intenso" : "Azul noturno");
   const second = favoriteColors[1] || (data.colors.metal === "Dourado" ? "Off white" : "Grafite");
-  const third = favoriteColors[2] || (data.intent.styleDirection === "Feminina" ? "Vinho profundo" : "Contraste controlado");
+  const preference = normalizeStyleDirectionPreference(data.intent.styleDirection);
+  const third =
+    favoriteColors[2] ||
+    (preference === "Feminina" ? "Vinho profundo" : preference === "Masculina" ? "Grafite intenso" : "Contraste controlado");
 
   return [
     { hex: buildColorHex(first, "#1F2937"), name: first },
@@ -87,7 +87,7 @@ function buildContextSummary(data: OnboardingData): string {
   const avoidColors = data.colors.avoidColors.join(", ") || "n/a";
 
   return [
-    `styleDirection=${normalizeText(data.intent.styleDirection) || "Neutra"}`,
+    `styleDirection=${getStyleDirectionDisplayLabel(data.intent.styleDirection)}`,
     `imageGoal=${normalizeText(data.intent.imageGoal) || "Elegancia"}`,
     `mainPain=${normalizeText(data.intent.mainPain) || "ruido visual"}`,
     `environments=${environments}`,
@@ -146,7 +146,7 @@ function buildFallbackColors(key: string): VisualAnalysisPayload["colors"] {
 
 function buildFallbackAnalysis(data: OnboardingData): VisualAnalysisPayload {
   const essence = deriveEssenceProfile(data);
-  const styleDirection = normalizeStyleDirection(data.intent.styleDirection);
+  const styleDirection = normalizeStyleDirectionPreference(data.intent.styleDirection);
   const goal = normalizeText(data.intent.imageGoal) || "Elegancia";
   const mainPain = normalizeText(data.intent.mainPain) || "ruido visual";
   const fit = normalizeText(data.body.fit) || "Slim";
@@ -200,7 +200,7 @@ function normalizeAnalysisPayload(
   fallback: VisualAnalysisPayload,
   data: OnboardingData,
 ): VisualAnalysisPayload {
-  const styleDirection = normalizeStyleDirection(raw.styleDirection || data.intent.styleDirection || fallback.styleDirection);
+  const styleDirection = normalizeStyleDirectionPreference(raw.styleDirection || data.intent.styleDirection || fallback.styleDirection);
   const keySignals = Array.isArray(raw.keySignals) && raw.keySignals.length > 0
     ? raw.keySignals.map((value) => normalizeText(value)).filter(Boolean).slice(0, 4)
     : fallback.keySignals;
@@ -276,7 +276,7 @@ export async function generateVisualProfileAnalysis(data: OnboardingData): Promi
                 "CONTEXTO CANONICO:",
                 buildContextSummary(data),
                 "",
-                `Direcao de styling explicitamente escolhida: ${normalizeStyleDirection(data.intent.styleDirection)}`,
+                `Direcao de styling explicitamente escolhida: ${getStyleDirectionDisplayLabel(data.intent.styleDirection)}`,
                 "A imagem da pessoa deve ser o sinal principal. O intake e apoio, nao o centro.",
                 "",
                 "Retorne JSON com estas chaves:",

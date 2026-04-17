@@ -143,6 +143,7 @@ const {
 require("./catalog-query/presentation.test.ts");
 require("./assisted-recommendation.presentation.test.ts");
 require("./onboarding/public-surface.test.ts");
+require("./onboarding/style-direction.test.ts");
 require("./onboarding/wow-surface.test.ts");
 require("./security/cross-tenant.test.ts");
 

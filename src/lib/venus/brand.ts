@@ -4,6 +4,10 @@ export const VENUS_SURFACE = "#0a0a0a";
 export const VENUS_GOLD = "#C9A84C";
 
 export type VenusResultState = "hero" | "preview" | "retry_required";
+import {
+  getStyleDirectionToneProfile,
+  normalizeStyleDirectionPreference,
+} from "@/lib/style-direction";
 
 export type VenusTenantBrandInput = {
   orgSlug?: string | null;
@@ -26,6 +30,7 @@ type VenusResultNarrativeInput = {
   reason?: string;
   hasArtifact?: boolean;
   hasLegacy?: boolean;
+  styleDirection?: string | null;
 };
 
 function normalizeText(value: unknown) {
@@ -64,15 +69,29 @@ export function buildVenusBodyScannerIntro() {
   return "Perfeito. Agora eu refino sua leitura premium ✨";
 }
 
+function buildResultNarrativeTitle(state: VenusResultState, styleDirection?: string | null) {
+  if (state === "retry_required") {
+    return "Essa leitura pede uma nova foto.";
+  }
+
+  const toneProfile = getStyleDirectionToneProfile(normalizeStyleDirectionPreference(styleDirection || "Sem preferência"));
+
+  if (state === "preview") {
+    return toneProfile.title === "Look de presença" ? "Presença em refinamento" : toneProfile.title;
+  }
+
+  return toneProfile.title;
+}
+
 export function buildVenusResultNarrative(input: VenusResultNarrativeInput) {
   if (input.state === "hero") {
     return {
       eyebrow: "Revelação final",
-      title: "Sua essência virou imagem.",
+      title: buildResultNarrativeTitle(input.state, input.styleDirection),
       subtitle:
         "A curadoria fechou com produto real, foto consistente e leitura premium. O resultado já está pronto para seguir para o WhatsApp.",
-      primaryCta: "Quero esse look no WhatsApp",
-      secondaryCta: "Continuar a conversa",
+      primaryCta: "Ver minha curadoria",
+      secondaryCta: "Compartilhar look",
       helper:
         input.reason ||
         "A estrutura do look e a apresentação visual fecharam em padrão hero com consistência alta.",
@@ -82,10 +101,10 @@ export function buildVenusResultNarrative(input: VenusResultNarrativeInput) {
   if (input.state === "preview") {
     return {
       eyebrow: "Prévia curada",
-      title: "A leitura está muito perto do ponto ideal.",
+      title: buildResultNarrativeTitle(input.state, input.styleDirection),
       subtitle:
         "A imagem existe, está elegante e já comunica direção. Falta só um ajuste fino antes de virar vitrine final.",
-      primaryCta: "Refazer foto",
+      primaryCta: "Gerar versão editorial",
       secondaryCta: "Continuar no WhatsApp",
       helper:
         input.reason ||
@@ -95,12 +114,12 @@ export function buildVenusResultNarrative(input: VenusResultNarrativeInput) {
 
   return {
     eyebrow: input.hasLegacy ? "Leitura antiga" : "Nova tentativa",
-    title: "Essa leitura pede uma nova foto.",
+    title: buildResultNarrativeTitle(input.state, input.styleDirection),
     subtitle: input.hasLegacy
       ? "O resultado veio de uma leitura antiga, sem peça validada para try-on. Vamos refazer com uma foto melhor para liberar a versão premium."
       : "A imagem ainda não atingiu integridade suficiente para virar hero. Com uma nova foto, a revelação fica mais precisa.",
-    primaryCta: "Tirar nova foto",
-    secondaryCta: input.hasArtifact ? "Nova leitura" : "Refazer leitura",
+    primaryCta: "Ver minha curadoria",
+    secondaryCta: input.hasArtifact ? "Refazer foto" : "Nova leitura",
     helper:
       input.reason ||
       "O resultado não atingiu integridade suficiente para exibição premium.",
