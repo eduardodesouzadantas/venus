@@ -5,6 +5,7 @@ import { SendHorizonal } from "lucide-react";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { VenusAvatar } from "@/components/venus/VenusAvatar";
+import { TenantResolutionFallbackScreen } from "@/components/onboarding/public-surface";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
 import { trackOnboardingConversionEvent } from "@/lib/onboarding/analytics";
 import { isOnboardingWowSurfaceEnabled } from "@/lib/onboarding/feature-flags";
@@ -12,6 +13,8 @@ import { buildOnboardingWowCopy } from "@/lib/onboarding/wow-surface";
 import { defaultOnboardingData, type OnboardingData } from "@/types/onboarding";
 import { buildVenusStylistIntro } from "@/lib/venus/brand";
 import { PremiumWowFirstChatContent } from "@/components/onboarding/PremiumWowFirstChatContent";
+import { normalizeTenantSlug } from "@/lib/tenant/core";
+import { resolveVenusTenantBrand } from "@/lib/venus/brand";
 
 type ChatRole = "venus" | "client";
 
@@ -809,25 +812,103 @@ function LegacyChatContent() {
 }
 
 function ChatContent() {
-  const { data, updateData, journey } = useOnboarding();
+  const { data, updateData, journey, isLoaded, isJourneyLoaded } = useOnboarding();
   const searchParams = useSearchParams();
-  const orgSlug = searchParams.get("org") || data?.tenant?.orgSlug || journey?.onboardingSeed?.tenant?.orgSlug || "";
+  const orgSlug = normalizeTenantSlug(
+    searchParams.get("org") || data?.tenant?.orgSlug || journey?.onboardingSeed?.tenant?.orgSlug || ""
+  );
   const orgId = data?.tenant?.orgId || journey?.onboardingSeed?.tenant?.orgId || "";
+  const [tenantResolutionStatus, setTenantResolutionStatus] = useState<"loading" | "ready" | "missing" | "invalid">("loading");
+  const validatedTenantSlugRef = useRef<string>("");
+  const validationInFlightRef = useRef<string | null>(null);
+
   useEffect(() => {
+    if (!isLoaded || !isJourneyLoaded) {
+      return;
+    }
+
     if (!orgSlug) {
+      validationInFlightRef.current = null;
+      validatedTenantSlugRef.current = "";
+      setTenantResolutionStatus("missing");
       return;
     }
 
-    if (data?.tenant?.orgSlug === orgSlug && (orgId ? data?.tenant?.orgId === orgId : true)) {
+    if (validatedTenantSlugRef.current === orgSlug) {
+      setTenantResolutionStatus("ready");
       return;
     }
 
-    updateData("tenant", {
-      ...data?.tenant,
-      orgSlug,
-      orgId: orgId || data?.tenant?.orgId || "",
-    });
-  }, [data?.tenant?.orgId, data?.tenant?.orgSlug, orgId, orgSlug, updateData]);
+    if (validationInFlightRef.current === orgSlug) {
+      return;
+    }
+
+    validationInFlightRef.current = orgSlug;
+    setTenantResolutionStatus("loading");
+
+    let cancelled = false;
+
+    void fetch(`/api/public/org/${encodeURIComponent(orgSlug)}`, { cache: "no-store" })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => null);
+        if (cancelled) {
+          return;
+        }
+
+        validationInFlightRef.current = null;
+
+        if (!response.ok || !payload?.org?.slug) {
+          validatedTenantSlugRef.current = "";
+          setTenantResolutionStatus("invalid");
+          return;
+        }
+
+        const brand = resolveVenusTenantBrand({
+          orgSlug: payload.org.slug,
+          orgName: payload.org.name,
+          branchName: payload.org.branch_name,
+          logoUrl: payload.org.logo_url,
+          primaryColor: payload.org.primary_color,
+        });
+
+        validatedTenantSlugRef.current = brand.slug || orgSlug;
+        setTenantResolutionStatus("ready");
+        updateData("tenant", {
+          ...data?.tenant,
+          orgSlug: payload.org.slug,
+          orgId: payload.org.id,
+          branchName: brand.displayName,
+        });
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
+
+        validationInFlightRef.current = null;
+        validatedTenantSlugRef.current = "";
+        setTenantResolutionStatus("invalid");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [data?.tenant, isJourneyLoaded, isLoaded, orgSlug, updateData]);
+
+  if (tenantResolutionStatus === "loading") {
+    return <div className="min-h-screen bg-[#090909]" />;
+  }
+
+  if (tenantResolutionStatus === "missing" || tenantResolutionStatus === "invalid") {
+    return (
+      <TenantResolutionFallbackScreen
+        title="Não consegui identificar a loja desta experiência."
+        message="A jornada precisa começar com uma loja ativa e reconhecida. Volte para a entrada segura e tente novamente."
+        actionHref="/"
+        actionLabel="Voltar para a entrada"
+      />
+    );
+  }
 
   const isWowPilot = isOnboardingWowSurfaceEnabled({
     orgSlug: orgSlug || null,

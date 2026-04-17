@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation";
+import { TenantResolutionFallbackScreen } from "@/components/onboarding/public-surface";
+import { CANONICAL_PUBLIC_TENANT_SLUG, resolvePublicEntryTenant } from "@/lib/onboarding/public-entry";
 import { normalizeTenantSlug } from "@/lib/tenant/core";
 
 export const dynamic = "force-dynamic";
@@ -13,9 +15,17 @@ export default async function IndexRouter({
     typeof resolved.org === "string" ? resolved.org : Array.isArray(resolved.org) ? resolved.org[0] || "" : ""
   );
 
-  if (requestedOrg) {
-    redirect(`/onboarding/chat?org=${requestedOrg}`);
+  const tenant = await resolvePublicEntryTenant(requestedOrg || CANONICAL_PUBLIC_TENANT_SLUG);
+  if (tenant) {
+    redirect(`/onboarding/chat?org=${tenant.slug}`);
   }
 
-  redirect("/onboarding/chat");
+  return (
+    <TenantResolutionFallbackScreen
+      title="Não consegui identificar a loja desta experiência."
+      message="A entrada pública precisa começar com uma loja ativa. Volte para a entrada segura e tente novamente."
+      actionHref="/"
+      actionLabel="Tentar novamente"
+    />
+  );
 }

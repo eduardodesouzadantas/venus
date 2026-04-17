@@ -4,7 +4,12 @@ import path from "node:path";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { BrandIntroScreen, PhotoUploadCTA, PublicOnboardingFrame } from "../../src/components/onboarding/public-surface.tsx";
+import {
+  BrandIntroScreen,
+  PhotoUploadCTA,
+  PublicOnboardingFrame,
+  TenantResolutionFallbackScreen,
+} from "../../src/components/onboarding/public-surface.tsx";
 import { buildOnboardingIntroCopy } from "../../src/lib/onboarding/wow-surface.ts";
 import { resolveVenusTenantBrand } from "../../src/lib/venus/brand.ts";
 
@@ -109,6 +114,21 @@ run("PublicOnboardingFrame keeps the chat hidden until the CTA is clicked", () =
   assert.doesNotMatch(chatHtml, /Começar/);
 });
 
+run("TenantResolutionFallbackScreen renders a safe public entry screen", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(TenantResolutionFallbackScreen, {
+      title: "Não consegui identificar a loja desta experiência.",
+      message: "A entrada pública precisa começar com uma loja ativa.",
+      actionHref: "/",
+      actionLabel: "Voltar para a entrada",
+    })
+  );
+
+  assert.match(html, /Não consegui identificar a loja desta experiência/);
+  assert.match(html, /Voltar para a entrada/);
+  assert.match(html, /Entrada segura/);
+});
+
 run("scanner opt-in CTA uses a direct button navigation path", () => {
   const source = fs.readFileSync(path.join(process.cwd(), "src/app/scanner/opt-in/page.tsx"), "utf8");
 
@@ -135,6 +155,20 @@ run("processing and result pages support the no-tenant preview fallback", () => 
   assert.match(processingSource, /\/result\?preview=1/);
   assert.match(resultSource, /previewMode/);
   assert.match(resultSource, /buildResultSurface\(onboardingData, null, null\)/);
+});
+
+run("public entry and chat validate the tenant before onboarding continues", () => {
+  const rootSource = fs.readFileSync(path.join(process.cwd(), "src/app/page.tsx"), "utf8");
+  const chatSource = fs.readFileSync(path.join(process.cwd(), "src/app/onboarding/chat/page.tsx"), "utf8");
+
+  assert.match(rootSource, /CANONICAL_PUBLIC_TENANT_SLUG/);
+  assert.match(rootSource, /resolvePublicEntryTenant/);
+  assert.match(rootSource, /TenantResolutionFallbackScreen/);
+  assert.match(rootSource, /onboarding\/chat\?org=/);
+
+  assert.match(chatSource, /\/api\/public\/org\//);
+  assert.match(chatSource, /tenantResolutionStatus/);
+  assert.match(chatSource, /TenantResolutionFallbackScreen/);
 });
 
 run("body photo upload keeps gallery separate from camera capture", () => {

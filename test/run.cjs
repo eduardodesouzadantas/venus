@@ -3947,6 +3947,139 @@ const FRONTEND_ORG_ID = "frontend-org";
     assert.equal(storage.getItem(newKey) !== null, true);
   });
 
+  await runAsync("scenario 1f - public entry resolves maison-elite canonically", async () => {
+    const admin = {
+      from(table) {
+        assert.equal(table, "orgs");
+        return {
+          select() {
+            return this;
+          },
+          eq(column, value) {
+            if (column === "slug") {
+              assert.ok(value === "maison-elite" || value === "invalid-tenant");
+            }
+            return this;
+          },
+          maybeSingle: async () => ({
+            data: {
+              id: "org-maison-elite",
+              slug: "maison-elite",
+              name: "Maison Elite",
+              branch_name: "Maison Elite",
+              logo_url: null,
+              primary_color: "#D4AF37",
+              status: "active",
+              kill_switch: false,
+            },
+            error: null,
+          }),
+        };
+      },
+    };
+
+    const publicEntryModule = await withMockedModules(
+      {
+        "@/lib/supabase/admin": {
+          createAdminClient: () => admin,
+        },
+      },
+      async () => loadFresh("../src/lib/onboarding/public-entry.ts")
+    );
+
+    const resolvedCanonical = await publicEntryModule.resolvePublicEntryTenant(null);
+    assert.equal(resolvedCanonical.slug, "maison-elite");
+    assert.equal(resolvedCanonical.status, "active");
+    assert.equal(resolvedCanonical.kill_switch, false);
+
+    const resolvedExplicit = await publicEntryModule.resolvePublicEntryTenant("maison-elite");
+    assert.equal(resolvedExplicit.slug, "maison-elite");
+
+    const invalidAdmin = {
+      from() {
+        return {
+          select() {
+            return this;
+          },
+          eq() {
+            return this;
+          },
+          maybeSingle: async () => ({ data: null, error: null }),
+        };
+      },
+    };
+
+    const missingModule = await withMockedModules(
+      {
+        "@/lib/supabase/admin": {
+          createAdminClient: () => invalidAdmin,
+        },
+      },
+      async () => loadFresh("../src/lib/onboarding/public-entry.ts")
+    );
+
+    const missingTenant = await missingModule.resolvePublicEntryTenant("invalid-tenant");
+    assert.equal(missingTenant, null);
+  });
+
+  await runAsync("scenario 1g - root page redirects to canonical maison-elite entry", async () => {
+    const redirectCalls = [];
+    const admin = {
+      from() {
+        return {
+          select() {
+            return this;
+          },
+          eq(column, value) {
+            assert.equal(column, "slug");
+            assert.equal(value, "maison-elite");
+            return this;
+          },
+          maybeSingle: async () => ({
+            data: {
+              id: "org-maison-elite",
+              slug: "maison-elite",
+              name: "Maison Elite",
+              branch_name: "Maison Elite",
+              logo_url: null,
+              primary_color: "#D4AF37",
+              status: "active",
+              kill_switch: false,
+            },
+            error: null,
+          }),
+        };
+      },
+    };
+
+    delete require.cache[require.resolve("next/navigation")];
+    delete require.cache[require.resolve("../src/lib/onboarding/public-entry.ts")];
+
+    const pageModule = await withMockedModules(
+      {
+        "next/navigation": {
+          redirect: (url) => {
+            redirectCalls.push(url);
+            throw new Error(`REDIRECT:${url}`);
+          },
+        },
+        "@/lib/supabase/admin": {
+          createAdminClient: () => admin,
+        },
+      },
+      async () => loadFresh("../src/app/page.tsx")
+    );
+
+    try {
+      await pageModule.default({ searchParams: Promise.resolve({}) });
+      throw new Error("Expected redirect from root page");
+    } catch (error) {
+      assert.ok(String(error.message || error).includes("REDIRECT:/onboarding/chat?org=maison-elite"));
+    }
+
+    assert.equal(redirectCalls[0], "/onboarding/chat?org=maison-elite");
+  });
+
   await runAsync("scenario 2 - tenant resolution failure throws before navigation", async () => {
     const onboarding = {
       contact: { name: "Cliente", phone: "+5511999999999", email: "cliente@exemplo.com" },

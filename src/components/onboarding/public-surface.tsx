@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { VenusButton } from "@/components/ui/VenusButton";
 import { VenusAvatar } from "@/components/venus/VenusAvatar";
 import { cn } from "@/lib/utils";
@@ -141,6 +142,47 @@ export function PhotoUploadCTA({
             {secondaryLabel}
           </button>
         ) : null}
+      </div>
+    </div>
+  );
+}
+
+export function TenantResolutionFallbackScreen({
+  title,
+  message,
+  actionHref,
+  actionLabel,
+}: {
+  title: string;
+  message: string;
+  actionHref: string;
+  actionLabel: string;
+}) {
+  return (
+    <div className="relative flex min-h-screen flex-col overflow-hidden bg-[#090909] px-5 py-6 text-white">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute left-[-10%] top-[-8%] h-72 w-72 rounded-full bg-[#C9A84C]/10 blur-[110px]" />
+        <div className="absolute right-[-14%] top-[14%] h-64 w-64 rounded-full bg-white/5 blur-[120px]" />
+        <div className="absolute bottom-[-12%] left-[14%] h-80 w-80 rounded-full bg-[#C9A84C]/6 blur-[140px]" />
+      </div>
+
+      <div className="relative z-10 mx-auto flex w-full max-w-[560px] flex-1 items-center justify-center">
+        <div className="w-full rounded-[34px] border border-white/10 bg-white/[0.045] p-6 text-center shadow-[0_24px_80px_rgba(0,0,0,0.28)] backdrop-blur-2xl sm:p-8">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-white/[0.05]">
+            <VenusAvatar size={36} animated />
+          </div>
+
+          <p className="mt-5 text-[9px] font-semibold uppercase tracking-[0.38em] text-[#C9A84C]">Entrada segura</p>
+          <h1 className="mt-3 text-[2rem] font-semibold leading-[1.02] tracking-[-0.04em] sm:text-[2.35rem]">{title}</h1>
+          <p className="mt-4 text-[15px] leading-7 text-white/70 sm:text-[16px]">{message}</p>
+
+          <Link
+            href={actionHref}
+            className="mt-6 inline-flex min-h-12 items-center justify-center rounded-full bg-[linear-gradient(180deg,#F1D77A_0%,#D4AF37_100%)] px-6 py-3.5 text-[12px] font-semibold uppercase tracking-[0.18em] text-[#0A0A0A] shadow-[0_18px_40px_rgba(212,175,55,0.18)] transition-transform active:scale-[0.98]"
+          >
+            {actionLabel}
+          </Link>
+        </div>
       </div>
     </div>
   );
