@@ -31,7 +31,7 @@ function buildProcessingSnapshot(data: OnboardingData): OnboardingData {
 
 export default function ProcessingPage() {
   const router = useRouter();
-  const { data } = useOnboarding();
+  const { data, isLoaded } = useOnboarding();
   const [phaseIndex, setPhaseIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [retryTick, setRetryTick] = useState(0);
@@ -48,7 +48,10 @@ export default function ProcessingPage() {
   }, []);
 
   useEffect(() => {
-    if (!data || isGenerating.current) return;
+    // Guard: wait for sessionStorage to be loaded into context before processing.
+    // Without this, the effect runs with defaultOnboardingData (empty tenant) on first mount,
+    // causing resolveAppTenantOrg to fail with TENANT_RESOLUTION_FAILED on multi-org deployments.
+    if (!isLoaded || !data || isGenerating.current) return;
 
     isGenerating.current = true;
     setError(null);
@@ -59,16 +62,33 @@ export default function ProcessingPage() {
       try {
         setStatus("processing");
         setSavedResultId(null);
+
+        const orgSlug = data?.tenant?.orgSlug || null;
+        const orgId = data?.tenant?.orgId || null;
+        const hasContact = Boolean(data?.contact?.phone || data?.contact?.email);
+        const scannerSource = data?.scanner?.skipped
+          ? "skipped"
+          : data?.scanner?.facePhoto || data?.scanner?.bodyPhoto
+            ? "captured"
+            : "unknown";
+
         console.info("[PROCESSING] persistence flow started", {
+          isLoaded,
           hasOnboardingData: Boolean(data),
-          orgId: data?.tenant?.orgId || null,
-          orgSlug: data?.tenant?.orgSlug || null,
+          orgId,
+          orgSlug,
+          hasContact,
+          scannerSource,
         });
 
         const dbReferenceId = await processAndPersistLead(buildProcessingSnapshot(data));
         console.info("[PROCESSING] processAndPersistLead returned", { dbReferenceId });
 
         if (!isValidResultId(dbReferenceId)) {
+          console.error("[PROCESSING] invalid result id returned", {
+            dbReferenceId,
+            failureReason: "RESULT_PERSISTENCE_INVALID_ID",
+          });
           throw new Error("RESULT_PERSISTENCE_INVALID_ID");
         }
 
@@ -77,32 +97,60 @@ export default function ProcessingPage() {
         });
 
         const validationText = await validationResponse.text().catch(() => "");
-        let validationPayload: any = null;
+        let validationPayload: Record<string, unknown> | null = null;
         if (validationText) {
           try {
-            validationPayload = JSON.parse(validationText);
+            validationPayload = JSON.parse(validationText) as Record<string, unknown>;
           } catch {
             validationPayload = null;
           }
         }
+
         if (!validationResponse.ok) {
           console.error("[PROCESSING] result validation lookup failed", {
-            dbReferenceId,
-            status: validationResponse.status,
-            bodyText: validationText,
+            resultId: dbReferenceId,
+            currentUrl: typeof window !== "undefined" ? window.location.href : null,
+            httpStatus: validationResponse.status,
+            payloadKeys: validationPayload ? Object.keys(validationPayload) : [],
+            failureReason: "RESULT_PERSISTENCE_LOOKUP_FAILED",
           });
           throw new Error("RESULT_PERSISTENCE_LOOKUP_FAILED");
-        } else {
-          console.info("[PROCESSING] result validation lookup ok", {
-            dbReferenceId,
-            tenantOrgId: validationPayload?.tenant?.orgId || null,
-          });
         }
-        if (!validationPayload?.tenant?.orgId) {
+
+        const tenantBlock = validationPayload?.tenant as Record<string, unknown> | null | undefined;
+        const hasTenantOrgId = Boolean(tenantBlock?.orgId);
+        const hasOrgId = Boolean(validationPayload?.org_id);
+        const hasCamelOrgId = Boolean(validationPayload?.orgId);
+        const hasImageUrl = Boolean(validationPayload?.imageUrl || (tenantBlock as any)?.imageUrl);
+        const hasFallbackPayload = Boolean(validationPayload?.fallback);
+
+        console.info("[PROCESSING] result validation lookup ok", {
+          resultId: dbReferenceId,
+          httpStatus: validationResponse.status,
+          payloadKeys: validationPayload ? Object.keys(validationPayload) : [],
+          hasTenantOrgId,
+          hasOrgId,
+          hasCamelOrgId,
+          hasImageUrl,
+          hasFallbackPayload,
+        });
+
+        const resolvedOrgId = (tenantBlock?.orgId as string) || (validationPayload?.orgId as string) || null;
+
+        if (!resolvedOrgId) {
           console.error("[PROCESSING] result validation missing tenant org", {
-            dbReferenceId,
-            responseOk: validationResponse.ok,
+            resultId: dbReferenceId,
+            currentUrl: typeof window !== "undefined" ? window.location.href : null,
+            orgSlug,
+            httpStatus: validationResponse.status,
             payloadKeys: validationPayload ? Object.keys(validationPayload) : [],
+            hasTenantOrgId,
+            hasOrgId,
+            hasCamelOrgId,
+            hasImageUrl,
+            hasFallbackPayload,
+            scannerSource,
+            failureReason: "RESULT_PERSISTENCE_MISSING_ORG",
           });
           throw new Error("RESULT_PERSISTENCE_MISSING_ORG");
         }
@@ -113,9 +161,16 @@ export default function ProcessingPage() {
           router.push(`/result?id=${dbReferenceId}`);
         }
       } catch (e) {
-        console.error("[PROCESSING] critical persistence failure", e);
+        const failureReason = e instanceof Error ? e.message : "UNKNOWN";
+        console.error("[PROCESSING] critical persistence failure", {
+          currentUrl: typeof window !== "undefined" ? window.location.href : null,
+          orgId: data?.tenant?.orgId || null,
+          orgSlug: data?.tenant?.orgSlug || null,
+          isLoaded,
+          failureReason,
+        });
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Não foi possível salvar seu resultado.");
+          setError(failureReason);
         }
       } finally {
         if (!cancelled) {
@@ -129,9 +184,10 @@ export default function ProcessingPage() {
     return () => {
       cancelled = true;
     };
-  }, [data, router, retryTick, status]);
+  }, [data, isLoaded, router, retryTick, status]);
 
   const handleRetry = () => {
+    isGenerating.current = false;
     setError(null);
     setRetryTick((value) => value + 1);
   };
@@ -198,4 +254,3 @@ export default function ProcessingPage() {
     </div>
   );
 }
-

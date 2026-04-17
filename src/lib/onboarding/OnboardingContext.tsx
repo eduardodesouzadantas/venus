@@ -5,6 +5,7 @@ import { OnboardingData, OnboardingConversationData, defaultOnboardingData } fro
 
 interface OnboardingContextProps {
   data: OnboardingData;
+  isLoaded: boolean;
   updateData: <K extends keyof OnboardingData>(step: K, values: Partial<OnboardingData[K]> | OnboardingData[K]) => void;
   updateConversation: (values: Partial<OnboardingConversationData>) => void;
 }
@@ -140,10 +141,8 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     }));
   };
 
-  // if (!isLoaded) return null; foi removido para permitir SSR livre e hidratar na ponta.
-
   return (
-    <OnboardingContext.Provider value={{ data, updateData, updateConversation }}>
+    <OnboardingContext.Provider value={{ data, isLoaded, updateData, updateConversation }}>
       {children}
     </OnboardingContext.Provider>
   );

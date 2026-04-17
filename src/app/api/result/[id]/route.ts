@@ -19,7 +19,7 @@ export async function GET(_: Request, context: RouteContext) {
     const supabase = createAdminClient();
     const { data, error } = await supabase
       .from("saved_results")
-      .select("id, payload, created_at")
+      .select("id, org_id, payload, created_at")
       .eq("id", id)
       .maybeSingle();
 
@@ -42,27 +42,45 @@ export async function GET(_: Request, context: RouteContext) {
     }
 
     const payload = (data.payload ?? {}) as Record<string, unknown>;
+    const rowOrgId = (data as Record<string, unknown>).org_id as string | null | undefined;
+    const tenantFromPayload = (payload.tenant ?? {}) as Record<string, unknown>;
+    const payloadOrgId = tenantFromPayload.orgId as string | null | undefined;
+
+    // Canonical org resolution: prefer payload.tenant.orgId, fall back to saved_results.org_id.
+    const resolvedOrgId: string | null = payloadOrgId || rowOrgId || null;
+
+    const canonicalTenant: Record<string, unknown> | null = resolvedOrgId
+      ? { ...tenantFromPayload, orgId: resolvedOrgId }
+      : Object.keys(tenantFromPayload).length > 0
+        ? tenantFromPayload
+        : null;
+
     const finalResult = (payload.finalResult ?? null) as Record<string, unknown> | null;
     const finalLooks = Array.isArray(finalResult?.looks) ? (finalResult?.looks as Array<Record<string, unknown>>) : [];
     if (hasLegacyTryOnProducts(finalLooks as any)) {
       console.warn("[RESULT_API] legacy try-on looks detected", {
         resultId: id,
-        orgId: (payload.tenant as Record<string, unknown> | null)?.orgId || null,
+        orgId: resolvedOrgId,
         lookIds: finalLooks.map((look) => look?.id || null),
       });
     }
 
     const response = {
       id: data.id,
+      resultId: data.id,
+      orgId: resolvedOrgId,
       analysis: payload.visualAnalysis ?? null,
       finalResult: payload.finalResult ?? null,
-      tenant: payload.tenant ?? null,
+      tenant: canonicalTenant,
       lastTryOn: payload.last_tryon ?? null,
       createdAt: data.created_at,
     };
+
     console.info("[RESULT_API] lookup success", {
       resultId: id,
-      orgId: (payload.tenant as Record<string, unknown> | null)?.orgId || null,
+      orgId: resolvedOrgId,
+      hasTenantOrgId: Boolean(payloadOrgId),
+      hasRowOrgId: Boolean(rowOrgId),
     });
 
     return NextResponse.json(response);

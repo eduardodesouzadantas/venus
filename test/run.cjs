@@ -1376,6 +1376,162 @@ const FRONTEND_ORG_ID = "frontend-org";
     assert.ok(!recoverySource.includes("org_id=${encodeURIComponent(orgId || \"\")}"));
   });
 
+  await runAsync("scenario 6 - legacy result with only saved_results.org_id gets canonical tenant.orgId", async () => {
+    const supabase = {
+      from(table) {
+        if (table !== "saved_results") throw new Error(`Unexpected table ${table}`);
+        return {
+          select() {
+            return {
+              eq(column, value) {
+                assert.equal(column, "id");
+                assert.equal(value, VALID_RESULT_ID);
+                return {
+                  maybeSingle: async () => ({
+                    data: {
+                      id: VALID_RESULT_ID,
+                      org_id: VALID_ORG_ID,
+                      payload: {
+                        finalResult: { looks: [] },
+                        // No tenant field — legacy result
+                      },
+                      created_at: "2026-04-06T12:00:00.000Z",
+                    },
+                    error: null,
+                  }),
+                };
+              },
+            };
+          },
+        };
+      },
+    };
+
+    const resultResponse = await withMockedModules({
+      "server-only": {},
+      "@/lib/supabase/admin": { createAdminClient: () => supabase },
+    }, async () => {
+      const resultRoute = loadFresh("../src/app/api/result/[id]/route.ts");
+      return resultRoute.GET(new Request(`https://example.com/api/result/${VALID_RESULT_ID}`), {
+        params: Promise.resolve({ id: VALID_RESULT_ID }),
+      });
+    });
+
+    assert.equal(resultResponse.status, 200);
+    const payload = await resultResponse.json();
+    assert.equal(payload.id, VALID_RESULT_ID);
+    assert.equal(payload.resultId, VALID_RESULT_ID);
+    assert.equal(payload.orgId, VALID_ORG_ID);
+    assert.equal(payload.tenant.orgId, VALID_ORG_ID);
+  });
+
+  await runAsync("scenario 7 - canonical contract always has resultId and orgId at top level", async () => {
+    const supabase = {
+      from(table) {
+        if (table !== "saved_results") throw new Error(`Unexpected table ${table}`);
+        return {
+          select() {
+            return {
+              eq() {
+                return {
+                  maybeSingle: async () => ({
+                    data: {
+                      id: VALID_RESULT_ID,
+                      org_id: VALID_ORG_ID,
+                      payload: {
+                        tenant: { orgId: VALID_ORG_ID, orgSlug: "venus" },
+                        finalResult: { looks: [] },
+                      },
+                      created_at: "2026-04-06T12:00:00.000Z",
+                    },
+                    error: null,
+                  }),
+                };
+              },
+            };
+          },
+        };
+      },
+    };
+
+    const resultResponse = await withMockedModules({
+      "server-only": {},
+      "@/lib/supabase/admin": { createAdminClient: () => supabase },
+    }, async () => {
+      const resultRoute = loadFresh("../src/app/api/result/[id]/route.ts");
+      return resultRoute.GET(new Request(`https://example.com/api/result/${VALID_RESULT_ID}`), {
+        params: Promise.resolve({ id: VALID_RESULT_ID }),
+      });
+    });
+
+    assert.equal(resultResponse.status, 200);
+    const payload = await resultResponse.json();
+    assert.equal(payload.resultId, VALID_RESULT_ID);
+    assert.equal(payload.orgId, VALID_ORG_ID);
+    assert.equal(payload.tenant.orgId, VALID_ORG_ID);
+    assert.equal(payload.tenant.orgSlug, "venus");
+  });
+
+  await runAsync("scenario 8 - processing page guards against unloaded context with isLoaded flag", async () => {
+    const processingSource = fs.readFileSync(path.join(process.cwd(), "src/app/processing/page.tsx"), "utf8");
+
+    // Guard must exist: effect must not start before sessionStorage is loaded.
+    assert.ok(processingSource.includes("isLoaded"), "processing page must use isLoaded from context");
+    assert.ok(processingSource.includes("!isLoaded"), "processing page must guard effect with !isLoaded");
+    assert.ok(processingSource.includes("const { data, isLoaded }"), "processing page must destructure isLoaded from useOnboarding");
+    // isLoaded must be in the effect dependency array.
+    assert.ok(processingSource.includes("isLoaded, router") || processingSource.includes("isLoaded,\n"), "isLoaded must be in effect deps");
+    // Canonical org check also accepts top-level orgId fallback.
+    assert.ok(processingSource.includes("validationPayload?.orgId"), "processing must accept top-level orgId fallback");
+
+    const contextSource = fs.readFileSync(path.join(process.cwd(), "src/lib/onboarding/OnboardingContext.tsx"), "utf8");
+    assert.ok(contextSource.includes("isLoaded: boolean"), "OnboardingContext must expose isLoaded");
+    assert.ok(contextSource.includes("isLoaded, updateData"), "OnboardingContext must provide isLoaded in value");
+  });
+
+  await runAsync("scenario 9 - absent tenant fails safely without exposing internals", async () => {
+    const supabase = {
+      from(table) {
+        if (table !== "saved_results") throw new Error(`Unexpected table ${table}`);
+        return {
+          select() {
+            return {
+              eq() {
+                return {
+                  maybeSingle: async () => ({
+                    data: {
+                      id: VALID_RESULT_ID,
+                      org_id: null,
+                      payload: {},
+                      created_at: "2026-04-06T12:00:00.000Z",
+                    },
+                    error: null,
+                  }),
+                };
+              },
+            };
+          },
+        };
+      },
+    };
+
+    const resultResponse = await withMockedModules({
+      "server-only": {},
+      "@/lib/supabase/admin": { createAdminClient: () => supabase },
+    }, async () => {
+      const resultRoute = loadFresh("../src/app/api/result/[id]/route.ts");
+      return resultRoute.GET(new Request(`https://example.com/api/result/${VALID_RESULT_ID}`), {
+        params: Promise.resolve({ id: VALID_RESULT_ID }),
+      });
+    });
+
+    // API returns 200 but with null orgId — processing page validation catches it.
+    assert.equal(resultResponse.status, 200);
+    const payload = await resultResponse.json();
+    assert.equal(payload.orgId, null);
+    assert.equal(payload.tenant, null);
+  });
+
   process.stdout.write("all reliability checks passed\n");
 })().catch((error) => {
   process.stderr.write(`${error instanceof Error ? error.stack || error.message : String(error)}\n`);
