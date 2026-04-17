@@ -32,7 +32,7 @@ function buildProcessingSnapshot(data: OnboardingData): OnboardingData {
 
 export default function ProcessingPage() {
   const router = useRouter();
-  const { data } = useOnboarding();
+  const { data, isLoaded } = useOnboarding();
   const [phaseIndex, setPhaseIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [retryTick, setRetryTick] = useState(0);
@@ -49,7 +49,8 @@ export default function ProcessingPage() {
   }, []);
 
   useEffect(() => {
-    if (!data || isGenerating.current) return;
+    // Guard: wait for sessionStorage hydration before processing (prevents TENANT_RESOLUTION_FAILED on empty data).
+    if (!isLoaded || !data || isGenerating.current) return;
 
     isGenerating.current = true;
     setError(null);
@@ -161,7 +162,7 @@ export default function ProcessingPage() {
     return () => {
       cancelled = true;
     };
-  }, [data, router, retryTick, status]);
+  }, [data, isLoaded, router, retryTick, status]);
 
   const handleRetry = () => {
     setError(null);

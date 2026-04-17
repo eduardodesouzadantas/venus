@@ -12,6 +12,7 @@ import {
 } from "@/lib/user/journey";
 
 interface OnboardingContextProps {
+  isLoaded: boolean;
   data: OnboardingData;
   updateData: <K extends keyof OnboardingData>(step: K, values: Partial<OnboardingData[K]> | OnboardingData[K]) => void;
   updateConversation: (values: Partial<OnboardingConversationData>) => void;
@@ -296,7 +297,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   // if (!isLoaded) return null; foi removido para permitir SSR livre e hidratar na ponta.
 
   return (
-    <OnboardingContext.Provider value={{ data, updateData, updateConversation, journey, isJourneyLoaded }}>
+    <OnboardingContext.Provider value={{ data, isLoaded, updateData, updateConversation, journey, isJourneyLoaded }}>
       {children}
     </OnboardingContext.Provider>
   );
