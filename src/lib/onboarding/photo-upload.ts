@@ -5,9 +5,10 @@ type OnboardingPhotoKind = "face" | "body";
 export type UploadedOnboardingPhoto = {
   bucket: string;
   storagePath: string;
-  photoUrl: string;
+  signedUrl: string;
   mimeType: string;
   size: number;
+  expiresInSeconds?: number;
 };
 
 type UploadOnboardingPhotoInput = {
@@ -128,7 +129,7 @@ export async function uploadOnboardingPhoto(input: UploadOnboardingPhotoInput): 
   }
 
   const payload = (await response.json().catch(() => null)) as Partial<UploadedOnboardingPhoto> | null;
-  if (!payload?.photoUrl || !payload.storagePath || !payload.bucket) {
+  if (!payload?.signedUrl || !payload.storagePath || !payload.bucket) {
     throw new Error("photo_upload_invalid_response");
   }
 

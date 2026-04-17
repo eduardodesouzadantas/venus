@@ -38,11 +38,11 @@ function clearTimer(timer: ReturnType<typeof setTimeout> | null) {
 }
 
 /**
- * Resolve a person image to a public HTTPS URL.
+ * Resolve a person image to a usable HTTPS URL.
  * If the image is already an https:// URL, return it directly.
- * If it's a data: URI or blob:, upload to Supabase Storage and return the public URL.
+ * If it's a data: URI or blob:, upload to private Supabase Storage and return a short-lived signed URL.
  */
-async function resolvePublicImageUrl(imageInput: string, orgId: string): Promise<string> {
+async function resolvePersonImageUrl(imageInput: string, orgId: string): Promise<string> {
   if (imageInput.startsWith("https://")) {
     return imageInput;
   }
@@ -77,9 +77,9 @@ async function resolvePublicImageUrl(imageInput: string, orgId: string): Promise
     throw new Error(body?.error || "Falha ao fazer upload da sua foto. Tente novamente.");
   }
 
-  const { publicUrl } = (await uploadRes.json()) as { publicUrl: string };
-  console.info("[useTryOn] upload completed", { orgId, hasPublicUrl: Boolean(publicUrl) });
-  return publicUrl;
+  const { signedUrl } = (await uploadRes.json()) as { signedUrl: string };
+  console.info("[useTryOn] upload completed", { orgId, hasSignedUrl: Boolean(signedUrl) });
+  return signedUrl;
 }
 
 export function useTryOn(): UseTryOnResult {
@@ -173,7 +173,7 @@ export function useTryOn(): UseTryOnResult {
           return;
         }
 
-        const resolvedPersonUrl = await resolvePublicImageUrl(model_image, org_id);
+        const resolvedPersonUrl = await resolvePersonImageUrl(model_image, org_id);
 
         const productRes = await fetch(
           `/api/tryon/resolve-product?product_id=${encodeURIComponent(resolvedProductId)}&org_id=${encodeURIComponent(org_id)}`

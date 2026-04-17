@@ -1,11 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkInMemoryRateLimit, logSecurityEvent, recordSecurityAlert } from "@/lib/reliability/security";
+import {
+  buildOnboardingPhotoStoragePath,
+  detectOnboardingImageMimeType,
+  getOnboardingPhotoExtension,
+  isAllowedOnboardingImageMimeType,
+  isValidOnboardingPhotoStoragePath,
+  ONBOARDING_PHOTO_BUCKET,
+  ONBOARDING_PHOTO_FILE_LIMIT,
+  ONBOARDING_PHOTO_SIGNED_URL_EXPIRY_SECONDS,
+  sanitizeOnboardingPhotoKind,
+  sanitizeStorageSegment,
+} from "@/lib/onboarding/photo-storage";
 
 export const dynamic = "force-dynamic";
-
-const ONBOARDING_BUCKET = "onboarding-photos";
-const PHOTO_FILE_LIMIT = 6 * 1024 * 1024;
 
 async function ensureBucketExists(supabase: ReturnType<typeof createAdminClient>) {
   const { data: buckets, error: listError } = await supabase.storage.listBuckets();
@@ -15,11 +24,11 @@ async function ensureBucketExists(supabase: ReturnType<typeof createAdminClient>
     throw new Error("storage_unavailable");
   }
 
-  const existing = buckets?.find((bucket) => bucket.name === ONBOARDING_BUCKET);
+  const existing = buckets?.find((bucket) => bucket.name === ONBOARDING_PHOTO_BUCKET);
   if (!existing) {
-    const { error: createError } = await supabase.storage.createBucket(ONBOARDING_BUCKET, {
-      public: true,
-      fileSizeLimit: PHOTO_FILE_LIMIT,
+    const { error: createError } = await supabase.storage.createBucket(ONBOARDING_PHOTO_BUCKET, {
+      public: false,
+      fileSizeLimit: ONBOARDING_PHOTO_FILE_LIMIT,
       allowedMimeTypes: ["image/jpeg", "image/png", "image/webp"],
     });
 
@@ -30,16 +39,14 @@ async function ensureBucketExists(supabase: ReturnType<typeof createAdminClient>
     return;
   }
 
-  if (!existing.public) {
-    const { error: updateError } = await supabase.storage.updateBucket(ONBOARDING_BUCKET, {
-      public: true,
-      fileSizeLimit: PHOTO_FILE_LIMIT,
-      allowedMimeTypes: ["image/jpeg", "image/png", "image/webp"],
-    });
+  const { error: updateError } = await supabase.storage.updateBucket(ONBOARDING_PHOTO_BUCKET, {
+    public: false,
+    fileSizeLimit: ONBOARDING_PHOTO_FILE_LIMIT,
+    allowedMimeTypes: ["image/jpeg", "image/png", "image/webp"],
+  });
 
-    if (updateError) {
-      console.warn("[ONBOARDING_UPLOAD] bucket update failed", updateError.message);
-    }
+  if (updateError) {
+    console.warn("[ONBOARDING_UPLOAD] bucket update failed", updateError.message);
   }
 }
 
@@ -51,11 +58,19 @@ export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
-    const orgId = normalizeText(formData.get("org_id"));
-    const orgSlug = normalizeText(formData.get("org_slug"));
-    const kind = normalizeText(formData.get("kind")) || "body";
+    const orgId = sanitizeStorageSegment(formData.get("org_id"), "");
+    const orgSlug = sanitizeStorageSegment(formData.get("org_slug"), "");
+    const kind = sanitizeOnboardingPhotoKind(formData.get("kind")) || null;
     const journeyId = normalizeText(formData.get("journey_id"));
     const sessionId = normalizeText(formData.get("session_id"));
+
+    if (!orgId && !orgSlug) {
+      return NextResponse.json({ error: "invalid_storage_path" }, { status: 400 });
+    }
+
+    if (!kind) {
+      return NextResponse.json({ error: "invalid_storage_path" }, { status: 400 });
+    }
 
     const rateLimit = checkInMemoryRateLimit({
       scope: "onboarding_photo_upload",
@@ -84,27 +99,54 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "missing_file" }, { status: 400 });
     }
 
-    if (file.size > PHOTO_FILE_LIMIT) {
+    if (file.size > ONBOARDING_PHOTO_FILE_LIMIT) {
       logSecurityEvent("warn", "onboarding_photo_too_large", {
         route: "onboarding/photo-upload",
         orgId: orgId || null,
         orgSlug: orgSlug || null,
         kind,
         size: file.size,
-        limit: PHOTO_FILE_LIMIT,
+        limit: ONBOARDING_PHOTO_FILE_LIMIT,
       });
       return NextResponse.json({ error: "file_too_large" }, { status: 413 });
+    }
+
+    const fileBuffer = Buffer.from(await file.arrayBuffer());
+    const detectedMimeType = detectOnboardingImageMimeType(fileBuffer.slice(0, 16));
+    const providedMimeType = normalizeText(file.type).toLowerCase();
+
+    if (!detectedMimeType || !isAllowedOnboardingImageMimeType(detectedMimeType)) {
+      return NextResponse.json({ error: "invalid_file_type" }, { status: 400 });
+    }
+
+    if (providedMimeType && providedMimeType !== detectedMimeType) {
+      return NextResponse.json({ error: "invalid_file_type" }, { status: 400 });
+    }
+
+    const fileExtension = getOnboardingPhotoExtension(detectedMimeType);
+    const providedExtension = (file.name.split(".").pop() || "").toLowerCase();
+    if (providedExtension && providedExtension !== fileExtension && providedExtension !== "jpeg") {
+      return NextResponse.json({ error: "invalid_file_type" }, { status: 400 });
     }
 
     const supabase = createAdminClient();
     await ensureBucketExists(supabase);
 
-    const safeExt = ["jpg", "jpeg", "png", "webp"].includes((file.name.split(".").pop() || "").toLowerCase()) ? (file.name.split(".").pop() || "jpg").toLowerCase() : "jpg";
-    const scopeParts = [orgId || orgSlug || "global", kind, journeyId || sessionId || Date.now().toString()];
-    const storagePath = `onboarding-inputs/${scopeParts.join("/")}-${Math.random().toString(36).slice(2, 8)}.${safeExt}`;
+    const storagePath = buildOnboardingPhotoStoragePath({
+      orgId: orgId || null,
+      orgSlug: orgSlug || null,
+      kind,
+      journeyId: journeyId || null,
+      sessionId: sessionId || null,
+      mimeType: detectedMimeType,
+    });
 
-    const { error: uploadError } = await supabase.storage.from(ONBOARDING_BUCKET).upload(storagePath, Buffer.from(await file.arrayBuffer()), {
-      contentType: file.type || "image/jpeg",
+    if (!storagePath || !isValidOnboardingPhotoStoragePath(storagePath, orgId || null, orgSlug || null)) {
+      return NextResponse.json({ error: "invalid_storage_path" }, { status: 400 });
+    }
+
+    const { error: uploadError } = await supabase.storage.from(ONBOARDING_PHOTO_BUCKET).upload(storagePath, fileBuffer, {
+      contentType: detectedMimeType,
       upsert: false,
     });
 
@@ -119,11 +161,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "upload_failed" }, { status: 500 });
     }
 
-    const { data: urlData } = supabase.storage.from(ONBOARDING_BUCKET).getPublicUrl(storagePath);
-    const photoUrl = urlData?.publicUrl || "";
+    const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+      .from(ONBOARDING_PHOTO_BUCKET)
+      .createSignedUrl(storagePath, ONBOARDING_PHOTO_SIGNED_URL_EXPIRY_SECONDS);
 
-    if (!photoUrl) {
-      return NextResponse.json({ error: "missing_public_url" }, { status: 500 });
+    if (signedUrlError || !signedUrlData?.signedUrl) {
+      logSecurityEvent("error", "onboarding_photo_signed_url_failed", {
+        route: "onboarding/photo-upload",
+        orgId: orgId || null,
+        orgSlug: orgSlug || null,
+        kind,
+        error: signedUrlError?.message || "missing_signed_url",
+      });
+      return NextResponse.json({ error: "signed_url_failed" }, { status: 500 });
     }
 
     if (orgId) {
@@ -146,16 +196,17 @@ export async function POST(req: NextRequest) {
       orgId: orgId || null,
       orgSlug: orgSlug || null,
       kind,
-      bucket: ONBOARDING_BUCKET,
-      hasPublicUrl: Boolean(photoUrl),
+      bucket: ONBOARDING_PHOTO_BUCKET,
+      hasSignedUrl: Boolean(signedUrlData.signedUrl),
     });
 
     return NextResponse.json({
-      bucket: ONBOARDING_BUCKET,
+      bucket: ONBOARDING_PHOTO_BUCKET,
       storagePath,
-      photoUrl,
-      mimeType: file.type || "image/jpeg",
+      signedUrl: signedUrlData.signedUrl,
+      mimeType: detectedMimeType,
       size: file.size,
+      expiresInSeconds: ONBOARDING_PHOTO_SIGNED_URL_EXPIRY_SECONDS,
     });
   } catch (error) {
     logSecurityEvent("error", "onboarding_photo_upload_failed", {

@@ -7,6 +7,7 @@ import { Text } from "./Text";
 import { VenusButton } from "./VenusButton";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
 import { useUserImage } from "@/lib/onboarding/UserImageContext";
+import { resolveOnboardingPhotoSignedUrl } from "@/lib/onboarding/photo-access";
 import { SimulatedCamera } from "./SimulatedCamera";
 import { readMerchantBenefitProgram } from "@/lib/social/merchant-benefits";
 import { buildTryOnPosterFile } from "@/lib/social/tryon";
@@ -49,6 +50,7 @@ export function TryOnModal({ isOpen, onClose, imageUrl, name, brandName, appName
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [generationSource, setGenerationSource] = useState<string>("");
   const [generationAttempts, setGenerationAttempts] = useState<number>(0);
+  const [resolvedSourcePhoto, setResolvedSourcePhoto] = useState<string>("");
 
   const styleDirection = getStyleDirectionDisplayLabel(onboardingData.intent.styleDirection || "Sem preferência");
   const resolvedLookDescription = lookDescription || name;
@@ -59,15 +61,64 @@ export function TryOnModal({ isOpen, onClose, imageUrl, name, brandName, appName
   ]
     .filter(Boolean)
     .join(" · ");
-  const resolvedSourcePhoto = useMemo(
-    () => userPhoto || onboardingData.scanner.facePhoto || onboardingData.scanner.bodyPhoto || "",
-    [userPhoto, onboardingData.scanner.facePhoto, onboardingData.scanner.bodyPhoto]
-  );
+  const sourcePhotoCandidate =
+    userPhoto ||
+    onboardingData.scanner.facePhotoUrl ||
+    onboardingData.scanner.bodyPhotoUrl ||
+    onboardingData.scanner.facePhoto ||
+    onboardingData.scanner.bodyPhoto ||
+    "";
   const sourcePhotoRef = useRef(resolvedSourcePhoto);
 
   useEffect(() => {
     sourcePhotoRef.current = resolvedSourcePhoto;
   }, [resolvedSourcePhoto]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function resolveSourcePhoto() {
+      if (!isOpen || !sourcePhotoCandidate) {
+        if (!cancelled) {
+          setResolvedSourcePhoto("");
+        }
+        return;
+      }
+
+      if (/^https?:\/\//i.test(sourcePhotoCandidate) || sourcePhotoCandidate.startsWith("data:")) {
+        if (!cancelled) {
+          setResolvedSourcePhoto(sourcePhotoCandidate);
+        }
+        return;
+      }
+
+      if (!sourcePhotoCandidate.startsWith("onboarding-inputs/")) {
+        return;
+      }
+
+      try {
+        const signedUrl = await resolveOnboardingPhotoSignedUrl({
+          storagePath: sourcePhotoCandidate,
+          orgId: onboardingData.tenant?.orgId || null,
+          orgSlug: onboardingData.tenant?.orgSlug || null,
+        });
+
+        if (!cancelled) {
+          setResolvedSourcePhoto(signedUrl);
+        }
+      } catch {
+        if (!cancelled) {
+          setResolvedSourcePhoto("");
+        }
+      }
+    }
+
+    void resolveSourcePhoto();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, onboardingData.tenant?.orgId, onboardingData.tenant?.orgSlug, sourcePhotoCandidate]);
 
   const merchantProgram = useMemo(() => readMerchantBenefitProgram(brandName || "Venus Engine"), [brandName]);
   const benefitTitles = useMemo(
@@ -113,7 +164,7 @@ export function TryOnModal({ isOpen, onClose, imageUrl, name, brandName, appName
     setGenerationAttempts(0);
 
     if (resolvedSourcePhoto) {
-      if (!userPhoto) {
+      if (!userPhoto && /^https?:\/\//i.test(resolvedSourcePhoto)) {
         setUserPhoto(resolvedSourcePhoto);
       }
       setStatus("loading");

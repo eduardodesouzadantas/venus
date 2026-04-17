@@ -34,13 +34,13 @@ export default function FaceScannerPage() {
       });
 
       updateData("scanner", {
-        facePhoto: uploaded.photoUrl,
-        facePhotoUrl: uploaded.photoUrl,
+        facePhoto: uploaded.storagePath,
+        facePhotoUrl: "",
         facePhotoPath: uploaded.storagePath,
       });
-      setUserPhoto(uploaded.photoUrl);
+      setUserPhoto(uploaded.signedUrl);
 
-      const analysis = await analyzeColorimetry(uploaded.photoUrl, data.tenant?.orgId || data.tenant?.orgSlug || "");
+      const analysis = await analyzeColorimetry(uploaded.signedUrl, data.tenant?.orgId || data.tenant?.orgSlug || "");
       if (analysis) {
         updateData("colorimetry", analysis);
         updateData("colors", {

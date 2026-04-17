@@ -4118,15 +4118,19 @@ const FRONTEND_ORG_ID = "frontend-org";
   });
 
   await runAsync("scenario 1h - onboarding photo upload stores file and returns lightweight references", async () => {
+    const bucketUpdates = [];
+    const pngBytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x00]);
     const createAdminClient = () => ({
       storage: {
         async listBuckets() {
           return { data: [{ name: "onboarding-photos", public: true }], error: null };
         },
-        async createBucket() {
+        async createBucket(name, options) {
+          bucketUpdates.push({ kind: "create", name, options });
           return { error: null };
         },
-        async updateBucket() {
+        async updateBucket(name, options) {
+          bucketUpdates.push({ kind: "update", name, options });
           return { error: null };
         },
         from() {
@@ -4134,11 +4138,12 @@ const FRONTEND_ORG_ID = "frontend-org";
             async upload() {
               return { error: null };
             },
-            getPublicUrl(storagePath) {
+            async createSignedUrl(storagePath, expiresIn) {
               return {
                 data: {
-                  publicUrl: `https://cdn.example.com/${storagePath}`,
+                  signedUrl: `https://cdn.example.com/${storagePath}?signed=1&expires=${expiresIn}`,
                 },
+                error: null,
               };
             },
           };
@@ -4165,7 +4170,7 @@ const FRONTEND_ORG_ID = "frontend-org";
     );
 
     const formData = new FormData();
-    formData.set("file", new File(["fake-image"], "photo.png", { type: "image/png" }));
+    formData.set("file", new File([pngBytes], "photo.png", { type: "image/png" }));
     formData.set("org_id", "org-123");
     formData.set("org_slug", "maison-elite");
     formData.set("kind", "body");
@@ -4180,8 +4185,259 @@ const FRONTEND_ORG_ID = "frontend-org";
     const payload = await response.json();
     assert.equal(payload.bucket, "onboarding-photos");
     assert.equal(typeof payload.storagePath, "string");
-    assert.equal(typeof payload.photoUrl, "string");
-    assert.ok(payload.photoUrl.includes(payload.storagePath));
+    assert.equal(typeof payload.signedUrl, "string");
+    assert.ok(payload.signedUrl.includes(payload.storagePath));
+    assert.equal(payload.expiresInSeconds, 600);
+    assert.ok(bucketUpdates.some((entry) => entry.kind === "update" && entry.options?.public === false));
+    assert.ok(bucketUpdates.some((entry) => entry.kind === "create" || entry.kind === "update"));
+  });
+
+  await runAsync("scenario 1i - onboarding photo upload rejects invalid mime and unsafe path inputs", async () => {
+    const pngBytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x00]);
+    const module = await withMockedModules(
+      {
+        "@/lib/supabase/admin": {
+          createAdminClient: () => ({
+            storage: {
+              async listBuckets() {
+                return { data: [{ name: "onboarding-photos", public: false }], error: null };
+              },
+              async updateBucket() {
+                return { error: null };
+              },
+              async createBucket() {
+                return { error: null };
+              },
+              from() {
+                return {
+                  async upload() {
+                    return { error: null };
+                  },
+                  async createSignedUrl() {
+                    return { data: { signedUrl: "https://cdn.example.com/signed" }, error: null };
+                  },
+                };
+              },
+            },
+          }),
+        },
+        "@/lib/reliability/security": {
+          checkInMemoryRateLimit: () => ({
+            allowed: true,
+            retryAfterSeconds: 0,
+            limit: 10,
+          }),
+          logSecurityEvent: () => null,
+          recordSecurityAlert: async () => null,
+        },
+      },
+      async () => loadFresh("../src/app/api/onboarding/photo-upload/route.ts")
+    );
+
+    const invalidMimeForm = new FormData();
+    invalidMimeForm.set("file", new File(["plain-text"], "photo.txt", { type: "text/plain" }));
+    invalidMimeForm.set("org_id", "org-123");
+    invalidMimeForm.set("kind", "face");
+
+    const invalidMimeResponse = await module.POST(new Request("https://example.com/api/onboarding/photo-upload", {
+      method: "POST",
+      body: invalidMimeForm,
+    }));
+
+    assert.equal(invalidMimeResponse.status, 400);
+    assert.equal((await invalidMimeResponse.json()).error, "invalid_file_type");
+
+    const missingOrgForm = new FormData();
+    missingOrgForm.set("file", new File([pngBytes], "photo.png", { type: "image/png" }));
+    missingOrgForm.set("kind", "body");
+
+    const missingOrgResponse = await module.POST(new Request("https://example.com/api/onboarding/photo-upload", {
+      method: "POST",
+      body: missingOrgForm,
+    }));
+
+    assert.equal(missingOrgResponse.status, 400);
+    assert.equal((await missingOrgResponse.json()).error, "invalid_storage_path");
+
+    const unsafePathForm = new FormData();
+    unsafePathForm.set("file", new File([pngBytes], "photo.png", { type: "image/png" }));
+    unsafePathForm.set("org_id", "../evil");
+    unsafePathForm.set("kind", "body");
+
+    const unsafePathResponse = await module.POST(new Request("https://example.com/api/onboarding/photo-upload", {
+      method: "POST",
+      body: unsafePathForm,
+    }));
+
+    assert.equal(unsafePathResponse.status, 200);
+    const sanitizedPayload = await unsafePathResponse.json();
+    assert.ok(String(sanitizedPayload.storagePath || "").includes("onboarding-inputs/evil/"));
+    assert.ok(!String(sanitizedPayload.storagePath || "").includes(".."));
+  });
+
+  await runAsync("scenario 1j - onboarding photo signed url route returns short-lived access", async () => {
+    const module = await withMockedModules(
+      {
+        "@/lib/supabase/admin": {
+          createAdminClient: () => ({
+            storage: {
+              from() {
+                return {
+                  async createSignedUrl(storagePath, expiresIn) {
+                    return {
+                      data: {
+                        signedUrl: `https://cdn.example.com/${storagePath}?expires=${expiresIn}`,
+                      },
+                      error: null,
+                    };
+                  },
+                };
+              },
+            },
+          }),
+        },
+      },
+      async () => loadFresh("../src/app/api/onboarding/photo-signed-url/route.ts")
+    );
+
+    const response = await module.POST(new Request("https://example.com/api/onboarding/photo-signed-url", {
+      method: "POST",
+      body: JSON.stringify({
+        storagePath: "onboarding-inputs/org-123/body/journey-123-abc123.jpg",
+        orgId: "org-123",
+      }),
+      headers: {
+        "Content-Type": "application/json",
+      },
+    }));
+
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.expiresInSeconds, 600);
+    assert.ok(String(payload.signedUrl || "").includes("expires=600"));
+  });
+
+  await runAsync("scenario 1k - onboarding photo upload rejects oversized images before storage", async () => {
+    const module = await withMockedModules(
+      {
+        "@/lib/supabase/admin": {
+          createAdminClient: () => ({
+            storage: {
+              async listBuckets() {
+                return { data: [{ name: "onboarding-photos", public: false }], error: null };
+              },
+              async updateBucket() {
+                return { error: null };
+              },
+              from() {
+                return {
+                  async upload() {
+                    return { error: null };
+                  },
+                  async createSignedUrl() {
+                    return { data: { signedUrl: "https://cdn.example.com/ok" }, error: null };
+                  },
+                };
+              },
+            },
+          }),
+        },
+        "@/lib/reliability/security": {
+          checkInMemoryRateLimit: () => ({
+            allowed: true,
+            retryAfterSeconds: 0,
+            limit: 10,
+          }),
+          logSecurityEvent: () => null,
+          recordSecurityAlert: async () => null,
+        },
+      },
+      async () => loadFresh("../src/app/api/onboarding/photo-upload/route.ts")
+    );
+
+    const oversizedBytes = new Uint8Array(6 * 1024 * 1024 + 1);
+    oversizedBytes[0] = 0xff;
+    oversizedBytes[1] = 0xd8;
+    oversizedBytes[2] = 0xff;
+    const oversizedForm = new FormData();
+    oversizedForm.set("file", new File([oversizedBytes], "photo.jpg", { type: "image/jpeg" }));
+    oversizedForm.set("org_id", "org-123");
+    oversizedForm.set("kind", "face");
+
+    const response = await module.POST(new Request("https://example.com/api/onboarding/photo-upload", {
+      method: "POST",
+      body: oversizedForm,
+    }));
+
+    assert.equal(response.status, 413);
+    assert.equal((await response.json()).error, "file_too_large");
+  });
+
+  await runAsync("scenario 1l - tryon upload stores private files and returns signed urls", async () => {
+    const bucketUpdates = [];
+    const pngBytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x00]);
+    const module = await withMockedModules(
+      {
+        "@/lib/supabase/admin": {
+          createAdminClient: () => ({
+            storage: {
+              async listBuckets() {
+                return { data: [{ name: "tryon-inputs", public: true }], error: null };
+              },
+              async createBucket(name, options) {
+                bucketUpdates.push({ kind: "create", name, options });
+                return { error: null };
+              },
+              async updateBucket(name, options) {
+                bucketUpdates.push({ kind: "update", name, options });
+                return { error: null };
+              },
+              from() {
+                return {
+                  async upload() {
+                    return { error: null };
+                  },
+                  async createSignedUrl(storagePath, expiresIn) {
+                    return {
+                      data: { signedUrl: `https://cdn.example.com/${storagePath}?expires=${expiresIn}` },
+                      error: null,
+                    };
+                  },
+                };
+              },
+            },
+          }),
+        },
+        "@/lib/reliability/security": {
+          checkInMemoryRateLimit: () => ({
+            allowed: true,
+            retryAfterSeconds: 0,
+            limit: 12,
+          }),
+          logSecurityEvent: () => null,
+          recordSecurityAlert: async () => null,
+        },
+      },
+      async () => loadFresh("../src/app/api/tryon/upload/route.ts")
+    );
+
+    const formData = new FormData();
+    formData.set("file", new File([pngBytes], "tryon.png", { type: "image/png" }));
+    formData.set("org_id", "org-123");
+
+    const response = await module.POST(new Request("https://example.com/api/tryon/upload", {
+      method: "POST",
+      body: formData,
+    }));
+
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.bucket, "tryon-inputs");
+    assert.equal(typeof payload.storagePath, "string");
+    assert.equal(typeof payload.signedUrl, "string");
+    assert.equal(payload.expiresInSeconds, 600);
+    assert.ok(payload.signedUrl.includes(payload.storagePath));
+    assert.ok(bucketUpdates.some((entry) => entry.kind === "update" && entry.options?.public === false));
   });
 
   await runAsync("scenario 2 - tenant resolution failure throws before navigation", async () => {

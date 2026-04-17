@@ -32,6 +32,7 @@ import { buildVenusStylistAudit, type VenusStylistAudit } from "@/lib/venus/audi
 import { TRYON_PREMIUM_FALLBACK_MESSAGE, TRYON_PREMIUM_REFINED_MESSAGE } from "@/lib/tryon/fallback-copy";
 import { getStyleDirectionDisplayLabel, normalizeStyleDirectionPreference } from "@/lib/style-direction";
 import { VenusLoadingScreen } from "@/components/ui/VenusLoadingScreen";
+import { resolveOnboardingPhotoSignedUrl } from "@/lib/onboarding/photo-access";
 
 // Categorization logic for the try-on engine
 function inferTryOnCategory(product: any): "tops" | "bottoms" | "one-pieces" {
@@ -67,6 +68,7 @@ function ResultDashboardContent() {
   const [socialFeedbackNote, setSocialFeedbackNote] = React.useState("");
   const [socialFeedbackStatus, setSocialFeedbackStatus] = React.useState<"idle" | "saving" | "saved" | "error">("idle");
   const [revealStage, setRevealStage] = React.useState(0);
+  const [resolvedStoredPhotoUrl, setResolvedStoredPhotoUrl] = React.useState<string | null>(null);
   const [premiumFallback, setPremiumFallback] = React.useState<{
     transitionMessage: string;
     refinementMessage: string;
@@ -124,7 +126,13 @@ function ResultDashboardContent() {
     whatsapp_phone: tenantContext?.whatsappNumber || "5511967011133",
   }), [tenantContext]);
 
-  const tryOnPersonImage = userPhoto || onboardingData?.scanner?.bodyPhoto || onboardingData?.scanner?.facePhoto || "";
+  const storedPhotoPath =
+    onboardingData?.scanner?.bodyPhotoPath ||
+    onboardingData?.scanner?.facePhotoPath ||
+    onboardingData?.scanner?.bodyPhoto ||
+    onboardingData?.scanner?.facePhoto ||
+    "";
+  const tryOnPersonImage = userPhoto || resolvedStoredPhotoUrl || (/^https?:\/\//i.test(storedPhotoPath) ? storedPhotoPath : "");
   const resolvedOrgId = tenantContext?.orgId || onboardingData?.tenant?.orgId || "";
   const displayImageUrl = tryOnImageUrl || persistedTryOn?.image_url;
   const isPreviousLook = !tryOnImageUrl && !!persistedTryOn?.image_url;
@@ -227,6 +235,58 @@ function ResultDashboardContent() {
   const retryPhotoHref = tenantContext?.orgSlug
     ? `/scanner/face?org=${encodeURIComponent(tenantContext.orgSlug)}`
     : "/scanner/face";
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    async function resolveStoredPhoto() {
+      if (userPhoto || resolvedStoredPhotoUrl || !storedPhotoPath) {
+        return;
+      }
+
+      if (/^https?:\/\//i.test(storedPhotoPath) || storedPhotoPath.startsWith("data:")) {
+        if (!cancelled) {
+          setResolvedStoredPhotoUrl(storedPhotoPath);
+        }
+        return;
+      }
+
+      if (!storedPhotoPath.startsWith("onboarding-inputs/")) {
+        return;
+      }
+
+      try {
+        const signedUrl = await resolveOnboardingPhotoSignedUrl({
+          storagePath: storedPhotoPath,
+          orgId: resolvedOrgId || onboardingData?.tenant?.orgId || null,
+          orgSlug: tenantContext?.orgSlug || onboardingData?.tenant?.orgSlug || null,
+        });
+
+        if (!cancelled) {
+          setResolvedStoredPhotoUrl(signedUrl);
+        }
+      } catch {
+        if (!cancelled) {
+          setResolvedStoredPhotoUrl(null);
+        }
+      }
+    }
+
+    void resolveStoredPhoto();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    onboardingData?.tenant?.orgId,
+    onboardingData?.tenant?.orgSlug,
+    resolvedOrgId,
+    resolvedStoredPhotoUrl,
+    storedPhotoPath,
+    tenantContext?.orgSlug,
+    userPhoto,
+  ]);
+
   const advanceReveal = React.useCallback(() => {
     if (resolvedOrgId && id) {
       void trackOnboardingConversionEvent({

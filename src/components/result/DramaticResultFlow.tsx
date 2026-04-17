@@ -13,6 +13,7 @@ import { LookCardSwipeable } from "@/components/ui/LookCardSwipeable";
 import { SavedProfileToast } from "@/components/ui/SavedProfileToast";
 import { SaveResultsModal } from "@/components/onboarding/SaveResultsModal";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
+import { resolveOnboardingPhotoSignedUrl } from "@/lib/onboarding/photo-access";
 import { getEngagedIds } from "@/lib/analytics/tracker";
 import { useBehaviorStatsSummary } from "@/lib/analytics/use-behavior-stats";
 import type { UserStats } from "@/lib/ai/orchestrator";
@@ -119,8 +120,62 @@ export default function DramaticResultPage() {
 
   const featuredLook = rankedLooks?.[0] || surface.looks?.[0];
 
-  const userPhoto = onboardingData.scanner.facePhoto || onboardingData.scanner.bodyPhoto || "";
+  const [resolvedUserPhoto, setResolvedUserPhoto] = useState("");
+  const userPhoto = resolvedUserPhoto;
   const lookImageUrl = featuredLook?.items?.[0]?.photoUrl || "";
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function resolveUserPhoto() {
+      const candidate =
+        onboardingData.scanner.facePhotoUrl ||
+        onboardingData.scanner.bodyPhotoUrl ||
+        onboardingData.scanner.facePhoto ||
+        onboardingData.scanner.bodyPhoto ||
+        "";
+
+      if (!candidate) {
+        if (!cancelled) {
+          setResolvedUserPhoto("");
+        }
+        return;
+      }
+
+      if (/^https?:\/\//i.test(candidate) || candidate.startsWith("data:")) {
+        if (!cancelled) {
+          setResolvedUserPhoto(candidate);
+        }
+        return;
+      }
+
+      if (!candidate.startsWith("onboarding-inputs/")) {
+        return;
+      }
+
+      try {
+        const signedUrl = await resolveOnboardingPhotoSignedUrl({
+          storagePath: candidate,
+          orgId: onboardingData.tenant?.orgId || null,
+          orgSlug: onboardingData.tenant?.orgSlug || null,
+        });
+
+        if (!cancelled) {
+          setResolvedUserPhoto(signedUrl);
+        }
+      } catch {
+        if (!cancelled) {
+          setResolvedUserPhoto("");
+        }
+      }
+    }
+
+    void resolveUserPhoto();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [onboardingData.scanner.facePhoto, onboardingData.scanner.facePhotoUrl, onboardingData.scanner.bodyPhoto, onboardingData.scanner.bodyPhotoUrl, onboardingData.tenant?.orgId, onboardingData.tenant?.orgSlug]);
 
   useEffect(() => {
     if (currentSection >= 2) {

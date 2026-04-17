@@ -11,6 +11,7 @@ import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
 import { analyzeColorimetry } from "@/lib/analysis/colorimetry-client";
 import { buildVenusBodyScannerIntro } from "@/lib/venus/brand";
 import { uploadOnboardingPhoto } from "@/lib/onboarding/photo-upload";
+import { resolveOnboardingPhotoSignedUrl } from "@/lib/onboarding/photo-access";
 
 export default function BodyScannerPage() {
   const router = useRouter();
@@ -37,13 +38,21 @@ export default function BodyScannerPage() {
       });
 
       updateData("scanner", {
-        bodyPhoto: uploaded.photoUrl,
-        bodyPhotoUrl: uploaded.photoUrl,
+        bodyPhoto: uploaded.storagePath,
+        bodyPhotoUrl: "",
         bodyPhotoPath: uploaded.storagePath,
       });
-      setUserPhoto(uploaded.photoUrl);
+      setUserPhoto(uploaded.signedUrl);
 
-      const sourceImage = data.scanner.facePhotoUrl || data.scanner.facePhoto || uploaded.photoUrl;
+      const sourceImage =
+        data.scanner.facePhotoUrl ||
+        (data.scanner.facePhotoPath
+          ? await resolveOnboardingPhotoSignedUrl({
+              storagePath: data.scanner.facePhotoPath,
+              orgId: data.tenant?.orgId || null,
+              orgSlug: data.tenant?.orgSlug || org || null,
+            })
+          : data.scanner.facePhoto || uploaded.signedUrl);
       if ((!data.colorimetry.justification || !data.favoriteColors.length || !data.avoidColors.length) && sourceImage) {
         const analysis = await analyzeColorimetry(sourceImage, data.tenant?.orgId || data.tenant?.orgSlug || "");
         if (analysis) {
