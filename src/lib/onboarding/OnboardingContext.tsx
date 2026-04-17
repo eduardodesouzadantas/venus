@@ -172,7 +172,8 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       setData(defaultOnboardingData);
     }
     setIsLoaded(true);
-  }, [data.tenant?.orgSlug, queryOrgSlug, user?.id]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     let active = true;

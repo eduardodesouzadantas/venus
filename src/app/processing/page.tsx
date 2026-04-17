@@ -165,6 +165,7 @@ export default function ProcessingPage() {
   }, [data, isLoaded, router, retryTick, status]);
 
   const handleRetry = () => {
+    isGenerating.current = false;
     setError(null);
     setRetryTick((value) => value + 1);
   };
