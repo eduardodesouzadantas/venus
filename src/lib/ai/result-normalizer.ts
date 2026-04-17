@@ -2,6 +2,7 @@ import type { OnboardingData } from "@/types/onboarding";
 import type { LookData, LookItem, ResultPayload } from "@/types/result";
 import type { Product } from "@/lib/catalog";
 import { deriveCatalogStylistProfile } from "@/lib/catalog/stylist-profile";
+import { buildColorStyleEvidence, flattenColorStyleEvidence, type ColorStyleEvidence } from "@/lib/color-style-evidence";
 import { deriveEssenceProfile } from "@/lib/result/essence";
 import {
   getStyleDirectionCatalogSignals,
@@ -40,6 +41,7 @@ type ProfileSignals = {
   metal: "Dourado" | "Prateado";
   contrast: string;
   keywords: string[];
+  paletteEvidence: ColorStyleEvidence;
 };
 
 type NormalizedProfile = ProfileSignals & {
@@ -214,27 +216,18 @@ function buildPaletteColor(name: string, fallbackHex: string): { hex: string; na
 function buildOnboardingPalette(
   profile: Pick<
     ProfileSignals,
-    "goal" | "goalKey" | "styleDirection" | "favoriteColors" | "avoidColors" | "metal" | "contrast" | "colorSeason" | "undertone" | "skinTone"
+    "goal" | "goalKey" | "styleDirection" | "favoriteColors" | "avoidColors" | "metal" | "contrast" | "colorSeason" | "undertone" | "skinTone" | "paletteEvidence"
   >,
 ): ResultPayload["palette"] {
-  const primaryName = profile.favoriteColors[0] || profile.goal;
-  const supportName = profile.favoriteColors[1] || (normalizeStyleDirectionPreference(profile.styleDirection) === "Feminina" ? "off white" : "grafite");
-  const accentName = profile.favoriteColors[2] || (profile.goalKey === "Autoridade" ? "marinho" : profile.goalKey === "Criatividade" ? "vinho profundo" : "grafite");
-  const avoided = profile.avoidColors.length > 0 ? profile.avoidColors.join(", ") : "cores de ruído";
   const directionLabel = getStyleDirectionDisplayLabel(profile.styleDirection).toLowerCase();
-  const metalLabel = profile.metal === "Dourado" ? "metais quentes" : "metais frios";
-  const colorimetryLabel = [profile.colorSeason, profile.undertone, profile.skinTone].filter(Boolean).join(" • ");
 
   return {
-    family: `${profile.goal} • linha ${directionLabel}`,
-    description: `Favorece ${profile.favoriteColors.join(", ") || primaryName} e evita ${avoided}, sustentando ${profile.goal.toLowerCase()} com ${directionLabel} e ${metalLabel}${colorimetryLabel ? `, em sintonia com ${colorimetryLabel.toLowerCase()}` : ""}.`,
+    family: `${profile.paletteEvidence.confidence === "high" ? "Leitura confirmada" : "Leitura preliminar"} • ${directionLabel === "sem preferência" ? "Base segura" : getStyleDirectionDisplayLabel(profile.styleDirection)}`,
+    description: profile.paletteEvidence.evidence,
     metal: profile.metal,
     contrast: profile.contrast,
-    colors: [
-      buildPaletteColor(primaryName, "#1F2937"),
-      buildPaletteColor(supportName, "#F8FAFC"),
-      buildPaletteColor(accentName, "#7C2D12"),
-    ],
+    colors: flattenColorStyleEvidence(profile.paletteEvidence),
+    evidence: profile.paletteEvidence,
   };
 }
 
@@ -267,6 +260,17 @@ function getProfileSignals(userData: OnboardingData) {
   const goalKeywords = GOAL_KEYWORDS[goalKey] || GOAL_KEYWORDS.Elegância;
   const environmentKeywords = userData.lifestyle.environments.map((value) => matchText(value));
   const colorKeywords = [...favoriteColors, ...avoidColors].map((value) => matchText(value));
+  const paletteEvidence = buildColorStyleEvidence({
+    styleDirection,
+    favoriteColors,
+    avoidColors,
+    colorSeason,
+    undertone,
+    skinTone,
+    contrast,
+    evidence: colorimetry.justification || "",
+    confidence: colorimetry.confidence || "",
+  });
 
   return {
     goal,
@@ -302,6 +306,7 @@ function getProfileSignals(userData: OnboardingData) {
       userData.scanner.skipped ? "skip" : "",
     ].filter(Boolean),
     styleDirection,
+    paletteEvidence,
   };
 }
 
@@ -367,7 +372,7 @@ function buildPalette(profile: Pick<ProfileSignals, "goalKey" | "metal" | "contr
 function buildPersonalizedPalette(
   profile: Pick<
     ProfileSignals,
-    "goal" | "goalKey" | "styleDirection" | "favoriteColors" | "avoidColors" | "metal" | "contrast" | "colorSeason" | "undertone" | "skinTone"
+    "goal" | "goalKey" | "styleDirection" | "favoriteColors" | "avoidColors" | "metal" | "contrast" | "colorSeason" | "undertone" | "skinTone" | "paletteEvidence"
   >,
 ): ResultPayload["palette"] {
   return buildOnboardingPalette(profile);
@@ -481,6 +486,32 @@ function scoreDirectionMatch(text: string, direction: ProfileSignals["styleDirec
   return 0;
 }
 
+function scorePaletteEvidence(text: string, evidence: ColorStyleEvidence): number {
+  const normalized = matchText(text);
+  let score = 0;
+
+  for (const entry of evidence.basePalette) {
+    const token = matchText(entry.name);
+    if (token && normalized.includes(token)) score += entry.tier === "base" ? 6 : 3;
+  }
+
+  for (const entry of evidence.accentPalette) {
+    const token = matchText(entry.name);
+    if (token && normalized.includes(token)) score += entry.tier === "accent" ? 4 : 2;
+  }
+
+  for (const entry of evidence.avoidOrUseCarefully) {
+    const token = matchText(entry.name);
+    if (token && normalized.includes(token)) score -= entry.tier === "caution" ? 10 : 6;
+  }
+
+  if (evidence.confidence === "low" && /laranja|amarelo|neon|rosa|vermelh/i.test(normalized)) {
+    score -= 4;
+  }
+
+  return score;
+}
+
 function scoreProduct(product: Product, blueprint: LookBlueprint, profile: ProfileSignals): number {
   const stylist = deriveCatalogStylistProfile(product);
   const text = matchText([
@@ -503,6 +534,7 @@ function scoreProduct(product: Product, blueprint: LookBlueprint, profile: Profi
   }
 
   score += scoreDirectionMatch(text, profile.styleDirection);
+  score += scorePaletteEvidence(text, profile.paletteEvidence);
 
   if (normalizeStyleDirectionPreference(stylist.direction) === normalizeStyleDirectionPreference(profile.styleDirection)) score += 8;
   if (stylist.direction !== "Neutra" && normalizeStyleDirectionPreference(profile.styleDirection) === "Sem preferência") score += 2;
@@ -979,6 +1011,7 @@ export function normalizeOpenAIRecommendationPayload(
   const selectedNames = looks.flatMap((look) => look.items.map((item) => item.name)).filter(Boolean);
   const accessoryNames = looks.flatMap((look) => look.accessories);
   const palette = raw.palette || buildPersonalizedPalette(profile);
+  const paletteEvidence = profile.paletteEvidence;
 
   return {
     hero: {
@@ -989,14 +1022,10 @@ export function normalizeOpenAIRecommendationPayload(
     palette: {
       family: compactText(palette.family, profile.paletteFamily, 60),
       description: compactText(palette.description, profile.paletteDescription, 160),
-      colors: Array.isArray(palette.colors) && palette.colors.length > 0
-        ? palette.colors.slice(0, 3).map((color) => ({
-            hex: normalizeText(color.hex) || "#111827",
-            name: compactText(color.name, "Cor estratégica", 40),
-          }))
-        : buildPersonalizedPalette(profile).colors,
+      colors: flattenColorStyleEvidence(paletteEvidence),
       metal: profile.metal,
       contrast: compactText(palette.contrast, profile.contrast, 20),
+      evidence: paletteEvidence,
     },
     diagnostic: {
       currentPerception: compactText(raw.diagnostic?.currentPerception, buildDiagnostic(profile, selectedNames).currentPerception, 160),

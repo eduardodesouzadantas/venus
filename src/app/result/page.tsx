@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { Suspense, useMemo } from "react";
 import Link from "next/link";
@@ -36,16 +36,16 @@ import { VenusLoadingScreen } from "@/components/ui/VenusLoadingScreen";
 // Categorization logic for the try-on engine
 function inferTryOnCategory(product: any): "tops" | "bottoms" | "one-pieces" {
   const source = `${product.category || ""} ${product.name || ""}`.toLowerCase();
-  if (source.includes("vestido") || source.includes("dress") || source.includes("macacão")) return "one-pieces";
-  if (source.includes("calça") || source.includes("saia") || source.includes("short") || source.includes("bermuda")) return "bottoms";
+  if (source.includes("vestido") || source.includes("dress") || source.includes("macacÃ£o")) return "one-pieces";
+  if (source.includes("calÃ§a") || source.includes("saia") || source.includes("short") || source.includes("bermuda")) return "bottoms";
   return "tops";
 }
 
 function ResultDashboardContent() {
-  // ──────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // ALL HOOKS MUST BE CALLED UNCONDITIONALLY AT THE TOP
   // React Error #310 happens when hooks are called after early returns.
-  // ──────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const searchParams = useSearchParams();
   const router = useRouter();
   const id = searchParams.get("id");
@@ -86,12 +86,24 @@ function ResultDashboardContent() {
   const [decision, setDecision] = React.useState<DecisionResult | null>(null);
   const wowShownTrackedRef = React.useRef(false);
 
-  // ── Derived values (safe even when surface is null) ──
+  // â”€â”€ Derived values (safe even when surface is null) â”€â”€
   const looks = useMemo(() => (surface?.looks && Array.isArray(surface.looks) ? surface.looks : []), [surface]);
-  const essenceLabel = surface?.essence?.label ?? "Sua Presença";
-  const palette = surface?.palette ?? { family: "Personalizada", colors: [] as any[], metal: "Prateado", contrast: "Médio Alto" };
+  const essenceLabel = surface?.essence?.label ?? "Sua PresenÃ§a";
+  const palette = surface?.palette ?? {
+    family: "Leitura preliminar",
+    colors: [] as any[],
+    metal: "Prateado",
+    contrast: "MÃ©dio Alto",
+    evidence: {
+      basePalette: [],
+      accentPalette: [],
+      avoidOrUseCarefully: [],
+      confidence: "medium" as const,
+      evidence: "Leitura preliminar baseada nesta foto. Uma luz frontal neutra melhora a precisÃ£o.",
+    },
+  };
   const paletteFamily = palette.family ?? "Personalizada";
-  const paletteColors = Array.isArray(palette.colors) ? palette.colors : [];
+  const paletteEvidence = palette.evidence;
   const bodyFit = onboardingData?.body?.fit ?? "Ajuste preciso";
   const colorContrast = onboardingData?.colors?.contrast ?? "Natural";
   const hasLegacyTryOnLooks = hasLegacyTryOnProducts(looks);
@@ -101,7 +113,7 @@ function ResultDashboardContent() {
     () =>
       buildAssistedRecommendationSurface(looks, {
         limit: 3,
-        sourceLabel: catalogSourceLabel || tenantContext?.branchName || tenantContext?.orgSlug || "Catálogo da loja",
+        sourceLabel: catalogSourceLabel || tenantContext?.branchName || tenantContext?.orgSlug || "CatÃ¡logo da loja",
         explicit: false,
       }),
     [looks, catalogSourceLabel, tenantContext?.branchName, tenantContext?.orgSlug]
@@ -173,7 +185,7 @@ function ResultDashboardContent() {
     () =>
       buildAssistedCatalogProductCards(looks, {
         limit: 3,
-        sourceLabel: catalogSourceLabel || tenantContext?.branchName || tenantContext?.orgSlug || "Catálogo da loja",
+        sourceLabel: catalogSourceLabel || tenantContext?.branchName || tenantContext?.orgSlug || "CatÃ¡logo da loja",
       }),
     [catalogSourceLabel, looks, tenantContext?.branchName, tenantContext?.orgSlug]
   );
@@ -184,7 +196,7 @@ function ResultDashboardContent() {
   const catalogCopy = useMemo(
     () =>
       buildCatalogAccessCopy({
-        sourceLabel: catalogSourceLabel || tenantContext?.branchName || tenantContext?.orgSlug || "catálogo da loja",
+        sourceLabel: catalogSourceLabel || tenantContext?.branchName || tenantContext?.orgSlug || "catÃ¡logo da loja",
         productCount: assistedCatalogProducts.length,
         lookCount: looks.length,
         explicit: false,
@@ -194,7 +206,7 @@ function ResultDashboardContent() {
   const explicitCatalogCopy = useMemo(
     () =>
       buildCatalogAccessCopy({
-        sourceLabel: catalogSourceLabel || tenantContext?.branchName || tenantContext?.orgSlug || "catálogo da loja",
+        sourceLabel: catalogSourceLabel || tenantContext?.branchName || tenantContext?.orgSlug || "catÃ¡logo da loja",
         productCount: assistedCatalogProducts.length,
         lookCount: looks.length,
         explicit: true,
@@ -364,7 +376,7 @@ function ResultDashboardContent() {
     });
   }, [surface, id, resolvedOrgId, onboardingData?.tenant?.orgId, tryOnQuality]);
 
-  // ── WhatsApp URL (memo, always called) ──
+  // â”€â”€ WhatsApp URL (memo, always called) â”€â”€
   React.useEffect(() => {
     if (loading || !surface || wowShownTrackedRef.current || !resolvedOrgId || !id) {
       return;
@@ -391,7 +403,7 @@ function ResultDashboardContent() {
     console.warn("[TRYON_QUALITY_LOW]", {
       resultId: id,
       orgId: resolvedOrgId || onboardingData?.tenant?.orgId || null,
-      styleDirection: getStyleDirectionDisplayLabel(onboardingData?.intent?.styleDirection || "Sem preferência"),
+      styleDirection: getStyleDirectionDisplayLabel(onboardingData?.intent?.styleDirection || "Sem preferÃªncia"),
       state: tryOnQuality.state,
       score: tryOnQuality.score,
       reason: tryOnQuality.reason,
@@ -413,7 +425,7 @@ function ResultDashboardContent() {
     return buildWhatsAppHandoffUrl(message, tenantContext?.whatsappNumber || "5511967011133") || "";
   }, [surface, onboardingData, essenceLabel, looks, tryOnImageUrl, persistedTryOn, decision, tenantContext, stylistAudit]);
 
-  // ── Global error instrumentation (always called) ──
+  // â”€â”€ Global error instrumentation (always called) â”€â”€
   React.useEffect(() => {
     const handleError = (event: ErrorEvent) => {
       console.error("[CLIENT_FATAL]", {
@@ -438,7 +450,7 @@ function ResultDashboardContent() {
     };
   }, []);
 
-  // ── Data loading effect (always called) ──
+  // â”€â”€ Data loading effect (always called) â”€â”€
   React.useEffect(() => {
     if (redirecting) {
       return;
@@ -487,7 +499,7 @@ function ResultDashboardContent() {
             if (recoveryPayload.lastTryOn) setPersistedTryOn(recoveryPayload.lastTryOn);
 
             const fallbackAnalysis = recoveryPayload.analysis || {
-              essence: { label: getStyleDirectionDisplayLabel(onboardingData?.intent?.styleDirection) || "Sua Essência", reason: "Sincronia baseada no seu perfil pessoal." },
+              essence: { label: getStyleDirectionDisplayLabel(onboardingData?.intent?.styleDirection) || "Sua EssÃªncia", reason: "Sincronia baseada no seu perfil pessoal." },
               palette: { family: "Personalizada", colors: [] },
               looks: [],
             };
@@ -528,7 +540,7 @@ function ResultDashboardContent() {
     load();
   }, [hasValidResultId, id, onboardingData, previewMode, redirecting, router, tenantContext, tryOnImageUrl]);
 
-  // ── Try-on sync effect (always called) ──
+  // â”€â”€ Try-on sync effect (always called) â”€â”€
   React.useEffect(() => {
     if (tryOnStatus !== "completed" || !tryOnImageUrl || !resolvedOrgId || !id || !pendingTryOnProduct) {
       return;
@@ -557,7 +569,7 @@ function ResultDashboardContent() {
     setPendingTryOnProduct(null);
   }, [tryOnStatus, tryOnImageUrl, resolvedOrgId, id, pendingTryOnProduct, tryOnPersonImage, looks]);
 
-  // ── Decision engine effect (always called) ──
+  // â”€â”€ Decision engine effect (always called) â”€â”€
   React.useEffect(() => {
     if (loading || !surface) return;
 
@@ -578,7 +590,7 @@ function ResultDashboardContent() {
     console.log("[Decision Engine] Next Action:", nextAction);
   }, [tryOnImageUrl, persistedTryOn, surface, loading, onboardingData?.intent?.satisfaction, looks]);
 
-  // ── Handlers ──
+  // â”€â”€ Handlers â”€â”€
   const handleGenerateTryOn = React.useCallback(
     (productId: string) => {
       if (!tryOnPersonImage || !resolvedOrgId || !id) return;
@@ -682,15 +694,15 @@ function ResultDashboardContent() {
     }
   }, [resolvedOrgId, id, socialFeedbackUrl, socialFeedbackNote, tryOnQuality.state, looks]);
 
-  // ──────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // EARLY RETURNS (after ALL hooks have been called)
-  // ──────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   if (redirecting) {
     return (
       <VenusLoadingScreen
-        title="A Venus está ajustando sua leitura"
-        subtitle="Carregando a próxima etapa sem interromper a experiência premium."
+        title="A Venus estÃ¡ ajustando sua leitura"
+        subtitle="Carregando a prÃ³xima etapa sem interromper a experiÃªncia premium."
       />
     );
   }
@@ -698,8 +710,8 @@ function ResultDashboardContent() {
   if (loading) {
     return (
       <VenusLoadingScreen
-        title="A Venus está preparando sua leitura"
-        subtitle="Aguarde um instante enquanto os dados da curadoria são hidratados com segurança."
+        title="A Venus estÃ¡ preparando sua leitura"
+        subtitle="Aguarde um instante enquanto os dados da curadoria sÃ£o hidratados com seguranÃ§a."
       />
     );
   }
@@ -715,9 +727,9 @@ function ResultDashboardContent() {
             </div>
           </div>
           <div className="space-y-2">
-            <p className="font-serif text-xl text-white">Sua leitura está a caminho...</p>
+            <p className="font-serif text-xl text-white">Sua leitura estÃ¡ a caminho...</p>
             <p className="max-w-xs text-sm text-white/40 leading-relaxed">
-              Estamos finalizando sua leitura premium. Se demorar um instante, a Venus está lapidando os últimos detalhes.
+              Estamos finalizando sua leitura premium. Se demorar um instante, a Venus estÃ¡ lapidando os Ãºltimos detalhes.
             </p>
           </div>
           <button
@@ -732,9 +744,9 @@ function ResultDashboardContent() {
     );
   }
 
-  // ──────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // MAIN RENDER (surface is guaranteed non-null here)
-  // ──────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   return (
     <main className="min-h-screen bg-[#0a0a0a] pb-24 text-[#f0ece4] selection:bg-[#C9A84C]/30">
@@ -747,7 +759,7 @@ function ResultDashboardContent() {
                 </div>
                 <div>
                   <p className="text-[9px] font-bold uppercase tracking-[0.32em] text-[#C9A84C]">{VENUS_STYLIST_NAME}</p>
-                  <p className="text-[10px] text-white/45">Revelação premium da sua leitura</p>
+                  <p className="text-[10px] text-white/45">RevelaÃ§Ã£o premium da sua leitura</p>
                 </div>
               </div>
               <div className="rounded-full border border-white/10 bg-black/40 px-3 py-1 text-[8px] font-bold uppercase tracking-[0.28em] text-white/60">
@@ -763,7 +775,7 @@ function ResultDashboardContent() {
                   <Sparkles className="absolute inset-5 h-6 w-6 animate-pulse text-[#C9A84C]" />
                 </div>
                 <p className="mt-8 font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-[#C9A84C]">
-                  Venus Stylist está revelando seu look
+                  Venus Stylist estÃ¡ revelando seu look
                 </p>
                 <p className="mt-4 text-[13px] text-white/60">
                   {currentLoadingMessage}
@@ -810,7 +822,7 @@ function ResultDashboardContent() {
                     <Sparkles className="h-4 w-4" />
                     <p className="text-[10px] font-bold uppercase tracking-[0.32em]">Curadoria premium</p>
                   </div>
-                  <h3 className="mt-3 font-serif text-2xl text-white">Já consegui identificar sua direção.</h3>
+                  <h3 className="mt-3 font-serif text-2xl text-white">JÃ¡ consegui identificar sua direÃ§Ã£o.</h3>
                   <p className="mt-3 text-[13px] leading-relaxed text-white/70">
                     Vou te mostrar o que mais valoriza seu estilo enquanto refino sua leitura visual.
                   </p>
@@ -855,8 +867,8 @@ function ResultDashboardContent() {
                 </div>
                 <p className="text-balance text-[15px] font-medium leading-relaxed text-white/80">
                   {shouldShowRetryCopy
-                    ? "Essa leitura ainda não chegou no ponto ideal. Vamos refazer com uma foto melhor."
-                    : "A Venus está pronta para revelar seu primeiro look."}
+                    ? "Essa leitura ainda nÃ£o chegou no ponto ideal. Vamos refazer com uma foto melhor."
+                    : "A Venus estÃ¡ pronta para revelar seu primeiro look."}
                 </p>
                 {tryOnError && (
                   <p className="max-w-sm text-[12px] leading-relaxed text-white/45">
@@ -878,11 +890,11 @@ function ResultDashboardContent() {
                   disabled={!tryOnAvailable}
                   className="mt-8"
                 >
-                  {tryOnAvailable ? tryOnPrimaryActionLabel : "Leitura indisponível"}
+                  {tryOnAvailable ? tryOnPrimaryActionLabel : "Leitura indisponÃ­vel"}
                 </VenusButton>
                 {!tryOnAvailable && (
                   <p className="mt-3 text-[11px] leading-relaxed text-white/40">
-                    Esse resultado veio de uma leitura antiga. Faça uma nova foto para liberar a versão premium.
+                    Esse resultado veio de uma leitura antiga. FaÃ§a uma nova foto para liberar a versÃ£o premium.
                   </p>
                 )}
               </div>
@@ -895,7 +907,7 @@ function ResultDashboardContent() {
                 {isPreviousLook && (
                   <div className="flex items-center gap-2 rounded-full border border-[#C9A84C]/20 bg-black/60 px-4 py-2 backdrop-blur-md">
                     <div className="h-1.5 w-1.5 rounded-full bg-[#C9A84C]" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-[#C9A84C]">Memória da Venus</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-[#C9A84C]">MemÃ³ria da Venus</span>
                   </div>
                 )}
                 <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/40 px-4 py-2 backdrop-blur-md">
@@ -951,7 +963,7 @@ function ResultDashboardContent() {
             <div className="mt-10 space-y-4">
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-[24px] border border-white/5 bg-black/20 p-4">
-                  <p className="text-[9px] font-bold uppercase tracking-[0.28em] text-[#C9A84C]">O que já funciona</p>
+                  <p className="text-[9px] font-bold uppercase tracking-[0.28em] text-[#C9A84C]">O que jÃ¡ funciona</p>
                   <div className="mt-3 space-y-2">
                     {stylistAudit.diagnosis.strengths.slice(0, 3).map((item) => (
                       <p key={item} className="text-[13px] leading-relaxed text-white/70">{item}</p>
@@ -982,7 +994,7 @@ function ResultDashboardContent() {
                   onClick={advanceReveal}
                   className="inline-flex h-11 w-full items-center justify-center rounded-2xl border border-[#C9A84C]/20 bg-[#C9A84C]/10 px-5 text-[9px] font-black uppercase tracking-[0.24em] text-[#C9A84C] transition-colors hover:bg-[#C9A84C]/16"
                 >
-                  Ver a direção
+                  Ver a direÃ§Ã£o
                 </button>
               )}
 
@@ -1026,8 +1038,8 @@ function ResultDashboardContent() {
                 products={assistedCatalogProducts}
                 reinforcement={[
                   "Baseado no seu corpo",
-                  "Cores ideais para você",
-                  "Look recomendado para você",
+                  "Cores ideais para vocÃª",
+                  "Look recomendado para vocÃª",
                 ]}
                 catalogAction={
                   catalogLink || "/catalog"
@@ -1124,7 +1136,7 @@ function ResultDashboardContent() {
             </div>
           )}
 
-          {/* Look Composition Gallery - Looks completos do catálogo */}
+          {/* Look Composition Gallery - Looks completos do catÃ¡logo */}
           {canShowCommerce && tryOnQuality.state !== "retry_required" && resolvedOrgId && (
             <div id="look-composition-gallery" className="mt-10">
               <LookCompositionGallery
@@ -1141,7 +1153,7 @@ function ResultDashboardContent() {
                 customerName={onboardingData?.contact?.name}
                 resultUrl={typeof window !== "undefined" && hasValidResultId ? `${window.location.origin}/result?id=${id}` : undefined}
                 onTryOnStart={(composition: LookComposition) => {
-                  // Iniciar try-on com a peça âncora do look
+                  // Iniciar try-on com a peÃ§a Ã¢ncora do look
                   if (composition.anchorPiece.id) {
                     handleGenerateTryOn(composition.anchorPiece.id);
                   }
@@ -1172,10 +1184,10 @@ function ResultDashboardContent() {
 
           {canShowCommerce && tryOnQuality.state !== "retry_required" && (
             <div className="mt-8 rounded-[28px] border border-white/5 bg-white/[0.03] p-5">
-              <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-[#C9A84C]">{stylistAudit?.social.eyebrow || "Prova social e memória"}</p>
+              <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-[#C9A84C]">{stylistAudit?.social.eyebrow || "Prova social e memÃ³ria"}</p>
               <h2 className="mt-2 font-serif text-2xl text-white">{stylistAudit?.social.title || "Registrar a postagem ou o link da leitura"}</h2>
               <p className="mt-2 text-[13px] leading-relaxed text-white/60">
-                {stylistAudit?.social.prompt || "Se você já publicou, a Venus guarda o sinal para refinar a próxima leitura."}
+                {stylistAudit?.social.prompt || "Se vocÃª jÃ¡ publicou, a Venus guarda o sinal para refinar a prÃ³xima leitura."}
               </p>
               <div className="mt-4 grid gap-3">
                 <input
@@ -1198,10 +1210,10 @@ function ResultDashboardContent() {
                   </VenusButton>
                   <span className="text-[11px] text-white/45">
                     {socialFeedbackStatus === "saved"
-                      ? "Memória registrada."
+                      ? "MemÃ³ria registrada."
                       : socialFeedbackStatus === "error"
-                        ? "Não foi possível registrar agora."
-                        : "Opcional, mas útil para a próxima leitura."}
+                        ? "NÃ£o foi possÃ­vel registrar agora."
+                        : "Opcional, mas Ãºtil para a prÃ³xima leitura."}
                   </span>
                 </div>
               </div>
@@ -1214,9 +1226,9 @@ function ResultDashboardContent() {
       <section className="mt-16 border-y border-white/5 bg-white/[0.02] py-12 px-5">
         <div className="mx-auto max-w-lg space-y-10">
           <div className="rounded-[28px] border border-[#C9A84C]/15 bg-[#C9A84C]/8 p-5 text-left">
-            <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-[#C9A84C]">{stylistAudit?.whatsapp.eyebrow || "Continuação natural"}</p>
+            <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-[#C9A84C]">{stylistAudit?.whatsapp.eyebrow || "ContinuaÃ§Ã£o natural"}</p>
             <h2 className="mt-2 font-serif text-2xl text-white">{stylistAudit?.whatsapp.title || `Continuar com ${VENUS_STYLIST_NAME}`}</h2>
-            <p className="mt-2 max-w-lg text-[13px] leading-relaxed text-white/65">{stylistAudit?.whatsapp.subtitle || "A conversa segue com a mesma leitura, sem começar do zero."}</p>
+            <p className="mt-2 max-w-lg text-[13px] leading-relaxed text-white/65">{stylistAudit?.whatsapp.subtitle || "A conversa segue com a mesma leitura, sem comeÃ§ar do zero."}</p>
             <div className="mt-5 flex flex-col gap-3">
               <Link
                 href={whatsappUrl}
@@ -1239,22 +1251,41 @@ function ResultDashboardContent() {
               </button>
             </div>
           </div>
-
           <div>
-            <p className="mb-3 font-mono text-[9px] uppercase tracking-[0.3em] text-[#C9A84C]">Leitura de cor • {paletteFamily}</p>
+            <p className="mb-3 font-mono text-[9px] uppercase tracking-[0.3em] text-[#C9A84C]">Leitura de cor - {paletteFamily}</p>
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-[#C9A84C]/20 bg-[#C9A84C]/10 px-3 py-1 text-[9px] font-bold uppercase tracking-[0.2em] text-[#C9A84C]">
+                Confianca da leitura: {paletteEvidence.confidence}
+              </span>
+              <span className="text-[11px] text-white/50">
+                Leitura {paletteEvidence.confidence === "high" ? "confirmada" : "preliminar"} baseada na foto e no contexto real.
+              </span>
+            </div>
             <p className="mb-6 text-[13px] leading-relaxed text-white/55">
-              A Venus leva essa paleta da imagem ao WhatsApp para manter a mesma assinatura.
+              {paletteEvidence.evidence}
             </p>
-            <div className="flex gap-2">
-              {paletteColors.slice(0, 5).map((cor: any, i: number) => (
-                <div key={i} className="flex-1">
-                  <div className="h-14 rounded-xl border border-white/5 shadow-lg" style={{ background: cor.hex }} />
-                  <p className="mt-2 text-[8px] text-center text-white/40 uppercase">{cor.name}</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {[
+                { label: "Base segura", swatches: paletteEvidence.basePalette, hint: "Tons centrais e sobrios para sustentar a leitura." },
+                { label: "Contraste recomendado", swatches: paletteEvidence.accentPalette.slice(0, 1), hint: `Contraste ${palette.contrast.toLowerCase()} sem ruido visual.` },
+                { label: "Acentos", swatches: paletteEvidence.accentPalette, hint: "Ponto de cor controlado, nao protagonista." },
+                { label: "Usar com cautela", swatches: paletteEvidence.avoidOrUseCarefully, hint: "So entram com justificativa visual explicita." },
+              ].map((section) => (
+                <div key={section.label} className="rounded-2xl border border-white/5 bg-black/20 p-4 text-left">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.28em] text-white/50">{section.label}</p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-white/45">{section.hint}</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {section.swatches.slice(0, 4).map((cor, index) => (
+                      <div key={`${section.label}:${index}`} className="rounded-xl border border-white/5 bg-white/[0.02] p-2">
+                        <div className="h-10 rounded-lg border border-white/5 shadow-lg" style={{ background: cor.hex }} />
+                        <p className="mt-2 text-[8px] uppercase tracking-wide text-white/40">{cor.name}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
           </div>
-
           <div className="grid grid-cols-2 gap-4">
             <div className="rounded-2xl border border-white/5 bg-black/20 p-5">
               <p className="text-[9px] text-white/40 uppercase tracking-widest mb-2 font-mono">Caimento</p>
@@ -1274,7 +1305,7 @@ function ResultDashboardContent() {
           <p className="text-[12px] text-white/40">Curadoria assinada por {VENUS_STYLIST_NAME}</p>
           <div className="flex justify-center gap-4">
             <Link href="/" className="text-[10px] font-bold uppercase tracking-widest text-white/30 hover:text-[#C9A84C] transition-colors">
-              Início
+              Inicio
             </Link>
           </div>
         </div>
@@ -1284,7 +1315,7 @@ function ResultDashboardContent() {
       <div className="fixed bottom-0 left-0 right-0 z-[150] flex h-14 items-center justify-between bg-[#C9A84C] px-4 shadow-[0_-10px_40px_rgba(0,0,0,0.3)]">
         <span className="text-[10px] font-bold uppercase tracking-wider text-black flex items-center gap-2">
           <div className="h-2 w-2 rounded-full bg-black animate-pulse" />
-          {VENUS_STYLIST_NAME} está online — {org.name}
+          {VENUS_STYLIST_NAME} esta online - {org.name}
         </span>
         <Link
           href={`https://wa.me/${org.whatsapp_phone}`}
@@ -1315,3 +1346,5 @@ export default function ResultDashboardPage() {
     </Suspense>
   );
 }
+
+

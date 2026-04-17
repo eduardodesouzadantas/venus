@@ -26,6 +26,25 @@ type ProcessingError = {
   details?: Record<string, unknown>;
 };
 
+function mapProcessingFailureCode(failureReason: string) {
+  if (failureReason === "PAYLOAD_TOO_LARGE_PREVENTED") return "PAYLOAD_TOO_LARGE";
+  if (failureReason === "PROCESSING_MISSING_PHOTO") return "IMAGE_UPLOAD_REQUIRED";
+  return failureReason;
+}
+
+function mapProcessingSafeMessage(failureReason: string) {
+  if (failureReason === "PAYLOAD_TOO_LARGE_PREVENTED") {
+    return "A foto enviada precisa ser menor ou ser reenviada como upload.";
+  }
+  if (failureReason === "PROCESSING_MISSING_PHOTO") {
+    return "Preciso de uma foto válida para seguir com segurança.";
+  }
+  if (failureReason === "PROCESSING_MISSING_TENANT") {
+    return "Não consegui identificar a loja desta experiência.";
+  }
+  return "Não foi possível validar e salvar seu resultado com segurança.";
+}
+
 export default function ProcessingPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -54,10 +73,8 @@ export default function ProcessingPage() {
 
     if (readiness.failureReason) {
       const failureReason = readiness.failureReason;
-      const safeMessage =
-        failureReason === "PROCESSING_MISSING_TENANT"
-          ? "Não consegui identificar a loja desta experiência."
-          : "Não encontrei uma foto válida para seguir.";
+      const safeMessage = mapProcessingSafeMessage(failureReason);
+      const errorCode = mapProcessingFailureCode(failureReason);
 
       console.error("[processing:persistence-validation-failed]", {
         resultId: null,
@@ -71,17 +88,19 @@ export default function ProcessingPage() {
         stage: "pre_processAndPersistLead",
         hasScannerPhotos: readiness.hasVisualInput,
         hasFallback: readiness.hasFallback,
+        hasInlineImage: readiness.hasInlineImage,
         orgSlugFromQuery: orgSlugFromQuery || null,
       });
 
       setError({
-        code: failureReason,
+        code: errorCode,
         safeMessage,
         stage: "pre_processAndPersistLead",
         details: {
           orgSlugFromQuery: orgSlugFromQuery || null,
           hasVisualInput: readiness.hasVisualInput,
           hasFallback: readiness.hasFallback,
+          hasInlineImage: readiness.hasInlineImage,
         },
       });
       return;
@@ -197,6 +216,8 @@ export default function ProcessingPage() {
         }
 
         const failureReason = e instanceof Error ? e.message : "UNKNOWN_NON_ERROR";
+        const errorCode = mapProcessingFailureCode(failureReason);
+        const safeMessage = mapProcessingSafeMessage(failureReason);
         console.error("[PROCESSING] critical persistence failure", {
           commitSha: "4d65c5b",
           currentUrl: typeof window !== "undefined" ? window.location.href : null,
@@ -210,8 +231,8 @@ export default function ProcessingPage() {
         });
         if (!cancelled) {
           setError({
-            code: failureReason,
-            safeMessage: "Não foi possível validar e salvar seu resultado com segurança.",
+            code: errorCode,
+            safeMessage,
             stage: "processing_validation",
           });
         }

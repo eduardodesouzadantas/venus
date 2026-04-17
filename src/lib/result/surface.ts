@@ -3,6 +3,7 @@ import type { LookData, ResultPayload } from "@/types/result";
 import type { VisualAnalysisPayload } from "@/types/visual-analysis";
 import { deriveEssenceProfile, type EssenceProfile } from "@/lib/result/essence";
 import { getStyleDirectionDisplayLabel } from "@/lib/style-direction";
+import { buildColorStyleEvidence, buildColorStyleEvidenceInputFromOnboarding, flattenColorStyleEvidence } from "@/lib/color-style-evidence";
 
 type GoalKey = "Autoridade" | "Elegância" | "Atração" | "Criatividade" | "Discrição sofisticada";
 
@@ -88,6 +89,17 @@ function buildPalette(goalKey: GoalKey, metal: string): ResultPayload["palette"]
           { hex: "#F8FAFC", name: "Branco óptico" },
           { hex: "#334155", name: "Grafite" },
         ],
+        evidence: {
+          basePalette: [
+            { hex: "#0F172A", name: "Marinho intenso", reason: "Base profunda para sustentar a leitura.", tier: "base" },
+            { hex: "#F8FAFC", name: "Branco óptico", reason: "Base clara para dar respiro visual.", tier: "base" },
+            { hex: "#334155", name: "Grafite", reason: "Base segura para manter a imagem firme.", tier: "base" },
+          ],
+          accentPalette: [],
+          avoidOrUseCarefully: [],
+          confidence: "medium",
+          evidence: "Leitura preliminar baseada no objetivo e no metal informado.",
+        },
       };
     case "Atração":
       return {
@@ -100,6 +112,17 @@ function buildPalette(goalKey: GoalKey, metal: string): ResultPayload["palette"]
           { hex: "#F5F5F4", name: "Off white" },
           { hex: "#7C2D12", name: "Vinho profundo" },
         ],
+        evidence: {
+          basePalette: [
+            { hex: "#111827", name: "Azul noturno", reason: "Base profunda para manter contraste.", tier: "base" },
+            { hex: "#F5F5F4", name: "Off white", reason: "Base clara para equilibrar a leitura.", tier: "base" },
+            { hex: "#7C2D12", name: "Vinho profundo", reason: "Base de impacto controlado.", tier: "base" },
+          ],
+          accentPalette: [],
+          avoidOrUseCarefully: [],
+          confidence: "medium",
+          evidence: "Leitura preliminar baseada no objetivo e no metal informado.",
+        },
       };
     case "Criatividade":
       return {
@@ -112,6 +135,17 @@ function buildPalette(goalKey: GoalKey, metal: string): ResultPayload["palette"]
           { hex: "#F8FAFC", name: "Branco óptico" },
           { hex: "#7C2D12", name: "Vinho profundo" },
         ],
+        evidence: {
+          basePalette: [
+            { hex: "#111827", name: "Azul noturno", reason: "Base profunda para sustentar a leitura.", tier: "base" },
+            { hex: "#F8FAFC", name: "Branco óptico", reason: "Base clara para dar respiro visual.", tier: "base" },
+            { hex: "#7C2D12", name: "Vinho profundo", reason: "Base de impacto controlado.", tier: "base" },
+          ],
+          accentPalette: [],
+          avoidOrUseCarefully: [],
+          confidence: "medium",
+          evidence: "Leitura preliminar baseada no objetivo e no metal informado.",
+        },
       };
     case "Discrição sofisticada":
       return {
@@ -124,6 +158,17 @@ function buildPalette(goalKey: GoalKey, metal: string): ResultPayload["palette"]
           { hex: "#F8FAFC", name: "Off white" },
           { hex: "#475569", name: "Chumbo" },
         ],
+        evidence: {
+          basePalette: [
+            { hex: "#111827", name: "Grafite", reason: "Base neutra para leitura limpa.", tier: "base" },
+            { hex: "#F8FAFC", name: "Off white", reason: "Base clara para equilibrar a leitura.", tier: "base" },
+            { hex: "#475569", name: "Chumbo", reason: "Base silenciosa para manter sofisticação.", tier: "base" },
+          ],
+          accentPalette: [],
+          avoidOrUseCarefully: [],
+          confidence: "medium",
+          evidence: "Leitura preliminar baseada no objetivo e no metal informado.",
+        },
       };
     default:
       return {
@@ -136,6 +181,17 @@ function buildPalette(goalKey: GoalKey, metal: string): ResultPayload["palette"]
           { hex: "#F8FAFC", name: "Branco óptico" },
           { hex: "#374151", name: "Grafite" },
         ],
+        evidence: {
+          basePalette: [
+            { hex: "#111827", name: "Marinho", reason: "Base segura para a leitura principal.", tier: "base" },
+            { hex: "#F8FAFC", name: "Branco óptico", reason: "Base clara para dar respiro visual.", tier: "base" },
+            { hex: "#374151", name: "Grafite", reason: "Base neutra para sustentar a imagem.", tier: "base" },
+          ],
+          accentPalette: [],
+          avoidOrUseCarefully: [],
+          confidence: "medium",
+          evidence: "Leitura preliminar baseada no objetivo e no metal informado.",
+        },
       };
   }
 }
@@ -159,30 +215,17 @@ function buildPaletteHex(name: string, fallbackHex: string): string {
 }
 
 function buildPaletteFromOnboarding(data: OnboardingData, essence: EssenceProfile): ResultPayload["palette"] {
-  const favoriteColors = (data?.colors?.favoriteColors || []).map((value) => normalizeText(value)).filter(Boolean);
-  const avoidColors = (data?.colors?.avoidColors || []).map((value) => normalizeText(value)).filter(Boolean);
+  const evidence = buildColorStyleEvidence(buildColorStyleEvidenceInputFromOnboarding(data));
   const directionLabel = getStyleDirectionDisplayLabel(data?.intent?.styleDirection || essence.styleDirection);
-  const goalLabel = normalizeText(data?.intent?.imageGoal) || essence.label;
-  const metalLabel = normalizeText(data?.colors?.metal) || "Prateado";
-  const colorSeason = normalizeText(data?.colorimetry?.colorSeason || (data as any)?.colorSeason);
-  const contrastLabel = normalizeText(data?.colorimetry?.contrast || data?.colors?.contrast || "");
-
-  const primary = favoriteColors[0] || (essence.key === "authority" ? "Marinho intenso" : "Azul noturno");
-  const support = favoriteColors[1] || (metalLabel === "Dourado" ? "Off white" : "Grafite");
-  const accent = favoriteColors[2] || "Contraste controlado";
-  const contrast = essence.key === "authority" || essence.key === "presence" || essence.key === "creative" ? "Alto" : "Médio Alto";
-  const colorimetryNotes = [colorSeason, contrastLabel].filter(Boolean).join(" • ");
+  const contrast = evidence.confidence === "high" ? "Alto" : evidence.confidence === "medium" ? "Médio Alto" : "Médio";
 
   return {
-    family: `${goalLabel} • ${directionLabel}`,
-    description: `Favorece ${favoriteColors.join(", ") || "as cores escolhidas"} e evita ${avoidColors.join(", ") || "cores de ruído"}, sustentando ${goalLabel.toLowerCase()} com leitura alinhada à direção ${directionLabel.toLowerCase()}${colorimetryNotes ? ` e à colorimetria ${colorimetryNotes.toLowerCase()}` : ""}.`,
-    colors: [
-      { hex: buildPaletteHex(primary, "#1E3A8A"), name: primary },
-      { hex: buildPaletteHex(support, "#F8FAFC"), name: support },
-      { hex: buildPaletteHex(accent, "#7C2D12"), name: accent },
-    ],
-    metal: metalLabel,
+    family: `${evidence.confidence === "high" ? "Leitura confirmada" : "Leitura preliminar"} • ${directionLabel}`,
+    description: evidence.evidence,
+    colors: flattenColorStyleEvidence(evidence),
+    metal: normalizeText(data?.colors?.metal) || "Prateado",
     contrast,
+    evidence,
   };
 }
 
@@ -193,15 +236,10 @@ function buildPaletteFromAnalysis(
   return {
     family: normalizeText(analysis.paletteFamily) || fallbackPalette.family,
     description: normalizeText(analysis.paletteDescription) || fallbackPalette.description,
-    colors:
-      Array.isArray(analysis.colors) && analysis.colors.length > 0
-        ? analysis.colors.slice(0, 3).map((color) => ({
-          hex: normalizeText(color.hex) || "#111827",
-          name: normalizeText(color.name) || "Cor estratégica",
-        }))
-        : fallbackPalette.colors,
+    colors: fallbackPalette.colors,
     metal: normalizeText(analysis.metal) || fallbackPalette.metal,
     contrast: normalizeText(analysis.contrast) || fallbackPalette.contrast,
+    evidence: fallbackPalette.evidence,
   };
 }
 

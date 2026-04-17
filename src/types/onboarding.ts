@@ -16,6 +16,11 @@ export interface ColorimetryAnalysisData {
   colorSeason: string;
   favoriteColors: string[];
   avoidColors: string[];
+  confidence: "low" | "medium" | "high" | "";
+  evidence: string;
+  basePalette: string[];
+  accentPalette: string[];
+  avoidOrUseCarefully: string[];
   faceShape: "oval" | "redondo" | "quadrado" | "coração" | "losango" | "retangular" | "";
   idealNeckline: string;
   idealFit: string;
@@ -58,8 +63,12 @@ export interface OnboardingData {
     hairLength: "Curto" | "Médio" | "Longo" | "";
   };
   scanner: {
-    facePhoto: string; // Base64 or ObjectURL string stub
-    bodyPhoto: string; // Base64 or ObjectURL string stub
+    facePhoto: string; // Lightweight reference or temporary preview URL
+    bodyPhoto: string; // Lightweight reference or temporary preview URL
+    facePhotoUrl?: string;
+    bodyPhotoUrl?: string;
+    facePhotoPath?: string;
+    bodyPhotoPath?: string;
     skipped: boolean;
   };
   colorimetry: ColorimetryAnalysisData;
@@ -103,7 +112,7 @@ export const defaultOnboardingData: OnboardingData = {
     avoidFabrics: [],
   },
   body: { highlight: [], camouflage: [], fit: "", faceLines: "", hairLength: "" },
-  scanner: { facePhoto: "", bodyPhoto: "", skipped: false },
+  scanner: { facePhoto: "", bodyPhoto: "", facePhotoUrl: "", bodyPhotoUrl: "", facePhotoPath: "", bodyPhotoPath: "", skipped: false },
   colorimetry: {
     skinTone: "",
     undertone: "",
@@ -111,6 +120,11 @@ export const defaultOnboardingData: OnboardingData = {
     colorSeason: "",
     favoriteColors: [],
     avoidColors: [],
+    confidence: "",
+    evidence: "",
+    basePalette: [],
+    accentPalette: [],
+    avoidOrUseCarefully: [],
     faceShape: "",
     idealNeckline: "",
     idealFit: "",

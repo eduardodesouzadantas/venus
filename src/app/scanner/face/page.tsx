@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
@@ -7,49 +8,77 @@ import { RealCamera } from "@/components/ui/RealCamera";
 import { useUserImage } from "@/lib/onboarding/UserImageContext";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
 import { analyzeColorimetry } from "@/lib/analysis/colorimetry-client";
+import { uploadOnboardingPhoto } from "@/lib/onboarding/photo-upload";
 
 export default function FaceScannerPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const org = searchParams.get("org");
-  const { data, updateData, updateConversation } = useOnboarding();
+  const { data, updateData, updateConversation, journey } = useOnboarding();
   const { setUserPhoto } = useUserImage();
+  const [error, setError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   const handleFaceCaptured = async (imageData: string) => {
-    updateData("scanner", { facePhoto: imageData });
-    setUserPhoto(imageData);
+    setIsUploading(true);
+    setError(null);
 
-    const analysis = await analyzeColorimetry(imageData, data.tenant?.orgId || data.tenant?.orgSlug || "");
-    if (analysis) {
-      updateData("colorimetry", analysis);
-      updateData("colors", {
-        favoriteColors: analysis.favoriteColors,
-        avoidColors: analysis.avoidColors,
-        colorSeason: analysis.colorSeason,
-        skinTone: analysis.skinTone,
-        undertone: analysis.undertone,
-        contrast: analysis.contrast,
-        faceShape: analysis.faceShape,
-        idealNeckline: analysis.idealNeckline,
-        idealFit: analysis.idealFit,
-        idealFabrics: analysis.idealFabrics,
-        avoidFabrics: analysis.avoidFabrics,
+    try {
+      const uploaded = await uploadOnboardingPhoto({
+        source: imageData,
+        orgId: data.tenant?.orgId || "",
+        orgSlug: data.tenant?.orgSlug || org || null,
+        kind: "face",
+        journeyId: journey?.lastState || null,
+        fileName: "venus-face.jpg",
       });
-      updateData("favoriteColors", analysis.favoriteColors);
-      updateData("avoidColors", analysis.avoidColors);
-      updateData("colorSeason", analysis.colorSeason);
-      updateData("faceShape", analysis.faceShape);
-      updateData("idealNeckline", analysis.idealNeckline);
-      updateData("idealFit", analysis.idealFit);
-      updateData("idealFabrics", analysis.idealFabrics);
-      updateData("avoidFabrics", analysis.avoidFabrics);
-      updateConversation({
-        favoriteColors: analysis.favoriteColors,
-        avoidColors: analysis.avoidColors,
+
+      updateData("scanner", {
+        facePhoto: uploaded.photoUrl,
+        facePhotoUrl: uploaded.photoUrl,
+        facePhotoPath: uploaded.storagePath,
       });
+      setUserPhoto(uploaded.photoUrl);
+
+      const analysis = await analyzeColorimetry(uploaded.photoUrl, data.tenant?.orgId || data.tenant?.orgSlug || "");
+      if (analysis) {
+        updateData("colorimetry", analysis);
+        updateData("colors", {
+          favoriteColors: analysis.basePalette.length > 0 ? analysis.basePalette : analysis.favoriteColors,
+          avoidColors: analysis.avoidOrUseCarefully.length > 0 ? analysis.avoidOrUseCarefully : analysis.avoidColors,
+          colorSeason: analysis.colorSeason,
+          skinTone: analysis.skinTone,
+          undertone: analysis.undertone,
+          contrast: analysis.contrast,
+          faceShape: analysis.faceShape,
+          idealNeckline: analysis.idealNeckline,
+          idealFit: analysis.idealFit,
+          idealFabrics: analysis.idealFabrics,
+          avoidFabrics: analysis.avoidFabrics,
+        });
+        updateData("favoriteColors", analysis.favoriteColors);
+        updateData("avoidColors", analysis.avoidColors);
+        updateData("colorSeason", analysis.colorSeason);
+        updateData("faceShape", analysis.faceShape);
+        updateData("idealNeckline", analysis.idealNeckline);
+        updateData("idealFit", analysis.idealFit);
+        updateData("idealFabrics", analysis.idealFabrics);
+        updateData("avoidFabrics", analysis.avoidFabrics);
+        updateConversation({
+          favoriteColors: analysis.favoriteColors,
+          avoidColors: analysis.avoidColors,
+        });
+      }
+
+      router.push(org ? `/scanner/body?org=${encodeURIComponent(org)}` : "/scanner/body");
+    } catch (uploadError) {
+      console.error("[ONBOARDING] face upload failed", {
+        error: uploadError instanceof Error ? uploadError.message : String(uploadError),
+      });
+      setError("Não consegui salvar essa foto. Tente novamente com uma imagem menor ou mais nítida.");
+    } finally {
+      setIsUploading(false);
     }
-
-    router.push(org ? `/scanner/body?org=${encodeURIComponent(org)}` : "/scanner/body");
   };
 
   return (
@@ -65,7 +94,9 @@ export default function FaceScannerPage() {
           </Text>
         </div>
 
+        {error ? <p className="mb-3 text-center text-sm text-[#ffb6a8]">{error}</p> : null}
         <RealCamera instruction="Enquadre rosto e pescoço no centro da moldura." overlayType="face" onCaptured={handleFaceCaptured} />
+        {isUploading ? <p className="mt-3 text-center text-xs text-white/45">Salvando a foto em segurança...</p> : null}
       </div>
     </div>
   );

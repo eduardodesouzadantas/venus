@@ -80,6 +80,21 @@ export interface LookData {
   engagementScore?: number;
 }
 
+export interface PaletteEvidenceColor {
+  hex: string;
+  name: string;
+  reason: string;
+  tier: "base" | "accent" | "caution";
+}
+
+export interface PaletteEvidence {
+  basePalette: PaletteEvidenceColor[];
+  accentPalette: PaletteEvidenceColor[];
+  avoidOrUseCarefully: PaletteEvidenceColor[];
+  confidence: "low" | "medium" | "high";
+  evidence: string;
+}
+
 export interface ResultPayload {
   hero: {
     dominantStyle: string;
@@ -92,6 +107,7 @@ export interface ResultPayload {
     colors: { hex: string; name: string }[];
     metal: string;
     contrast: string;
+    evidence: PaletteEvidence;
   };
   diagnostic: {
     currentPerception: string;

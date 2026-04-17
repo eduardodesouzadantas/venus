@@ -438,8 +438,8 @@ run("lead status event types map terminal states", () => {
 run("binary onboarding artifacts are stripped before persistence", () => {
   const sanitized = stripOnboardingBinaryArtifacts(sampleOnboarding);
 
-  assert.equal(sanitized.scanner.facePhoto, "[BASE64_IMAGE_STRIPPED_FOR_STORAGE]");
-  assert.equal(sanitized.scanner.bodyPhoto, "[BASE64_IMAGE_STRIPPED_FOR_STORAGE]");
+  assert.equal(sanitized.scanner.facePhoto, "[IMAGE_REFERENCE_STRIPPED_FOR_STORAGE]");
+  assert.equal(sanitized.scanner.bodyPhoto, "[IMAGE_REFERENCE_STRIPPED_FOR_STORAGE]");
   assert.equal(sanitized.contact?.email, sampleOnboarding.contact.email);
 });
 
@@ -3847,8 +3847,12 @@ const FRONTEND_ORG_ID = "frontend-org";
       tenant: {},
       contact: {},
       scanner: {
-        facePhoto: "data:image/png;base64,face",
-        bodyPhoto: "data:image/png;base64,body",
+        facePhoto: "https://cdn.example.com/face.jpg",
+        facePhotoUrl: "https://cdn.example.com/face.jpg",
+        facePhotoPath: "onboarding-inputs/org-1/face.jpg",
+        bodyPhoto: "https://cdn.example.com/body.jpg",
+        bodyPhotoUrl: "https://cdn.example.com/body.jpg",
+        bodyPhotoPath: "onboarding-inputs/org-1/body.jpg",
         skipped: false,
       },
       intent: { imageGoal: "Autoridade", styleDirection: "Executiva", satisfaction: 9 },
@@ -3860,12 +3864,30 @@ const FRONTEND_ORG_ID = "frontend-org";
     const blocked = processingModule.buildProcessingPersistInput(onboarding, "", null);
     assert.equal(blocked.readiness.failureReason, "PROCESSING_MISSING_TENANT");
 
+    const inlineBlocked = processingModule.buildProcessingPersistInput(
+      {
+        ...onboarding,
+        scanner: {
+          facePhoto: "data:image/png;base64,face-inline",
+          bodyPhoto: "data:image/png;base64,body-inline",
+          skipped: false,
+        },
+      },
+      "maison-elite",
+      null
+    );
+    assert.equal(inlineBlocked.readiness.failureReason, "PAYLOAD_TOO_LARGE_PREVENTED");
+
     const missingPhoto = processingModule.buildProcessingPersistInput(
       {
         ...onboarding,
         scanner: {
           facePhoto: "",
           bodyPhoto: "",
+          facePhotoUrl: "",
+          bodyPhotoUrl: "",
+          facePhotoPath: "",
+          bodyPhotoPath: "",
           skipped: false,
         },
       },
@@ -3880,6 +3902,10 @@ const FRONTEND_ORG_ID = "frontend-org";
         scanner: {
           facePhoto: "",
           bodyPhoto: "",
+          facePhotoUrl: "",
+          bodyPhotoUrl: "",
+          facePhotoPath: "",
+          bodyPhotoPath: "",
           skipped: true,
         },
       },
@@ -3891,8 +3917,18 @@ const FRONTEND_ORG_ID = "frontend-org";
     const allowed = processingModule.buildProcessingPersistInput(onboarding, "maison-elite", null);
     assert.equal(allowed.readiness.failureReason, null);
     assert.equal(allowed.payload.tenant.orgSlug, "maison-elite");
-    assert.equal(allowed.payload.scanner.facePhoto, "data:image/png;base64,face");
-    assert.equal(allowed.payload.scanner.bodyPhoto, "data:image/png;base64,body");
+    assert.equal(allowed.payload.scanner.facePhoto, "https://cdn.example.com/face.jpg");
+    assert.equal(allowed.payload.scanner.bodyPhoto, "https://cdn.example.com/body.jpg");
+    assert.equal(allowed.payload.scanner.facePhotoUrl, "https://cdn.example.com/face.jpg");
+    assert.equal(allowed.payload.scanner.bodyPhotoUrl, "https://cdn.example.com/body.jpg");
+    assert.equal(allowed.payload.scanner.facePhotoPath, "onboarding-inputs/org-1/face.jpg");
+    assert.equal(allowed.payload.scanner.bodyPhotoPath, "onboarding-inputs/org-1/body.jpg");
+
+    const processingSource = fs.readFileSync(path.join(process.cwd(), "src/app/processing/page.tsx"), "utf8");
+    assert.ok(processingSource.includes("PAYLOAD_TOO_LARGE"));
+    assert.ok(processingSource.includes("IMAGE_UPLOAD_REQUIRED"));
+    assert.ok(processingSource.includes("Não foi possível validar e salvar seu resultado com segurança."));
+    assert.ok(!processingSource.includes("Body exceeded 1 MB limit"));
   });
 
   await runAsync("scenario 1e - onboarding storage migrates legacy session key and keeps storage key consistent", async () => {
@@ -4081,11 +4117,83 @@ const FRONTEND_ORG_ID = "frontend-org";
     assert.equal(redirectCalls[0], "/onboarding/chat?org=maison-elite");
   });
 
+  await runAsync("scenario 1h - onboarding photo upload stores file and returns lightweight references", async () => {
+    const createAdminClient = () => ({
+      storage: {
+        async listBuckets() {
+          return { data: [{ name: "onboarding-photos", public: true }], error: null };
+        },
+        async createBucket() {
+          return { error: null };
+        },
+        async updateBucket() {
+          return { error: null };
+        },
+        from() {
+          return {
+            async upload() {
+              return { error: null };
+            },
+            getPublicUrl(storagePath) {
+              return {
+                data: {
+                  publicUrl: `https://cdn.example.com/${storagePath}`,
+                },
+              };
+            },
+          };
+        },
+      },
+    });
+
+    const module = await withMockedModules(
+      {
+        "@/lib/supabase/admin": {
+          createAdminClient,
+        },
+        "@/lib/reliability/security": {
+          checkInMemoryRateLimit: () => ({
+            allowed: true,
+            retryAfterSeconds: 0,
+            limit: 10,
+          }),
+          logSecurityEvent: () => null,
+          recordSecurityAlert: async () => null,
+        },
+      },
+      async () => loadFresh("../src/app/api/onboarding/photo-upload/route.ts")
+    );
+
+    const formData = new FormData();
+    formData.set("file", new File(["fake-image"], "photo.png", { type: "image/png" }));
+    formData.set("org_id", "org-123");
+    formData.set("org_slug", "maison-elite");
+    formData.set("kind", "body");
+    formData.set("journey_id", "journey-123");
+
+    const response = await module.POST(new Request("https://example.com/api/onboarding/photo-upload", {
+      method: "POST",
+      body: formData,
+    }));
+
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.bucket, "onboarding-photos");
+    assert.equal(typeof payload.storagePath, "string");
+    assert.equal(typeof payload.photoUrl, "string");
+    assert.ok(payload.photoUrl.includes(payload.storagePath));
+  });
+
   await runAsync("scenario 2 - tenant resolution failure throws before navigation", async () => {
     const onboarding = {
       contact: { name: "Cliente", phone: "+5511999999999", email: "cliente@exemplo.com" },
       tenant: {},
-      scanner: { facePhoto: "data:image/png;base64,aaa", bodyPhoto: "data:image/png;base64,bbb" },
+      scanner: {
+        facePhoto: "https://cdn.example.com/face.jpg",
+        facePhotoUrl: "https://cdn.example.com/face.jpg",
+        bodyPhoto: "https://cdn.example.com/body.jpg",
+        bodyPhotoUrl: "https://cdn.example.com/body.jpg",
+      },
       intent: { imageGoal: "Autoridade", styleDirection: "Executiva", satisfaction: 9 },
       lifestyle: {},
       colors: {},
@@ -4177,7 +4285,14 @@ const FRONTEND_ORG_ID = "frontend-org";
     const onboarding = {
       contact: { name: "Cliente", phone: "+5511999999999", email: "cliente@exemplo.com" },
       tenant: { orgId: "org-123" },
-      scanner: { facePhoto: "data:image/png;base64,aaa", bodyPhoto: "data:image/png;base64,bbb" },
+      scanner: {
+        facePhoto: "https://cdn.example.com/face.jpg",
+        facePhotoUrl: "https://cdn.example.com/face.jpg",
+        facePhotoPath: "onboarding-inputs/org-123/face.jpg",
+        bodyPhoto: "https://cdn.example.com/body.jpg",
+        bodyPhotoUrl: "https://cdn.example.com/body.jpg",
+        bodyPhotoPath: "onboarding-inputs/org-123/body.jpg",
+      },
       intent: { imageGoal: "Autoridade", styleDirection: "Executiva", satisfaction: 9 },
       lifestyle: {},
       colors: {},
@@ -4283,6 +4398,99 @@ const FRONTEND_ORG_ID = "frontend-org";
       const resultId = await actions.processAndPersistLead(onboarding);
       assert.equal(resultId, "result-1");
     });
+  });
+
+  await runAsync("scenario 2c - processAndPersistLead blocks inline image payload before persistence", async () => {
+    const onboarding = {
+      contact: { name: "Cliente", phone: "+5511999999999", email: "cliente@exemplo.com" },
+      tenant: { orgId: "org-123", orgSlug: "maison-elite" },
+      scanner: { facePhoto: "data:image/png;base64,aaa", bodyPhoto: "data:image/png;base64,bbb" },
+      intent: { imageGoal: "Autoridade", styleDirection: "Executiva", satisfaction: 9 },
+      lifestyle: {},
+      colors: {},
+      body: {},
+    };
+
+    const actions = await withMockedModules({
+      "server-only": {},
+      "@/lib/supabase/admin": {
+        createAdminClient: () => ({
+          from() {
+            return {
+              select() {
+                return {
+                  eq() {
+                    return { maybeSingle: async () => ({ data: null, error: null }) };
+                  },
+                };
+              },
+            };
+          },
+          storage: {
+            from() {
+              return {
+                async upload() {
+                  return { error: null };
+                },
+              };
+            },
+          },
+        }),
+      },
+      "@/lib/tenant/core": {
+        fetchTenantById: async () => ({ org: null, error: null }),
+        fetchTenantBySlug: async () => ({ org: null, error: null }),
+        isTenantActive: () => true,
+        normalizeTenantSlug: (value) => (value || "").trim(),
+        resolveAppTenantOrg: async () => ({ org: null, source: "none" }),
+      },
+      "@/lib/ai": {
+        generateOpenAIRecommendation: async () => {
+          throw new Error("should_not_run");
+        },
+      },
+      "@/lib/ai/result-normalizer": {
+        buildCatalogAwareFallbackResult: () => ({}),
+      },
+      "@/lib/leads": {
+        extractLeadSignalsFromSavedResultPayload: () => ({ intentScore: 0 }),
+        persistSavedResultAndLead: async () => ({ id: "result-1" }),
+      },
+      "@/lib/lead-context": {
+        buildLeadContextProfileFromOnboarding: () => ({}),
+        upsertLeadContextByLeadId: async () => null,
+      },
+      "@/lib/decision-engine": {
+        decideNextAction: () => ({ chosenAction: "WAIT", reason: "test", adaptiveConfidence: 0.5, weightAdjustments: {} }),
+      },
+      "@/lib/reliability/idempotency": {
+        createProcessAndPersistLeadIdempotencyKey: () => "key",
+        stripOnboardingBinaryArtifacts: (value) => value,
+      },
+      "@/lib/reliability/observability": {
+        captureOperationalTiming: () => ({ duration_ms: 0, started_at: "", completed_at: "" }),
+        formatOperationalReason: () => "reason",
+        recordOperationalTenantEvent: async () => null,
+      },
+      "@/lib/reliability/processing": {
+        completeProcessingReservation: async () => null,
+        createProcessingOwnerToken: () => "owner",
+        failProcessingReservation: async () => null,
+        reserveProcessingReservation: async () => ({ acquired: false, should_wait: false, status: "busy", saved_result_id: null }),
+        waitForProcessingReservation: async () => ({ acquired: false, should_wait: false, status: "busy", saved_result_id: null }),
+      },
+      "@/lib/analysis/visual-profile": {
+        generateVisualProfileAnalysis: async () => ({}),
+      },
+      "@/lib/catalog": {
+        getB2BProducts: async () => [],
+      },
+    }, async () => loadFresh("../src/lib/recommendation/actions.ts"));
+
+    await assert.rejects(
+      () => actions.processAndPersistLead(onboarding),
+      (error) => error instanceof Error && error.message === "PAYLOAD_TOO_LARGE_PREVENTED"
+    );
   });
 
   await runAsync("scenario 3 - invalid result ids are rejected immediately", async () => {

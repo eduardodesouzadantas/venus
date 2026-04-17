@@ -1,6 +1,7 @@
 import { OnboardingData } from "@/types/onboarding";
 import { ResultPayload, LookData } from "@/types/result";
 import { normalizeStyleDirectionPreference } from "@/lib/style-direction";
+import { buildColorStyleEvidence, flattenColorStyleEvidence } from "@/lib/color-style-evidence";
 
 function normalizeText(value: unknown): string {
   return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
@@ -82,6 +83,17 @@ export async function generateResultMock(data: OnboardingData): Promise<ResultPa
   const fit = data.body.fit || "Slim";
   const direction = normalizeDirection(data.intent.styleDirection);
   const directionTags = buildDirectionTags(direction);
+  const paletteEvidence = buildColorStyleEvidence({
+    styleDirection: direction,
+    favoriteColors: data.colorimetry.basePalette?.length ? data.colorimetry.basePalette : data.colors.favoriteColors,
+    avoidColors: data.colorimetry.avoidOrUseCarefully?.length ? data.colorimetry.avoidOrUseCarefully : data.colors.avoidColors,
+    colorSeason: data.colorimetry.colorSeason || data.colors.colorSeason,
+    undertone: data.colorimetry.undertone || data.colors.undertone,
+    skinTone: data.colorimetry.skinTone || data.colors.skinTone,
+    contrast: data.colorimetry.contrast || data.colors.contrast,
+    confidence: data.colorimetry.confidence || "",
+    evidence: data.colorimetry.evidence || data.colorimetry.justification || "",
+  });
 
   const looks: LookData[] = [
     {
@@ -132,15 +144,12 @@ export async function generateResultMock(data: OnboardingData): Promise<ResultPa
       coverImageUrl: "",
     },
     palette: {
-      family: "Inverno Frio Contrastante",
-      description: `Com base nas suas seleções, a intensidade das cores precisa ancorar a sua ${goal}.`,
-      colors: [
-        { hex: "#1A2530", name: "Navy Noturno" },
-        { hex: "#F5F5DC", name: "Greige Puro" },
-        { hex: "#631A2B", name: "Bordô Imperial" },
-      ],
+      family: `${paletteEvidence.confidence === "high" ? "Leitura confirmada" : "Leitura preliminar"} • ${direction === "Sem preferência" ? "Base segura" : direction}`,
+      description: paletteEvidence.evidence,
+      colors: flattenColorStyleEvidence(paletteEvidence),
       metal: metal,
-      contrast: "Alto",
+      contrast: paletteEvidence.confidence === "high" ? "Alto" : paletteEvidence.confidence === "medium" ? "Médio Alto" : "Médio",
+      evidence: paletteEvidence,
     },
     diagnostic: {
       currentPerception: "Roupas usadas para camuflagem e refúgio diário, gerando apagamento em momentos-chave.",

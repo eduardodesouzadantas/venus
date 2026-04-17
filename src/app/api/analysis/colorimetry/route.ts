@@ -12,6 +12,8 @@ export const dynamic = "force-dynamic";
 
 type ColorimetryPayload = {
   imageBase64?: string;
+  imageSource?: string;
+  imageUrl?: string;
   orgId?: string;
 };
 
@@ -21,7 +23,13 @@ const FALLBACK_COLORIMETRY: ColorimetryAnalysisData = {
   contrast: "médio",
   colorSeason: "Neutro Equilibrado",
   favoriteColors: ["Marinho suave", "Grafite", "Off white", "Verde oliva"],
-  avoidColors: ["Neon", "Amarelo vibrante", "Rosa choque"],
+  avoidColors: ["Laranja vivo", "Amarelo aberto", "Neon"],
+  confidence: "medium",
+  evidence:
+    "Leitura preliminar baseada nesta foto. Uma luz frontal neutra melhora a precisão. Base segura em marinho, grafite e off-white; acentos controlados em verde oliva; usar com cautela laranja vivo, amarelo aberto e neon.",
+  basePalette: ["Marinho suave", "Grafite", "Off white", "Verde oliva"],
+  accentPalette: ["Verde oliva fechado", "Prata", "Vinho fechado"],
+  avoidOrUseCarefully: ["Laranja vivo", "Amarelo aberto", "Neon"],
   faceShape: "oval",
   idealNeckline: "Decote em V suave",
   idealFit: "Caimento reto com estrutura leve",
@@ -49,9 +57,40 @@ function normalizeStringArray(value: unknown, maxItems: number): string[] {
     .slice(0, maxItems);
 }
 
+function normalizeConfidence(value: unknown, evidence: string): ColorimetryAnalysisData["confidence"] {
+  const text = normalizeText(value).toLowerCase();
+  const evidenceText = normalizeText(evidence).toLowerCase();
+  const limitationSignals = [
+    "pouca luz",
+    "baixa luz",
+    "sombra",
+    "óculos",
+    "ocul",
+    "rosto parcial",
+    "fundo dominante",
+    "baixa resolução",
+    "resolução baixa",
+    "low light",
+    "shadow",
+    "glasses",
+    "blur",
+  ];
+  const hasLimitation = limitationSignals.some((signal) => evidenceText.includes(signal));
+
+  if (text === "low" || text === "medium" || text === "high") {
+    if (text === "high" && hasLimitation) return "medium";
+    return text;
+  }
+
+  return hasLimitation ? "medium" : "medium";
+}
+
 function toImageUrl(imageBase64: string) {
-  if (imageBase64.startsWith("data:image/")) return imageBase64;
-  return `data:image/jpeg;base64,${imageBase64}`;
+  const normalized = normalizeText(imageBase64);
+  if (!normalized) return "";
+  if (normalized.startsWith("data:image/")) return normalized;
+  if (/^https?:\/\//i.test(normalized)) return normalized;
+  return `data:image/jpeg;base64,${normalized}`;
 }
 
 function isColorShape(value: unknown): value is ColorimetryAnalysisData["faceShape"] {
@@ -74,6 +113,14 @@ function parseColorimetryPayload(input: Record<string, unknown>): ColorimetryAna
     colorSeason: normalizeText(input.colorSeason),
     favoriteColors: normalizeStringArray(input.favoriteColors, 4),
     avoidColors: normalizeStringArray(input.avoidColors, 3),
+    confidence: normalizeConfidence(
+      input.confidence,
+      `${normalizeText(input.evidence)} ${normalizeText(input.justification)}`.trim(),
+    ),
+    evidence: normalizeText(input.evidence),
+    basePalette: normalizeStringArray(input.basePalette, 4),
+    accentPalette: normalizeStringArray(input.accentPalette, 3),
+    avoidOrUseCarefully: normalizeStringArray(input.avoidOrUseCarefully, 3),
     faceShape: isColorShape(input.faceShape) ? input.faceShape : "",
     idealNeckline: normalizeText(input.idealNeckline),
     idealFit: normalizeText(input.idealFit),
@@ -89,6 +136,11 @@ function parseColorimetryPayload(input: Record<string, unknown>): ColorimetryAna
     !candidate.colorSeason ||
     candidate.favoriteColors.length === 0 ||
     candidate.avoidColors.length === 0 ||
+    !candidate.confidence ||
+    !candidate.evidence ||
+    candidate.basePalette.length === 0 ||
+    candidate.accentPalette.length === 0 ||
+    candidate.avoidOrUseCarefully.length === 0 ||
     !candidate.faceShape ||
     !candidate.idealNeckline ||
     !candidate.idealFit ||
@@ -116,7 +168,7 @@ export async function POST(req: NextRequest) {
     return fallbackResponse();
   }
 
-  const imageBase64 = normalizeText(body.imageBase64);
+  const imageBase64 = normalizeText(body.imageSource || body.imageUrl || body.imageBase64);
   const orgId = normalizeText(body.orgId);
 
   if (!imageBase64) {
@@ -184,7 +236,7 @@ export async function POST(req: NextRequest) {
         {
           role: "system",
           content:
-            "Voce e uma colorista profissional com 20 anos de experiencia em colorimetria pessoal e visagismo. Analise a foto e retorne APENAS JSON valido sem markdown.",
+            "Voce e uma colorista profissional com 20 anos de experiencia em colorimetria pessoal e visagismo. Analise a foto e retorne APENAS JSON valido sem markdown. Não infira cores fortes como base sem justificativa visual. Se houver pouca luz, sombras, óculos escuros, rosto parcialmente oculto, fundo dominante ou baixa resolução, a confiança deve ser low ou medium, nunca high.",
         },
         {
           role: "user",
@@ -192,7 +244,7 @@ export async function POST(req: NextRequest) {
             {
               type: "text",
               text:
-                "Analise esta foto e retorne JSON com exatamente estas chaves: { skinTone: 'claro' | 'médio' | 'escuro', undertone: 'frio' | 'quente' | 'neutro', contrast: 'baixo' | 'médio' | 'alto', colorSeason: string, favoriteColors: string[] (4 cores que favorecem, nomes em português), avoidColors: string[] (3 cores que enfraquecem), faceShape: 'oval' | 'redondo' | 'quadrado' | 'coração' | 'losango' | 'retangular', idealNeckline: string, idealFit: string, idealFabrics: string[] (3 tecidos que valorizam), avoidFabrics: string[] (2 tecidos que não favorecem), justification: string (2 frases explicando a leitura) }",
+                "Analise esta foto e retorne JSON com exatamente estas chaves: { skinTone: 'claro' | 'médio' | 'escuro', undertone: 'frio' | 'quente' | 'neutro', contrast: 'baixo' | 'médio' | 'alto', colorSeason: string, favoriteColors: string[] (4 cores que favorecem, nomes em português), avoidColors: string[] (3 cores que enfraquecem), confidence: 'low' | 'medium' | 'high', evidence: string (1 ou 2 frases curtas com base visual), basePalette: string[] (4 cores base seguras), accentPalette: string[] (3 cores de acento), avoidOrUseCarefully: string[] (3 cores fortes ou de cautela), faceShape: 'oval' | 'redondo' | 'quadrado' | 'coração' | 'losango' | 'retangular', idealNeckline: string, idealFit: string, idealFabrics: string[] (3 tecidos que valorizam), avoidFabrics: string[] (2 tecidos que não favorecem), justification: string (2 frases explicando a leitura) }. Cores fortes como laranja, amarelo aberto, neon, pink ou vermelho aberto só podem aparecer como accentPalette ou avoidOrUseCarefully, nunca como basePalette sem justificativa explícita e confiança high.",
             },
             {
               type: "image_url" as const,

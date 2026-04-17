@@ -39,6 +39,10 @@ export interface CatalogQueryContext {
   user_style_identity?: string;
   user_image_goal?: string;
   user_palette_family?: string;
+  user_palette_base?: string[];
+  user_palette_accent?: string[];
+  user_palette_caution?: string[];
+  user_palette_confidence?: "low" | "medium" | "high";
   user_fit_preference?: string;
   previous_products_shown?: string[];
   try_on_count?: number;

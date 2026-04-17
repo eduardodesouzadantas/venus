@@ -134,6 +134,11 @@ export async function updateB2CResult(formData: FormData, dbResultId: string) {
       colorimetry: {
         favoriteColors: Array.isArray(currentColors?.favoriteColors) ? currentColors.favoriteColors : [],
         avoidColors: Array.isArray(currentColors?.avoidColors) ? currentColors.avoidColors : [],
+        confidence: "",
+        evidence: "",
+        basePalette: Array.isArray(currentColors?.favoriteColors) ? currentColors.favoriteColors : [],
+        accentPalette: [],
+        avoidOrUseCarefully: Array.isArray(currentColors?.avoidColors) ? currentColors.avoidColors : [],
       },
       bodyAnalysis: {
         fit: typeof currentBody?.fit === "string" ? currentBody.fit : "",

@@ -8,6 +8,10 @@ function isColorArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === "string");
 }
 
+function isConfidence(value: unknown): value is ColorimetryAnalysisResponse["confidence"] {
+  return value === "low" || value === "medium" || value === "high" || value === "";
+}
+
 function isShape(value: unknown): value is ColorimetryAnalysisData["faceShape"] {
   return (
     value === "oval" ||
@@ -20,13 +24,13 @@ function isShape(value: unknown): value is ColorimetryAnalysisData["faceShape"] 
   );
 }
 
-export async function analyzeColorimetry(imageBase64: string, orgId = ""): Promise<ColorimetryAnalysisResponse | null> {
+export async function analyzeColorimetry(imageSource: string, orgId = ""): Promise<ColorimetryAnalysisResponse | null> {
   const response = await fetch("/api/analysis/colorimetry", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ imageBase64, orgId }),
+    body: JSON.stringify({ imageSource, orgId }),
   });
 
   if (!response.ok) {
@@ -45,6 +49,11 @@ export async function analyzeColorimetry(imageBase64: string, orgId = ""): Promi
     typeof payload.colorSeason !== "string" ||
     !isColorArray(payload.favoriteColors) ||
     !isColorArray(payload.avoidColors) ||
+    !isConfidence(payload.confidence) ||
+    typeof payload.evidence !== "string" ||
+    !isColorArray(payload.basePalette) ||
+    !isColorArray(payload.accentPalette) ||
+    !isColorArray(payload.avoidOrUseCarefully) ||
     !isShape(payload.faceShape) ||
     typeof payload.idealNeckline !== "string" ||
     typeof payload.idealFit !== "string" ||
@@ -62,6 +71,11 @@ export async function analyzeColorimetry(imageBase64: string, orgId = ""): Promi
     colorSeason: payload.colorSeason,
     favoriteColors: payload.favoriteColors,
     avoidColors: payload.avoidColors,
+    confidence: payload.confidence,
+    evidence: payload.evidence,
+    basePalette: payload.basePalette,
+    accentPalette: payload.accentPalette,
+    avoidOrUseCarefully: payload.avoidOrUseCarefully,
     faceShape: payload.faceShape,
     idealNeckline: payload.idealNeckline,
     idealFit: payload.idealFit,

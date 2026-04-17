@@ -37,6 +37,16 @@ function normalizeText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function isInlineImageReference(value: unknown) {
+  const text = normalizeText(value);
+  return /^data:image\//i.test(text) || (text.length > 200_000 && !/^https?:\/\//i.test(text) && !text.startsWith("/"));
+}
+
+type ProcessAndPersistLeadInput = OnboardingData & {
+  journeyId?: string | null;
+  sessionId?: string | null;
+};
+
 export async function generateEngineResult(
   userData: OnboardingData,
   hardCapContext?: {
@@ -109,8 +119,29 @@ function buildConsultiveBrief(userData: OnboardingData, visualAnalysis: VisualAn
 // --------------------------------------------------------------------------------------
 // ACTION FIM-A-FIM: Gera o resultado e persite uma SessÃ£o AnÃ´nima no DB retornando o ID
 // --------------------------------------------------------------------------------------
-export async function processAndPersistLead(userData: OnboardingData): Promise<string> {
+export async function processAndPersistLead(userData: ProcessAndPersistLeadInput): Promise<string> {
   try {
+    const hasInlineImagePayload = [
+      userData.scanner?.facePhoto,
+      userData.scanner?.bodyPhoto,
+      userData.scanner?.facePhotoUrl,
+      userData.scanner?.bodyPhotoUrl,
+      userData.scanner?.facePhotoPath,
+      userData.scanner?.bodyPhotoPath,
+    ].some((value) => isInlineImageReference(value));
+
+    if (hasInlineImagePayload) {
+      console.warn("[SAVED_RESULTS] blocked inline image payload before persistence", {
+        hasFacePhoto: Boolean(userData.scanner?.facePhoto),
+        hasBodyPhoto: Boolean(userData.scanner?.bodyPhoto),
+        hasFacePhotoUrl: Boolean(userData.scanner?.facePhotoUrl),
+        hasBodyPhotoUrl: Boolean(userData.scanner?.bodyPhotoUrl),
+        hasFacePhotoPath: Boolean(userData.scanner?.facePhotoPath),
+        hasBodyPhotoPath: Boolean(userData.scanner?.bodyPhotoPath),
+      });
+      throw new Error("PAYLOAD_TOO_LARGE_PREVENTED");
+    }
+
     const supabase = createAdminClient();
     const startedAtMs = Date.now();
     const explicitOrgId = normalizeText(userData.tenant?.orgId);
@@ -119,7 +150,14 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
       explicitOrgId,
       explicitOrgSlug,
       hasContact: Boolean(userData.contact?.phone || userData.contact?.email),
-      hasScannerPhotos: Boolean(userData.scanner?.facePhoto || userData.scanner?.bodyPhoto),
+      hasScannerPhotos: Boolean(
+        userData.scanner?.facePhoto ||
+        userData.scanner?.bodyPhoto ||
+        userData.scanner?.facePhotoUrl ||
+        userData.scanner?.bodyPhotoUrl ||
+        userData.scanner?.facePhotoPath ||
+        userData.scanner?.bodyPhotoPath,
+      ),
       hasSupabaseUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
       hasServiceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
       deploymentEnv: process.env.VERCEL_ENV || process.env.NODE_ENV || null,
@@ -164,11 +202,12 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
       source: resolvedTenant.source,
     });
 
-    const safeUserData = stripOnboardingBinaryArtifacts(userData);
+    const persistedUserData = userData;
+    const idempotencyUserData = stripOnboardingBinaryArtifacts(userData);
     const idempotencyKey = createProcessAndPersistLeadIdempotencyKey({
       orgId: resolvedTenant.org.id,
       source: resolvedTenant.source,
-      userData: safeUserData,
+      userData: idempotencyUserData,
     });
     console.info("[SAVED_RESULTS] idempotency key generated", {
       orgId: resolvedTenant.org.id,
@@ -429,7 +468,7 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
     const visualAnalysis = await generateVisualProfileAnalysis(userData);
     let result: ResultPayload;
     try {
-      result = await generateEngineResult(safeUserData, {
+      result = await generateEngineResult(persistedUserData, {
         orgId: resolvedTenant.org.id,
         orgSlug: resolvedTenant.org.slug,
         eventSource: "app",
@@ -495,10 +534,10 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
     }
 
     const leadSignals = extractLeadSignalsFromSavedResultPayload({
-      onboardingContext: safeUserData,
+      onboardingContext: persistedUserData,
       finalResult: result,
-      user_email: safeUserData.contact?.email || null,
-      user_name: safeUserData.contact?.name || null,
+      user_email: persistedUserData.contact?.email || null,
+      user_name: persistedUserData.contact?.name || null,
     });
 
     try {
@@ -510,8 +549,8 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
       const persisted = await persistSavedResultAndLead(supabase, {
         orgId: resolvedTenant.org.id,
         idempotencyKey,
-        userEmail: safeUserData.contact?.email || null,
-        userName: safeUserData.contact?.name || null,
+        userEmail: persistedUserData.contact?.email || null,
+        userName: persistedUserData.contact?.name || null,
         payload: {
           tenant: {
             orgId: resolvedTenant.org.id,
@@ -521,17 +560,17 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
             source: resolvedTenant.source,
             idempotencyKey,
           },
-          onboardingContext: safeUserData,
+          onboardingContext: persistedUserData,
           visualAnalysis,
           finalResult: result,
         },
-        leadName: leadSignals.name || safeUserData.contact?.name || null,
-        leadEmail: leadSignals.email || safeUserData.contact?.email || null,
-        leadPhone: leadSignals.phone || safeUserData.contact?.phone || null,
+        leadName: leadSignals.name || persistedUserData.contact?.name || null,
+        leadEmail: leadSignals.email || persistedUserData.contact?.email || null,
+        leadPhone: leadSignals.phone || persistedUserData.contact?.phone || null,
         leadSource: "app",
         leadStatus: "new",
-        intentScore: leadSignals.intentScore ?? Math.round(Number(safeUserData.intent.satisfaction || 0) * 10),
-        whatsappKey: leadSignals.whatsappKey || safeUserData.contact?.phone || null,
+        intentScore: leadSignals.intentScore ?? Math.round(Number(persistedUserData.intent.satisfaction || 0) * 10),
+        whatsappKey: leadSignals.whatsappKey || persistedUserData.contact?.phone || null,
         lastInteractionAt: leadSignals.lastInteractionAt || undefined,
         eventSource: "app",
       });
@@ -540,15 +579,15 @@ export async function processAndPersistLead(userData: OnboardingData): Promise<s
         orgId: resolvedTenant.org.id,
         leadId: persisted.leadId,
         ...buildLeadContextProfileFromOnboarding({
-          data: safeUserData,
+          data: persistedUserData,
           result,
-          leadName: safeUserData.contact?.name || null,
-          leadPhone: safeUserData.contact?.phone || null,
-          leadEmail: safeUserData.contact?.email || null,
+          leadName: persistedUserData.contact?.name || null,
+          leadPhone: persistedUserData.contact?.phone || null,
+          leadEmail: persistedUserData.contact?.email || null,
           orgId: resolvedTenant.org.id,
           orgSlug: resolvedTenant.org.slug,
           savedResultId: persisted.savedResultId,
-          intentScore: leadSignals.intentScore ?? Math.round(Number(safeUserData.intent.satisfaction || 0) * 10),
+        intentScore: leadSignals.intentScore ?? Math.round(Number(persistedUserData.intent.satisfaction || 0) * 10),
         }),
       });
 

@@ -107,8 +107,9 @@ Regras:
 - Respeite a linha de styling escolhida no onboarding e não misture peças fora dessa direção.
 - Explique de forma curta e clara por que cada escolha combina com o perfil, com linguagem de consultoria, visagismo e colorimetria.
 - Mostre a hierarquia do look com base, apoio e destaque sem escrever demais.
-- Justifique a paleta com o objetivo de imagem, o corpo, a colorimetria e o metal informado.
-- Se a confiança for baixa, seja conservador e mantenha a coerência.
+- Estruture a paleta em base segura, acentos e uso com cautela; nunca coloque cores fortes como laranja, amarelo aberto, neon, pink ou vermelho aberto na base sem evidência visual forte e confiança alta.
+- Justifique a paleta com o objetivo de imagem, o corpo, a colorimetria, a evidência visual e o metal informado.
+- Se a confiança for baixa, seja conservador e mantenha a coerência. Se houver pouca luz, sombra, óculos escuros, rosto parcialmente oculto, fundo dominante ou baixa resolução, a leitura deve ser low ou medium, nunca high.
 - Retorne apenas JSON válido, exatamente no schema solicitado.
 - Monte 3 looks.
 
@@ -134,6 +135,7 @@ CATÁLOGO REAL RELEVANTE:
 ${catalogSummary}
 
 Gere a saída final com foco em aderência ao perfil, explicação curta, hierarquia clara do look e peças reais do catálogo quando existirem.
+Na paleta, prefira base neutra/sóbria quando a evidência for limitada. Cores fortes só podem aparecer como acento ou cautela.
 `;
 
   const response = await openai.chat.completions.create({

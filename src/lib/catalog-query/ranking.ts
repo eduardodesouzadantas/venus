@@ -50,6 +50,34 @@ export function rankProducts(
       }
     }
 
+    if (product.colors.length > 0) {
+      const colorText = product.colors.join(" ").toLowerCase();
+      const baseMatch = context.user_palette_base?.some((color) => colorText.includes(color.toLowerCase()));
+      const accentMatch = context.user_palette_accent?.some((color) => colorText.includes(color.toLowerCase()));
+      const cautionMatch = context.user_palette_caution?.some((color) => colorText.includes(color.toLowerCase()));
+
+      if (baseMatch) {
+        score += config.color_match_weight * 2;
+        reasons.push("Base segura da paleta");
+      }
+
+      if (accentMatch) {
+        score += config.color_match_weight;
+        reasons.push("Acento compatível com a paleta");
+      }
+
+      if (cautionMatch) {
+        score -= config.color_match_weight * 2.5;
+        reasons.push("Cor de cautela");
+      }
+
+      if (!context.user_palette_confidence || context.user_palette_confidence === "low") {
+        if (colorText.includes("laranja") || colorText.includes("amarelo") || colorText.includes("neon") || colorText.includes("rosa choque")) {
+          score -= config.color_match_weight;
+        }
+      }
+    }
+
     if (params.price_min !== undefined && params.price_max !== undefined) {
       if (product.price >= params.price_min && product.price <= params.price_max) {
         score += config.price_match_weight;

@@ -38,12 +38,19 @@ function sha256Hex(value: string) {
 }
 
 export function stripOnboardingBinaryArtifacts(userData: OnboardingData): OnboardingData {
+  const stripPhotoReference = (value: string | undefined | null) =>
+    value ? "[IMAGE_REFERENCE_STRIPPED_FOR_STORAGE]" : "";
+
   return {
     ...userData,
     scanner: {
       ...userData.scanner,
-      facePhoto: userData.scanner.facePhoto ? "[BASE64_IMAGE_STRIPPED_FOR_STORAGE]" : "",
-      bodyPhoto: userData.scanner.bodyPhoto ? "[BASE64_IMAGE_STRIPPED_FOR_STORAGE]" : "",
+      facePhoto: stripPhotoReference(userData.scanner.facePhoto),
+      bodyPhoto: stripPhotoReference(userData.scanner.bodyPhoto),
+      facePhotoUrl: stripPhotoReference(userData.scanner.facePhotoUrl),
+      bodyPhotoUrl: stripPhotoReference(userData.scanner.bodyPhotoUrl),
+      facePhotoPath: stripPhotoReference(userData.scanner.facePhotoPath),
+      bodyPhotoPath: stripPhotoReference(userData.scanner.bodyPhotoPath),
     },
   };
 }
