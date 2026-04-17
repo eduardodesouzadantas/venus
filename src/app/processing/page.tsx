@@ -62,9 +62,18 @@ export default function ProcessingPage() {
         setStatus("processing");
         setSavedResultId(null);
         console.info("[PROCESSING] persistence flow started", {
+          commitSha: "b29b966",
+          currentUrl: typeof window !== "undefined" ? window.location.href : null,
+          isLoaded,
           hasOnboardingData: Boolean(data),
           orgId: data?.tenant?.orgId || null,
           orgSlug: data?.tenant?.orgSlug || null,
+          hasTenant: Boolean(data?.tenant && Object.keys(data.tenant).some((k) => (data.tenant as Record<string, unknown>)[k])),
+          onboardingDataTopLevelNonEmpty: data
+            ? Object.entries(data)
+                .filter(([, v]) => v !== null && v !== "" && !(Array.isArray(v) && v.length === 0) && !(typeof v === "object" && v !== null && Object.keys(v).length === 0))
+                .map(([k]) => k)
+            : [],
         });
 
         const dbReferenceId = await processAndPersistLead(buildProcessingSnapshot(data));
@@ -146,9 +155,19 @@ export default function ProcessingPage() {
           return;
         }
 
-        console.error("[PROCESSING] critical persistence failure", e);
+        const failureReason = e instanceof Error ? e.message : "UNKNOWN_NON_ERROR";
+        console.error("[PROCESSING] critical persistence failure", {
+          commitSha: "b29b966",
+          currentUrl: typeof window !== "undefined" ? window.location.href : null,
+          isLoaded,
+          failureReason,
+          orgSlug: data?.tenant?.orgSlug || null,
+          orgId: data?.tenant?.orgId || null,
+          hasTenant: Boolean(data?.tenant && Object.keys(data.tenant).some((k) => (data.tenant as Record<string, unknown>)[k])),
+          errorStack: e instanceof Error ? (e.stack?.split("\n").slice(0, 4).join(" | ") ?? null) : null,
+        });
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Não foi possível salvar seu resultado.");
+          setError(failureReason);
         }
       } finally {
         if (!cancelled) {
@@ -183,6 +202,11 @@ export default function ProcessingPage() {
               Não foi possível validar e salvar seu resultado com segurança.
               A operação foi interrompida antes de navegar para a tela final.
             </Text>
+            {error && (
+              <Text className="font-mono text-[10px] text-[#C9A84C]/50 break-all">
+                {error}
+              </Text>
+            )}
           </div>
           <button
             type="button"
