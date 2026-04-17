@@ -86,6 +86,7 @@ export default function ProcessingPage() {
             validationPayload = null;
           }
         }
+        const validationTenantOrgId = validationPayload?.tenant?.orgId || validationPayload?.org_id || validationPayload?.orgId || "";
         if (!validationResponse.ok) {
           console.error("[PROCESSING] result validation lookup failed", {
             dbReferenceId,
@@ -96,16 +97,21 @@ export default function ProcessingPage() {
         } else {
           console.info("[PROCESSING] result validation lookup ok", {
             dbReferenceId,
-            tenantOrgId: validationPayload?.tenant?.orgId || null,
+            tenantOrgId: validationTenantOrgId,
           });
         }
-        if (!validationPayload?.tenant?.orgId) {
+        if (!validationTenantOrgId) {
           console.error("[PROCESSING] result validation missing tenant org", {
             dbReferenceId,
             responseOk: validationResponse.ok,
             payloadKeys: validationPayload ? Object.keys(validationPayload) : [],
           });
           throw new Error("RESULT_PERSISTENCE_MISSING_ORG");
+        } else if (!validationPayload?.tenant?.orgId) {
+          console.warn("[PROCESSING] result validation normalized tenant from fallback org id", {
+            dbReferenceId,
+            tenantOrgId: validationTenantOrgId,
+          });
         }
 
         if (!cancelled && dbReferenceId && status === "processing" && savedResultId !== dbReferenceId) {

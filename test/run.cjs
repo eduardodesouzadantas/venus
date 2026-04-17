@@ -3746,6 +3746,77 @@ const FRONTEND_ORG_ID = "frontend-org";
     assert.ok(!processingSource.includes('router.push("/result?id=MOCK_DB_FAIL")'));
   });
 
+  await runAsync("scenario 1b - result api normalizes tenant from saved_results org_id", async () => {
+    const supabase = {
+      from(table) {
+        if (table !== "saved_results") {
+          throw new Error(`Unexpected table ${table}`);
+        }
+
+        return {
+          select() {
+            return {
+              eq(column, value) {
+                assert.equal(column, "id");
+                assert.equal(value, VALID_RESULT_ID);
+                return {
+                  maybeSingle: async () => ({
+                    data: {
+                      id: VALID_RESULT_ID,
+                      org_id: VALID_ORG_ID,
+                      payload: {
+                        visualAnalysis: { essence: { label: "Autora", reason: "Teste" } },
+                        finalResult: { looks: [] },
+                      },
+                      created_at: "2026-04-06T12:00:00.000Z",
+                      updated_at: "2026-04-06T12:00:00.000Z",
+                    },
+                    error: null,
+                  }),
+                };
+              },
+            };
+          },
+        };
+      },
+    };
+
+    const resultResponse = await withMockedModules({
+      "server-only": {},
+      "@/lib/supabase/admin": {
+        createAdminClient: () => supabase,
+      },
+      "@/lib/catalog-query/engine": {
+        getCatalogLink: async () => "/catalog",
+      },
+      "@/lib/tenant-config": {
+        getTenantConfigSummary: async () => ({
+          catalog_sources_count: 0,
+          active_catalog_source: null,
+          ai_capabilities_enabled: 0,
+          ai_capabilities_disabled: 0,
+          knowledge_base_enabled: false,
+          knowledge_base_entries: 0,
+          personality: "consultive",
+        }),
+      },
+    }, async () => {
+      const resultRoute = loadFresh("../src/app/api/result/[id]/route.ts");
+      return resultRoute.GET(new Request(`https://example.com/api/result/${VALID_RESULT_ID}`), {
+        params: Promise.resolve({ id: VALID_RESULT_ID }),
+      });
+    });
+
+    assert.equal(resultResponse.status, 200);
+    const payload = await resultResponse.json();
+    assert.equal(payload.tenant.orgId, VALID_ORG_ID);
+    assert.equal(payload.catalogLink, "/catalog");
+
+    const processingSource = fs.readFileSync(path.join(process.cwd(), "src/app/processing/page.tsx"), "utf8");
+    assert.ok(processingSource.includes("validationPayload?.org_id"));
+    assert.ok(processingSource.includes("validationTenantOrgId"));
+  });
+
   await runAsync("scenario 2 - tenant resolution failure throws before navigation", async () => {
     const onboarding = {
       contact: { name: "Cliente", phone: "+5511999999999", email: "cliente@exemplo.com" },

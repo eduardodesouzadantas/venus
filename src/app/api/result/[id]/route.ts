@@ -23,7 +23,7 @@ export async function GET(_: Request, context: RouteContext) {
     const supabase = createAdminClient();
     const { data, error } = await supabase
       .from("saved_results")
-      .select("id, payload, created_at")
+      .select("id, org_id, payload, created_at")
       .eq("id", id)
       .maybeSingle();
 
@@ -47,7 +47,22 @@ export async function GET(_: Request, context: RouteContext) {
     const finalResult = (payload.finalResult ?? null) as Record<string, unknown> | null;
     const finalLooks = Array.isArray(finalResult?.looks) ? (finalResult?.looks as LookData[]) : [];
     const tenant = (payload.tenant ?? null) as Record<string, unknown> | null;
-    const tenantOrgId = typeof tenant?.orgId === "string" ? tenant.orgId : "";
+    const rowOrgId = typeof data.org_id === "string" ? data.org_id.trim() : "";
+    const payloadTenantOrgId = typeof tenant?.orgId === "string" ? tenant.orgId.trim() : "";
+    const tenantOrgId = payloadTenantOrgId || rowOrgId;
+    const normalizedTenant = tenantOrgId
+      ? {
+        ...(tenant || {}),
+        orgId: tenantOrgId,
+      }
+      : tenant;
+
+    if (!payloadTenantOrgId && rowOrgId) {
+      console.warn("[RESULT_API] tenant normalized from saved_results.org_id", {
+        resultId: id,
+        orgId: rowOrgId,
+      });
+    }
 
     const [catalogLink, tenantSummary] = tenantOrgId
       ? await Promise.all([
@@ -59,7 +74,7 @@ export async function GET(_: Request, context: RouteContext) {
     if (hasLegacyTryOnProducts(finalLooks)) {
       console.warn("[RESULT_API] legacy try-on looks detected", {
         resultId: id,
-        orgId: (payload.tenant as Record<string, unknown> | null)?.orgId || null,
+        orgId: tenantOrgId || null,
         lookIds: finalLooks.map((look) => look?.id || null),
       });
     }
@@ -74,7 +89,7 @@ export async function GET(_: Request, context: RouteContext) {
       id: data.id,
       analysis: payload.visualAnalysis ?? null,
       finalResult: payload.finalResult ?? null,
-      tenant: payload.tenant ?? null,
+      tenant: normalizedTenant ?? null,
       lastTryOn: payload.last_tryon ?? null,
       catalogLink,
       catalogSourceLabel: tenantSummary?.active_catalog_source || null,
@@ -83,7 +98,7 @@ export async function GET(_: Request, context: RouteContext) {
     };
     console.info("[RESULT_API] lookup success", {
       resultId: id,
-      orgId: (payload.tenant as Record<string, unknown> | null)?.orgId || null,
+      orgId: tenantOrgId || null,
     });
 
     return NextResponse.json(response);
