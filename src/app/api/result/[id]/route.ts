@@ -57,6 +57,14 @@ export async function GET(_: Request, context: RouteContext) {
       }
       : tenant;
 
+    console.info("[RESULT_API] tenant normalization check", {
+      resultId: id,
+      payloadKeys: Object.keys(payload),
+      hasPayloadTenantOrgId: Boolean(payloadTenantOrgId),
+      hasRowOrgId: Boolean(rowOrgId),
+      tenantOrgId: tenantOrgId || null,
+    });
+
     if (!payloadTenantOrgId && rowOrgId) {
       console.warn("[RESULT_API] tenant normalized from saved_results.org_id", {
         resultId: id,

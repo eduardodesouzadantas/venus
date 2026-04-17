@@ -87,24 +87,38 @@ export default function ProcessingPage() {
           }
         }
         const validationTenantOrgId = validationPayload?.tenant?.orgId || validationPayload?.org_id || validationPayload?.orgId || "";
+        const validationResponseKeys = validationPayload ? Object.keys(validationPayload) : [];
         if (!validationResponse.ok) {
-          console.error("[PROCESSING] result validation lookup failed", {
+          console.error("[processing:persistence-validation-failed]", {
             dbReferenceId,
+            orgIdResolved: data?.tenant?.orgId || null,
+            hasTenantOrgId: Boolean(validationPayload?.tenant?.orgId),
+            hasOrgId: Boolean(validationPayload?.org_id),
+            hasCamelOrgId: Boolean(validationPayload?.orgId),
             status: validationResponse.status,
-            bodyText: validationText,
+            responseKeys: validationResponseKeys,
+            failureReason: "lookup_failed",
+            stage: "processing_validation",
           });
           throw new Error("RESULT_PERSISTENCE_LOOKUP_FAILED");
         } else {
           console.info("[PROCESSING] result validation lookup ok", {
             dbReferenceId,
             tenantOrgId: validationTenantOrgId,
+            responseKeys: validationResponseKeys,
           });
         }
         if (!validationTenantOrgId) {
-          console.error("[PROCESSING] result validation missing tenant org", {
+          console.error("[processing:persistence-validation-failed]", {
             dbReferenceId,
-            responseOk: validationResponse.ok,
-            payloadKeys: validationPayload ? Object.keys(validationPayload) : [],
+            orgIdResolved: data?.tenant?.orgId || null,
+            hasTenantOrgId: Boolean(validationPayload?.tenant?.orgId),
+            hasOrgId: Boolean(validationPayload?.org_id),
+            hasCamelOrgId: Boolean(validationPayload?.orgId),
+            status: validationResponse.status,
+            responseKeys: validationResponseKeys,
+            failureReason: "missing_tenant_org",
+            stage: "processing_validation",
           });
           throw new Error("RESULT_PERSISTENCE_MISSING_ORG");
         } else if (!validationPayload?.tenant?.orgId) {

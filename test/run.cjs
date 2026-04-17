@@ -3815,6 +3815,29 @@ const FRONTEND_ORG_ID = "frontend-org";
     const processingSource = fs.readFileSync(path.join(process.cwd(), "src/app/processing/page.tsx"), "utf8");
     assert.ok(processingSource.includes("validationPayload?.org_id"));
     assert.ok(processingSource.includes("validationTenantOrgId"));
+    assert.ok(processingSource.includes("[processing:persistence-validation-failed]"));
+  });
+
+  await runAsync("scenario 1c - version api exposes safe deployment metadata", async () => {
+    const response = await withTempEnv({
+      VERCEL_GIT_COMMIT_SHA: "185b6749dd045913dde3a78993ba1d7978a73c90",
+      VERCEL_GIT_COMMIT_REF: "antigravity/scope-guards-observability",
+      VERCEL_DEPLOYMENT_ID: "dpl_test_123",
+      VERCEL_URL: "venus-engine.vercel.app",
+      VERCEL_ENV: "production",
+    }, async () => {
+      const versionRoute = loadFresh("../src/app/api/version/route.ts");
+      return versionRoute.GET(new Request("https://example.com/api/version"));
+    });
+
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.commitSha, "185b6749dd045913dde3a78993ba1d7978a73c90");
+    assert.equal(payload.commitRef, "antigravity/scope-guards-observability");
+    assert.equal(payload.deploymentId, "dpl_test_123");
+    assert.equal(payload.deploymentUrl, "venus-engine.vercel.app");
+    assert.equal(payload.environment, "production");
+    assert.ok(typeof payload.buildTimestamp === "string");
   });
 
   await runAsync("scenario 2 - tenant resolution failure throws before navigation", async () => {
