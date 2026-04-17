@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { OnboardingData, OnboardingConversationData, defaultOnboardingData } from "@/types/onboarding";
 import { useAuth } from "@/lib/auth/AuthContext";
 import {
+  applyQueryOrgSlug,
   hydrateOnboardingStorage,
   mergeOnboardingData,
   persistOnboardingStorage,
@@ -84,16 +85,24 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   const routeState = useMemo(() => resolveJourneyRouteState(pathname), [pathname]);
 
   useEffect(() => {
+    if (!queryOrgSlug) {
+      return;
+    }
+
+    setData((current) => applyQueryOrgSlug(current, queryOrgSlug));
+  }, [queryOrgSlug]);
+
+  useEffect(() => {
     const storageSnapshot = typeof window === "undefined"
       ? null
       : hydrateOnboardingStorage({
           storage: window.sessionStorage,
           userId: user?.id || null,
           queryOrgSlug,
-        });
+    });
 
     if (storageSnapshot?.data) {
-      setData(storageSnapshot.data);
+      setData(() => applyQueryOrgSlug(storageSnapshot.data, queryOrgSlug));
     } else if (queryOrgSlug) {
       setData((current) => ({
         ...current,
@@ -105,8 +114,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     }
 
     setIsLoaded(true);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [queryOrgSlug, user?.id]);
 
   useEffect(() => {
     let active = true;

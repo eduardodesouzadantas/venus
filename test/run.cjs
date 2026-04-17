@@ -3984,6 +3984,26 @@ const FRONTEND_ORG_ID = "frontend-org";
     assert.equal(storage.getItem(newKey) !== null, true);
   });
 
+  await runAsync("scenario 1e2 - query org slug is reapplied into onboarding tenant state", async () => {
+    const storageModule = loadFresh("../src/lib/onboarding/storage.ts");
+
+    const patched = storageModule.applyQueryOrgSlug(
+      {
+        ...storageModule.mergeOnboardingData({}, ""),
+        tenant: {
+          orgSlug: "",
+          orgId: "",
+          branchName: null,
+          whatsappNumber: null,
+        },
+      },
+      "maison-elite"
+    );
+
+    assert.equal(patched.tenant.orgSlug, "maison-elite");
+    assert.equal(patched.tenant.orgId, "");
+  });
+
   await runAsync("scenario 1f - public entry resolves maison-elite canonically", async () => {
     const admin = {
       from(table) {

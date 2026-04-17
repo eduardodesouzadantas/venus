@@ -63,6 +63,26 @@ export function mergeOnboardingData(parsed: Partial<OnboardingData>, queryOrgSlu
   } as OnboardingData;
 }
 
+export function applyQueryOrgSlug(data: OnboardingData, queryOrgSlug: string): OnboardingData {
+  const normalizedQueryOrgSlug = normalize(queryOrgSlug);
+  if (!normalizedQueryOrgSlug) {
+    return data;
+  }
+
+  if (normalize(data.tenant?.orgSlug) === normalizedQueryOrgSlug) {
+    return data;
+  }
+
+  return {
+    ...data,
+    tenant: {
+      ...defaultOnboardingData.tenant,
+      ...(data.tenant || {}),
+      orgSlug: normalizedQueryOrgSlug,
+    },
+  };
+}
+
 export function hydrateOnboardingStorage(input: {
   storage: Pick<Storage, "getItem" | "setItem" | "removeItem" | "key" | "length">;
   userId?: string | null;
