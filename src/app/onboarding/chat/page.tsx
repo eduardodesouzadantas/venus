@@ -809,12 +809,29 @@ function LegacyChatContent() {
 }
 
 function ChatContent() {
-  const { data, journey } = useOnboarding();
+  const { data, updateData, journey } = useOnboarding();
   const searchParams = useSearchParams();
   const orgSlug = searchParams.get("org") || data?.tenant?.orgSlug || journey?.onboardingSeed?.tenant?.orgSlug || "";
+  const orgId = data?.tenant?.orgId || journey?.onboardingSeed?.tenant?.orgId || "";
+  useEffect(() => {
+    if (!orgSlug) {
+      return;
+    }
+
+    if (data?.tenant?.orgSlug === orgSlug && (orgId ? data?.tenant?.orgId === orgId : true)) {
+      return;
+    }
+
+    updateData("tenant", {
+      ...data?.tenant,
+      orgSlug,
+      orgId: orgId || data?.tenant?.orgId || "",
+    });
+  }, [data?.tenant?.orgId, data?.tenant?.orgSlug, orgId, orgSlug, updateData]);
+
   const isWowPilot = isOnboardingWowSurfaceEnabled({
     orgSlug: orgSlug || null,
-    orgId: data?.tenant?.orgId || journey?.onboardingSeed?.tenant?.orgId || null,
+    orgId: orgId || journey?.onboardingSeed?.tenant?.orgId || null,
   });
 
   return isWowPilot ? <PremiumWowFirstChatContent /> : <LegacyChatContent />;

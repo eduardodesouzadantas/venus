@@ -3840,6 +3840,113 @@ const FRONTEND_ORG_ID = "frontend-org";
     assert.ok(typeof payload.buildTimestamp === "string");
   });
 
+  await runAsync("scenario 1d - processing preflight blocks empty tenant and preserves photo payloads", async () => {
+    const processingModule = loadFresh("../src/lib/onboarding/processing.ts");
+    const onboarding = {
+      tenant: {},
+      contact: {},
+      scanner: {
+        facePhoto: "data:image/png;base64,face",
+        bodyPhoto: "data:image/png;base64,body",
+        skipped: false,
+      },
+      intent: { imageGoal: "Autoridade", styleDirection: "Executiva", satisfaction: 9 },
+      lifestyle: {},
+      colors: {},
+      body: {},
+    };
+
+    const blocked = processingModule.buildProcessingPersistInput(onboarding, "", null);
+    assert.equal(blocked.readiness.failureReason, "PROCESSING_MISSING_TENANT");
+
+    const missingPhoto = processingModule.buildProcessingPersistInput(
+      {
+        ...onboarding,
+        scanner: {
+          facePhoto: "",
+          bodyPhoto: "",
+          skipped: false,
+        },
+      },
+      "maison-elite",
+      null
+    );
+    assert.equal(missingPhoto.readiness.failureReason, "PROCESSING_MISSING_PHOTO");
+
+    const fallbackAllowed = processingModule.buildProcessingPersistInput(
+      {
+        ...onboarding,
+        scanner: {
+          facePhoto: "",
+          bodyPhoto: "",
+          skipped: true,
+        },
+      },
+      "maison-elite",
+      null
+    );
+    assert.equal(fallbackAllowed.readiness.failureReason, null);
+
+    const allowed = processingModule.buildProcessingPersistInput(onboarding, "maison-elite", null);
+    assert.equal(allowed.readiness.failureReason, null);
+    assert.equal(allowed.payload.tenant.orgSlug, "maison-elite");
+    assert.equal(allowed.payload.scanner.facePhoto, "data:image/png;base64,face");
+    assert.equal(allowed.payload.scanner.bodyPhoto, "data:image/png;base64,body");
+  });
+
+  await runAsync("scenario 1e - onboarding storage migrates legacy session key and keeps storage key consistent", async () => {
+    const storageModule = loadFresh("../src/lib/onboarding/storage.ts");
+    const store = new Map();
+    const storage = {
+      getItem(key) {
+        return store.has(key) ? store.get(key) : null;
+      },
+      setItem(key, value) {
+        store.set(key, value);
+      },
+      removeItem(key) {
+        store.delete(key);
+      },
+      key(index) {
+        return Array.from(store.keys())[index] || null;
+      },
+      get length() {
+        return store.size;
+      },
+    };
+
+    storage.setItem(
+      "venus_onboarding",
+      JSON.stringify({
+        tenant: { orgSlug: "legacy-maison", branchName: "Legacy Maison" },
+        scanner: { facePhoto: "", bodyPhoto: "data:image/png;base64,body", skipped: false },
+        intent: { imageGoal: "Autoridade" },
+      })
+    );
+
+    const snapshot = storageModule.hydrateOnboardingStorage({
+      storage,
+      userId: "user-123",
+      queryOrgSlug: "",
+    });
+
+    assert.equal(snapshot.data.tenant.orgSlug, "legacy-maison");
+    assert.equal(snapshot.sourceKey, "venus_onboarding");
+    assert.equal(snapshot.migrated, true);
+
+    const newKey = storageModule.buildOnboardingStorageKey("user-123", "legacy-maison");
+    assert.equal(storage.getItem("venus_onboarding"), null);
+    assert.ok(storage.getItem(newKey));
+
+    storageModule.persistOnboardingStorage({
+      storage,
+      userId: "user-123",
+      queryOrgSlug: "legacy-maison",
+      data: snapshot.data,
+    });
+    assert.equal(storage.getItem(newKey) !== null, true);
+  });
+
   await runAsync("scenario 2 - tenant resolution failure throws before navigation", async () => {
     const onboarding = {
       contact: { name: "Cliente", phone: "+5511999999999", email: "cliente@exemplo.com" },

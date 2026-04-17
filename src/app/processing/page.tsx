@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
-import type { OnboardingData } from "@/types/onboarding";
+import { buildProcessingPersistInput } from "@/lib/onboarding/processing";
 import { processAndPersistLead } from "@/lib/recommendation/actions";
-import { RESULT_ID_PATTERN, isValidResultId } from "@/lib/result/id";
+import { isValidResultId } from "@/lib/result/id";
 import { buildVenusBodyScannerIntro } from "@/lib/venus/brand";
 
 const PHASES = [
@@ -19,22 +19,20 @@ const PHASES = [
   "Gerando seu resultado...",
 ];
 
-function buildProcessingSnapshot(data: OnboardingData): OnboardingData {
-  return {
-    ...data,
-    scanner: {
-      ...data.scanner,
-      facePhoto: "",
-      bodyPhoto: "",
-    },
-  };
-}
+type ProcessingError = {
+  code: string;
+  safeMessage: string;
+  stage: string;
+  details?: Record<string, unknown>;
+};
 
 export default function ProcessingPage() {
   const router = useRouter();
-  const { data, isLoaded } = useOnboarding();
+  const searchParams = useSearchParams();
+  const orgSlugFromQuery = searchParams.get("org") || "";
+  const { data, isLoaded, journey, isJourneyLoaded } = useOnboarding();
   const [phaseIndex, setPhaseIndex] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ProcessingError | null>(null);
   const [retryTick, setRetryTick] = useState(0);
   const [savedResultId, setSavedResultId] = useState<string | null>(null);
   const [status, setStatus] = useState<"processing" | "completed">("processing");
@@ -50,7 +48,44 @@ export default function ProcessingPage() {
 
   useEffect(() => {
     // Guard: wait for sessionStorage hydration before processing (prevents TENANT_RESOLUTION_FAILED on empty data).
-    if (!isLoaded || !data || isGenerating.current) return;
+    if (!isLoaded || !isJourneyLoaded || !data || isGenerating.current) return;
+
+    const { readiness, payload } = buildProcessingPersistInput(data, orgSlugFromQuery || null, journey);
+
+    if (readiness.failureReason) {
+      const failureReason = readiness.failureReason;
+      const safeMessage =
+        failureReason === "PROCESSING_MISSING_TENANT"
+          ? "Não consegui identificar a loja desta experiência."
+          : "Não encontrei uma foto válida para seguir.";
+
+      console.error("[processing:persistence-validation-failed]", {
+        resultId: null,
+        orgIdResolved: readiness.tenant?.orgId || null,
+        hasTenantOrgId: Boolean(payload.tenant?.orgId),
+        hasOrgId: Boolean(payload.tenant?.orgId),
+        hasCamelOrgId: Boolean(payload.tenant?.orgId),
+        responseStatus: null,
+        responseKeys: Object.keys(payload),
+        failureReason,
+        stage: "pre_processAndPersistLead",
+        hasScannerPhotos: readiness.hasVisualInput,
+        hasFallback: readiness.hasFallback,
+        orgSlugFromQuery: orgSlugFromQuery || null,
+      });
+
+      setError({
+        code: failureReason,
+        safeMessage,
+        stage: "pre_processAndPersistLead",
+        details: {
+          orgSlugFromQuery: orgSlugFromQuery || null,
+          hasVisualInput: readiness.hasVisualInput,
+          hasFallback: readiness.hasFallback,
+        },
+      });
+      return;
+    }
 
     isGenerating.current = true;
     setError(null);
@@ -62,21 +97,24 @@ export default function ProcessingPage() {
         setStatus("processing");
         setSavedResultId(null);
         console.info("[PROCESSING] persistence flow started", {
-          commitSha: "b29b966",
+          commitSha: "4d65c5b",
           currentUrl: typeof window !== "undefined" ? window.location.href : null,
           isLoaded,
+          isJourneyLoaded,
           hasOnboardingData: Boolean(data),
-          orgId: data?.tenant?.orgId || null,
-          orgSlug: data?.tenant?.orgSlug || null,
-          hasTenant: Boolean(data?.tenant && Object.keys(data.tenant).some((k) => (data.tenant as Record<string, unknown>)[k])),
-          onboardingDataTopLevelNonEmpty: data
-            ? Object.entries(data)
+          orgId: payload?.tenant?.orgId || null,
+          orgSlug: payload?.tenant?.orgSlug || null,
+          hasTenant: Boolean(payload?.tenant && Object.keys(payload.tenant).some((k) => (payload.tenant as Record<string, unknown>)[k])),
+          onboardingDataTopLevelNonEmpty: payload
+            ? Object.entries(payload)
                 .filter(([, v]) => v !== null && v !== "" && !(Array.isArray(v) && v.length === 0) && !(typeof v === "object" && v !== null && Object.keys(v).length === 0))
                 .map(([k]) => k)
             : [],
+          hasScannerPhotos: Boolean(payload.scanner?.facePhoto || payload.scanner?.bodyPhoto),
+          hasFallback: Boolean(payload.scanner?.skipped),
         });
 
-        const dbReferenceId = await processAndPersistLead(buildProcessingSnapshot(data));
+        const dbReferenceId = await processAndPersistLead(payload);
         console.info("[PROCESSING] processAndPersistLead returned", { dbReferenceId });
 
         if (!isValidResultId(dbReferenceId)) {
@@ -96,16 +134,18 @@ export default function ProcessingPage() {
             validationPayload = null;
           }
         }
+
         const validationTenantOrgId = validationPayload?.tenant?.orgId || validationPayload?.org_id || validationPayload?.orgId || "";
         const validationResponseKeys = validationPayload ? Object.keys(validationPayload) : [];
+
         if (!validationResponse.ok) {
           console.error("[processing:persistence-validation-failed]", {
-            dbReferenceId,
-            orgIdResolved: data?.tenant?.orgId || null,
+            resultId: dbReferenceId,
+            orgIdResolved: payload?.tenant?.orgId || null,
             hasTenantOrgId: Boolean(validationPayload?.tenant?.orgId),
             hasOrgId: Boolean(validationPayload?.org_id),
             hasCamelOrgId: Boolean(validationPayload?.orgId),
-            status: validationResponse.status,
+            responseStatus: validationResponse.status,
             responseKeys: validationResponseKeys,
             failureReason: "lookup_failed",
             stage: "processing_validation",
@@ -113,19 +153,20 @@ export default function ProcessingPage() {
           throw new Error("RESULT_PERSISTENCE_LOOKUP_FAILED");
         } else {
           console.info("[PROCESSING] result validation lookup ok", {
-            dbReferenceId,
+            resultId: dbReferenceId,
             tenantOrgId: validationTenantOrgId,
             responseKeys: validationResponseKeys,
           });
         }
+
         if (!validationTenantOrgId) {
           console.error("[processing:persistence-validation-failed]", {
-            dbReferenceId,
-            orgIdResolved: data?.tenant?.orgId || null,
+            resultId: dbReferenceId,
+            orgIdResolved: payload?.tenant?.orgId || null,
             hasTenantOrgId: Boolean(validationPayload?.tenant?.orgId),
             hasOrgId: Boolean(validationPayload?.org_id),
             hasCamelOrgId: Boolean(validationPayload?.orgId),
-            status: validationResponse.status,
+            responseStatus: validationResponse.status,
             responseKeys: validationResponseKeys,
             failureReason: "missing_tenant_org",
             stage: "processing_validation",
@@ -133,7 +174,7 @@ export default function ProcessingPage() {
           throw new Error("RESULT_PERSISTENCE_MISSING_ORG");
         } else if (!validationPayload?.tenant?.orgId) {
           console.warn("[PROCESSING] result validation normalized tenant from fallback org id", {
-            dbReferenceId,
+            resultId: dbReferenceId,
             tenantOrgId: validationTenantOrgId,
           });
         }
@@ -146,8 +187,8 @@ export default function ProcessingPage() {
       } catch (e) {
         if (e instanceof Error && e.message === "TENANT_RESOLUTION_FAILED") {
           console.warn("[PROCESSING] tenant resolution failed; falling back to preview result", {
-            orgId: data?.tenant?.orgId || null,
-            orgSlug: data?.tenant?.orgSlug || null,
+            orgId: payload?.tenant?.orgId || null,
+            orgSlug: payload?.tenant?.orgSlug || null,
           });
           if (!cancelled) {
             router.replace("/result?preview=1");
@@ -157,17 +198,22 @@ export default function ProcessingPage() {
 
         const failureReason = e instanceof Error ? e.message : "UNKNOWN_NON_ERROR";
         console.error("[PROCESSING] critical persistence failure", {
-          commitSha: "b29b966",
+          commitSha: "4d65c5b",
           currentUrl: typeof window !== "undefined" ? window.location.href : null,
           isLoaded,
+          isJourneyLoaded,
           failureReason,
-          orgSlug: data?.tenant?.orgSlug || null,
-          orgId: data?.tenant?.orgId || null,
-          hasTenant: Boolean(data?.tenant && Object.keys(data.tenant).some((k) => (data.tenant as Record<string, unknown>)[k])),
+          orgSlug: payload?.tenant?.orgSlug || null,
+          orgId: payload?.tenant?.orgId || null,
+          hasTenant: Boolean(payload?.tenant && Object.keys(payload.tenant).some((k) => (payload.tenant as Record<string, unknown>)[k])),
           errorStack: e instanceof Error ? (e.stack?.split("\n").slice(0, 4).join(" | ") ?? null) : null,
         });
         if (!cancelled) {
-          setError(failureReason);
+          setError({
+            code: failureReason,
+            safeMessage: "Não foi possível validar e salvar seu resultado com segurança.",
+            stage: "processing_validation",
+          });
         }
       } finally {
         if (!cancelled) {
@@ -181,13 +227,16 @@ export default function ProcessingPage() {
     return () => {
       cancelled = true;
     };
-  }, [data, isLoaded, router, retryTick, status]);
+  }, [data, isLoaded, isJourneyLoaded, journey, orgSlugFromQuery, router, retryTick, status]);
 
   const handleRetry = () => {
     isGenerating.current = false;
     setError(null);
     setRetryTick((value) => value + 1);
   };
+
+  const restartOrgSlug = orgSlugFromQuery || data?.tenant?.orgSlug || journey?.onboardingSeed?.tenant?.orgSlug || "";
+  const restartHref = restartOrgSlug ? `/onboarding/chat?org=${encodeURIComponent(restartOrgSlug)}` : "/onboarding/chat";
 
   if (error) {
     return (
@@ -198,23 +247,28 @@ export default function ProcessingPage() {
             <Heading as="h4" className="font-serif text-lg tracking-[0.2em] text-[#C9A84C]">
               PERSISTÊNCIA FALHOU
             </Heading>
-            <Text className="text-sm leading-relaxed text-white/70">
-              Não foi possível validar e salvar seu resultado com segurança.
+            <Text className="text-sm leading-relaxed text-white/70">{error.safeMessage}</Text>
+            <Text className="text-sm leading-relaxed text-white/55">
               A operação foi interrompida antes de navegar para a tela final.
             </Text>
-            {error && (
-              <Text className="font-mono text-[10px] text-[#C9A84C]/50 break-all">
-                {error}
-              </Text>
-            )}
+            <Text className="font-mono text-[10px] text-[#C9A84C]/50 break-all">{error.code}</Text>
           </div>
-          <button
-            type="button"
-            onClick={handleRetry}
-            className="rounded-full border border-[#C9A84C]/30 bg-[#C9A84C]/10 px-5 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-[#C9A84C] transition-colors hover:bg-[#C9A84C]/20"
-          >
-            Tentar Novamente
-          </button>
+          <div className="flex w-full flex-col gap-3">
+            <button
+              type="button"
+              onClick={handleRetry}
+              className="rounded-full border border-[#C9A84C]/30 bg-[#C9A84C]/10 px-5 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-[#C9A84C] transition-colors hover:bg-[#C9A84C]/20"
+            >
+              Tentar Novamente
+            </button>
+            <button
+              type="button"
+              onClick={() => router.replace(restartHref)}
+              className="rounded-full border border-white/10 bg-white/5 px-5 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-white/70 transition-colors hover:bg-white/10"
+            >
+              Reiniciar Jornada
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -237,9 +291,7 @@ export default function ProcessingPage() {
         <Heading as="h4" className="mb-2 font-serif text-base tracking-widest text-[#C9A84C] transition-opacity duration-300 sm:text-lg">
           VENUS STYLIST
         </Heading>
-        <Text className="text-sm leading-relaxed text-white/70">
-          {buildVenusBodyScannerIntro()}
-        </Text>
+        <Text className="text-sm leading-relaxed text-white/70">{buildVenusBodyScannerIntro()}</Text>
         <div className="relative mt-4 h-10 w-full">
           {PHASES.map((phase, i) => (
             <Text
@@ -256,4 +308,3 @@ export default function ProcessingPage() {
     </div>
   );
 }
-

@@ -5,6 +5,11 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { OnboardingData, OnboardingConversationData, defaultOnboardingData } from "@/types/onboarding";
 import { useAuth } from "@/lib/auth/AuthContext";
 import {
+  hydrateOnboardingStorage,
+  mergeOnboardingData,
+  persistOnboardingStorage,
+} from "@/lib/onboarding/storage";
+import {
   fetchUserJourneyState,
   resolveUserJourneyState,
   saveUserJourneyState,
@@ -24,65 +29,6 @@ const OnboardingContext = createContext<OnboardingContextProps | undefined>(unde
 
 function normalize(value: string | null | undefined) {
   return typeof value === "string" ? value.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9_-]/g, "") : "";
-}
-
-function safeSessionStorageGet(key: string) {
-  try {
-    return typeof window === "undefined" ? null : window.sessionStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function safeSessionStorageSet(key: string, value: string) {
-  try {
-    if (typeof window === "undefined") return;
-    window.sessionStorage.setItem(key, value);
-  } catch {
-    // Ignore storage failures on browsers with restricted storage access.
-  }
-}
-
-function mergeOnboardingData(parsed: Partial<OnboardingData>, queryOrgSlug: string): OnboardingData {
-  return {
-    ...defaultOnboardingData,
-    ...parsed,
-    intent: {
-      ...defaultOnboardingData.intent,
-      ...(parsed.intent || {}),
-    },
-    lifestyle: {
-      ...defaultOnboardingData.lifestyle,
-      ...(parsed.lifestyle || {}),
-    },
-    colors: {
-      ...defaultOnboardingData.colors,
-      ...(parsed.colors || {}),
-    },
-    body: {
-      ...defaultOnboardingData.body,
-      ...(parsed.body || {}),
-    },
-    scanner: {
-      ...defaultOnboardingData.scanner,
-      ...(parsed.scanner || {}),
-    },
-    conversation: {
-      ...defaultOnboardingData.conversation,
-      ...(parsed.conversation || {}),
-    },
-    tenant: {
-      ...defaultOnboardingData.tenant,
-      ...(parsed.tenant || {}),
-      orgSlug: queryOrgSlug || parsed.tenant?.orgSlug,
-    },
-  };
-}
-
-const ONBOARDING_STORAGE_PREFIX = "venus_onboarding";
-
-function buildStorageKey(userId: string | null | undefined, orgSlug: string | null | undefined) {
-  return [ONBOARDING_STORAGE_PREFIX, userId || "guest", orgSlug || "global"].join(":");
 }
 
 function resolveJourneyRouteState(pathname: string) {
@@ -138,26 +84,16 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   const routeState = useMemo(() => resolveJourneyRouteState(pathname), [pathname]);
 
   useEffect(() => {
-    const storageKey = buildStorageKey(user?.id || null, queryOrgSlug || data.tenant?.orgSlug || null);
-    const anonymousKey = buildStorageKey(null, queryOrgSlug || data.tenant?.orgSlug || null);
-    const saved = safeSessionStorageGet(storageKey) || safeSessionStorageGet(anonymousKey);
+    const storageSnapshot = typeof window === "undefined"
+      ? null
+      : hydrateOnboardingStorage({
+          storage: window.sessionStorage,
+          userId: user?.id || null,
+          queryOrgSlug,
+        });
 
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as Partial<OnboardingData>;
-        setData(mergeOnboardingData(parsed, queryOrgSlug));
-      } catch (e) {
-        console.error("Failed to parse onboarding data", e);
-        if (queryOrgSlug) {
-          setData((current) => ({
-            ...current,
-            tenant: {
-              ...current.tenant,
-              orgSlug: queryOrgSlug,
-            },
-          }));
-        }
-      }
+    if (storageSnapshot?.data) {
+      setData(storageSnapshot.data);
     } else if (queryOrgSlug) {
       setData((current) => ({
         ...current,
@@ -168,9 +104,6 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       }));
     }
 
-    if (!saved && !queryOrgSlug) {
-      setData(defaultOnboardingData);
-    }
     setIsLoaded(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -228,8 +161,15 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     if (isLoaded) {
-      const storageKey = buildStorageKey(user?.id || null, queryOrgSlug || data.tenant?.orgSlug || null);
-      safeSessionStorageSet(storageKey, JSON.stringify(data));
+      if (typeof window !== "undefined") {
+        persistOnboardingStorage({
+          storage: window.sessionStorage,
+          userId: user?.id || null,
+          queryOrgSlug,
+          data,
+        });
+      }
+
       if (!user?.id) {
         return;
       }
