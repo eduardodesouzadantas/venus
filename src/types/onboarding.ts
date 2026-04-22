@@ -1,4 +1,5 @@
 import type { StyleDirectionPreference } from "@/lib/style-direction";
+import type { ConsultationProfile } from "@/lib/consultation-profile";
 
 export interface OnboardingConversationData {
   line: string;
@@ -85,6 +86,7 @@ export interface OnboardingData {
     phone: string;
     email: string;
   };
+  consultation: ConsultationProfile;
   conversation: OnboardingConversationData;
   tenant?: {
     orgSlug?: string;
@@ -140,5 +142,17 @@ export const defaultOnboardingData: OnboardingData = {
   idealFit: "",
   idealFabrics: [],
   avoidFabrics: [],
+  consultation: {
+    styleDirection: "",
+    desiredPerception: "",
+    occasion: "",
+    boldness: "",
+    restrictions: [],
+    preferredColors: [],
+    avoidColors: [],
+    bodyFocus: "",
+    aestheticVibe: "",
+    confidenceSource: "",
+  },
   conversation: { line: "", imageGoal: "", styleDirection: "", avoidColorNote: "", favoriteColors: [], avoidColors: [] },
 };

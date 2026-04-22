@@ -3,10 +3,13 @@ import type { LookData, LookItem, ResultPayload } from "@/types/result";
 import type { Product } from "@/lib/catalog";
 import { deriveCatalogStylistProfile } from "@/lib/catalog/stylist-profile";
 import { buildColorStyleEvidence, flattenColorStyleEvidence, type ColorStyleEvidence } from "@/lib/color-style-evidence";
+import { buildConsultationProfileSummary, normalizeConsultationProfile, type ConsultationProfile } from "@/lib/consultation-profile";
 import { deriveEssenceProfile } from "@/lib/result/essence";
 import {
   getStyleDirectionCatalogSignals,
   getStyleDirectionDisplayLabel,
+  isProductCompatibleWithStyleDirection,
+  isExplicitNeutralStyleDirection,
   normalizeStyleDirectionPreference,
   type StyleDirectionPreference,
 } from "@/lib/style-direction";
@@ -23,6 +26,7 @@ type ProfileSignals = {
   goal: string;
   goalKey: string;
   styleDirection: StyleDirectionPreference;
+  consultation: ConsultationProfile;
   satisfaction: number;
   mainPain: string;
   favoriteColors: string[];
@@ -131,6 +135,8 @@ const GENERIC_MARKETING_PATTERNS = [
   /vire o jogo/i,
 ];
 
+const CATALOG_NO_MATCH_FOR_STYLE_DIRECTION = "CATALOG_NO_MATCH_FOR_STYLE_DIRECTION";
+
 function normalizeText(value: unknown): string {
   return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
 }
@@ -169,29 +175,6 @@ function normalizeMetal(value: string | undefined): "Dourado" | "Prateado" {
   return normalized.includes("dour") ? "Dourado" : "Prateado";
 }
 
-function isDirectionCompatible(
-  productDirection: "Masculina" | "Feminina" | "Neutra",
-  targetDirection: ProfileSignals["styleDirection"],
-  productSignals: string[] = [],
-): boolean {
-  const preference = normalizeStyleDirectionPreference(targetDirection);
-  const signalText = matchText(productSignals.join(" "));
-
-  if (preference === "Masculina") {
-    return productDirection === "Masculina" || productDirection === "Neutra";
-  }
-
-  if (preference === "Feminina") {
-    return productDirection === "Feminina" || productDirection === "Neutra";
-  }
-
-  if (preference === "Streetwear" || preference === "Casual" || preference === "Social") {
-    return productDirection === "Neutra" || getStyleDirectionCatalogSignals(preference).some((keyword) => signalText.includes(keyword));
-  }
-
-  return productDirection === "Neutra";
-}
-
 function buildPaletteColor(name: string, fallbackHex: string): { hex: string; name: string } {
   const normalized = matchText(name);
   if (!normalized) {
@@ -219,10 +202,12 @@ function buildOnboardingPalette(
     "goal" | "goalKey" | "styleDirection" | "favoriteColors" | "avoidColors" | "metal" | "contrast" | "colorSeason" | "undertone" | "skinTone" | "paletteEvidence"
   >,
 ): ResultPayload["palette"] {
-  const directionLabel = getStyleDirectionDisplayLabel(profile.styleDirection).toLowerCase();
+  const directionLabel = isExplicitNeutralStyleDirection(profile.styleDirection)
+    ? "Base neutra"
+    : getStyleDirectionDisplayLabel(profile.styleDirection);
 
   return {
-    family: `${profile.paletteEvidence.confidence === "high" ? "Leitura confirmada" : "Leitura preliminar"} • ${directionLabel === "sem preferência" ? "Base segura" : getStyleDirectionDisplayLabel(profile.styleDirection)}`,
+    family: `${profile.paletteEvidence.confidence === "high" ? "Leitura confirmada" : "Leitura preliminar"} • ${directionLabel}`,
     description: profile.paletteEvidence.evidence,
     metal: profile.metal,
     contrast: profile.contrast,
@@ -235,6 +220,7 @@ function getProfileSignals(userData: OnboardingData) {
   const goal = compactText(userData.intent.imageGoal, "Elegância", 40);
   const goalKey = pickGoalKey(goal);
   const styleDirection = normalizeStyleDirectionPreference(userData.intent.styleDirection || "");
+  const consultation = normalizeConsultationProfile(userData.consultation);
   const fit = compactText(userData.body.fit, "Slim", 24);
   const faceLines = compactText(userData.body.faceLines, "Marcantes", 24);
   const hairLength = compactText(userData.body.hairLength, "Médio", 24);
@@ -262,8 +248,8 @@ function getProfileSignals(userData: OnboardingData) {
   const colorKeywords = [...favoriteColors, ...avoidColors].map((value) => matchText(value));
   const paletteEvidence = buildColorStyleEvidence({
     styleDirection,
-    favoriteColors,
-    avoidColors,
+    favoriteColors: consultation.preferredColors.length > 0 ? consultation.preferredColors : favoriteColors,
+    avoidColors: consultation.avoidColors.length > 0 ? consultation.avoidColors : avoidColors,
     colorSeason,
     undertone,
     skinTone,
@@ -282,6 +268,12 @@ function getProfileSignals(userData: OnboardingData) {
     hairLength,
     mainPain,
     metal,
+    consultation: {
+      ...consultation,
+      styleDirection: consultation.styleDirection || styleDirection,
+      preferredColors: consultation.preferredColors.length > 0 ? consultation.preferredColors : favoriteColors,
+      avoidColors: consultation.avoidColors.length > 0 ? consultation.avoidColors : avoidColors,
+    },
     skinTone,
     undertone,
     colorSeason,
@@ -395,30 +387,37 @@ function buildBodyVisagism(profile: Pick<ProfileSignals, "fit" | "faceLines" | "
 }
 
 function buildDiagnostic(
-  profile: Pick<ProfileSignals, "goal" | "mainPain" | "fit" | "faceLines" | "faceShape" | "colorSeason" | "undertone" | "contrast">,
+  profile: Pick<ProfileSignals, "goal" | "mainPain" | "fit" | "faceLines" | "faceShape" | "colorSeason" | "undertone" | "contrast" | "consultation">,
   selectedNames: string[],
 ): ResultPayload["diagnostic"] {
   const firstItem = selectedNames[0] || "o catálogo";
+  const consultation = profile.consultation;
+  const desiredPerception = consultation.desiredPerception || profile.goal;
+  const occasion = consultation.occasion ? ` para ${consultation.occasion.toLowerCase()}` : "";
   return {
-    currentPerception: `Seu perfil pede menos ruído e mais estrutura. Hoje o ponto sensível é ${profile.mainPain.toLowerCase()} e o caimento ${profile.fit.toLowerCase()}, com leitura de ${profile.faceLines.toLowerCase()} e contraste ${profile.contrast.toLowerCase()}.`,
-    desiredGoal: `Projetar ${profile.goal.toLowerCase()} de um jeito mais limpo, pessoal e consistente, respeitando ${profile.colorSeason || "a sua estação"} e o subtom ${profile.undertone || "não informado"}.`,
-    gapSolution: `Usar ${firstItem} como base e completar com peças do catálogo que respeitem seu rosto ${profile.faceLines.toLowerCase()}${profile.faceShape ? `, formato de rosto ${profile.faceShape.toLowerCase()}` : ""} e o caimento ${profile.fit.toLowerCase()}.`,
+    currentPerception: `Seu perfil pede menos ruído e mais estrutura${occasion}. Hoje o ponto sensível é ${profile.mainPain.toLowerCase()} e o caimento ${profile.fit.toLowerCase()}, com leitura de ${profile.faceLines.toLowerCase()} e contraste ${profile.contrast.toLowerCase()}.`,
+    desiredGoal: `Projetar ${desiredPerception.toLowerCase()} de um jeito mais limpo, pessoal e consistente, respeitando ${profile.colorSeason || "a sua estação"} e o subtom ${profile.undertone || "não informado"}.`,
+    gapSolution: `Usar ${firstItem} como base e completar com peças do catálogo que respeitem seu rosto ${profile.faceLines.toLowerCase()}${profile.faceShape ? `, formato de rosto ${profile.faceShape.toLowerCase()}` : ""}, o foco em ${consultation.bodyFocus || "imagem"} e o caimento ${profile.fit.toLowerCase()}.`,
   };
 }
 
-function buildAccessories(profile: Pick<ProfileSignals, "goalKey" | "metal" | "goal">, accessoryNames: string[]): ResultPayload["accessories"] {
+function buildAccessories(profile: Pick<ProfileSignals, "goalKey" | "metal" | "goal" | "consultation">, accessoryNames: string[]): ResultPayload["accessories"] {
   const hint = accessoryNames.length > 0 ? accessoryNames.join(" • ") : profile.metal === "Dourado" ? "Metal quente em ponto único" : "Metal frio em ponto único";
+  const restrictionHint = profile.consultation.restrictions.length > 0
+    ? ` Evitando ${profile.consultation.restrictions.slice(0, 2).join(", ")}.`
+    : "";
   return {
     scale: profile.goalKey === "Atração" ? "Marcante" : profile.goalKey === "Criatividade" ? "Moderada" : "Minimalista",
     focalPoint: "Punhos e parte superior do tronco",
-    advice: `Mantenha poucos pontos de atenção e deixe ${hint.toLowerCase()} fechar a composição sem competir com a peça principal.`,
+    advice: `Mantenha poucos pontos de atenção e deixe ${hint.toLowerCase()} fechar a composição sem competir com a peça principal.${restrictionHint}`,
   };
 }
 
-function buildHero(profile: Pick<ProfileSignals, "goalKey" | "goal" | "fit">): ResultPayload["hero"] {
+function buildHero(profile: Pick<ProfileSignals, "goalKey" | "goal" | "fit" | "consultation">): ResultPayload["hero"] {
+  const consultation = profile.consultation;
   return {
     dominantStyle: buildHeroStyle(profile.goalKey),
-    subtitle: `Seu perfil pede ${profile.goal.toLowerCase()} com leitura limpa, fit ${profile.fit.toLowerCase()} e uso real.`,
+    subtitle: `Seu perfil pede ${consultation.desiredPerception.toLowerCase() || profile.goal.toLowerCase()} com leitura limpa, fit ${profile.fit.toLowerCase()} e uso real${consultation.occasion ? ` para ${consultation.occasion.toLowerCase()}` : ""}.`,
     coverImageUrl: "",
   };
 }
@@ -451,34 +450,42 @@ function scoreDirectionMatch(text: string, direction: ProfileSignals["styleDirec
   const hasCasual = casualSignals.some((keyword) => text.includes(keyword));
   const hasSocial = socialSignals.some((keyword) => text.includes(keyword));
 
-  if (preference === "Masculina") {
+  if (preference === "masculine") {
     if (hasMasculine) return 16;
     if (hasFeminine) return -28;
+    if (hasNeutral) return 12;
     return 0;
   }
 
-  if (preference === "Feminina") {
+  if (preference === "feminine") {
     if (hasFeminine) return 16;
     if (hasMasculine) return -28;
+    if (hasNeutral) return 12;
     return 0;
   }
 
-  if (preference === "Streetwear") {
+  if (preference === "streetwear") {
     if (hasStreet || hasNeutral) return 12;
     if (hasFeminine) return -4;
     return 0;
   }
 
-  if (preference === "Casual") {
+  if (preference === "casual") {
     if (hasCasual || hasNeutral) return 10;
     if (hasFeminine || hasMasculine) return -2;
     return 0;
   }
 
-  if (preference === "Social") {
+  if (preference === "social") {
     if (hasSocial || hasNeutral) return 12;
     if (hasMasculine || hasFeminine) return -2;
     return 0;
+  }
+
+  if (preference === "neutral" || preference === "no_preference") {
+    if (hasNeutral) return 14;
+    if (hasMasculine || hasFeminine) return -12;
+    return 8;
   }
 
   if (hasNeutral) return 10;
@@ -514,6 +521,7 @@ function scorePaletteEvidence(text: string, evidence: ColorStyleEvidence): numbe
 
 function scoreProduct(product: Product, blueprint: LookBlueprint, profile: ProfileSignals): number {
   const stylist = deriveCatalogStylistProfile(product);
+  const productColors = Array.isArray((product as any).colors) ? ((product as any).colors as string[]) : [];
   const text = matchText([
     product.name,
     product.category,
@@ -524,6 +532,17 @@ function scoreProduct(product: Product, blueprint: LookBlueprint, profile: Profi
   ].filter(Boolean).join(" "));
 
   let score = 0;
+  const normalizedStylistDirection = normalizeStyleDirectionPreference(stylist.direction);
+  const consultation = profile.consultation;
+  const consultationRestrictions = consultation.restrictions.map((value) => matchText(value));
+  const consultationPreferredColors = consultation.preferredColors.map((value) => matchText(value));
+  const consultationAvoidColors = consultation.avoidColors.map((value) => matchText(value));
+  const consultationSignals = [
+    consultation.desiredPerception,
+    consultation.occasion,
+    consultation.bodyFocus,
+    consultation.aestheticVibe,
+  ].map(matchText).filter(Boolean);
 
   for (const keyword of blueprint.keywords) {
     if (text.includes(keyword)) score += 10;
@@ -536,8 +555,62 @@ function scoreProduct(product: Product, blueprint: LookBlueprint, profile: Profi
   score += scoreDirectionMatch(text, profile.styleDirection);
   score += scorePaletteEvidence(text, profile.paletteEvidence);
 
-  if (normalizeStyleDirectionPreference(stylist.direction) === normalizeStyleDirectionPreference(profile.styleDirection)) score += 8;
-  if (stylist.direction !== "Neutra" && normalizeStyleDirectionPreference(profile.styleDirection) === "Sem preferência") score += 2;
+  if (consultationSignals.some((signal) => text.includes(signal))) {
+    score += 3;
+  }
+
+  if (consultation.occasion && text.includes(matchText(consultation.occasion))) {
+    score += 4;
+  }
+
+  if (consultation.desiredPerception && text.includes(matchText(consultation.desiredPerception))) {
+    score += 2;
+  }
+
+  if (consultation.bodyFocus) {
+    const bodyFocusSignals = consultation.bodyFocus.includes("rosto")
+      ? ["rosto", "gola", "decote", "colarinho"]
+      : consultation.bodyFocus.includes("tronco")
+        ? ["tronco", "ombro", "blazer", "camisa", "jaqueta"]
+        : consultation.bodyFocus.includes("perna")
+          ? ["calça", "saia", "comprimento"]
+          : consultation.bodyFocus.includes("silhueta")
+            ? ["linha", "estrutura", "modelagem", "caimento"]
+            : [];
+
+    if (bodyFocusSignals.some((signal) => text.includes(signal))) {
+      score += 2;
+    }
+  }
+
+  if (consultation.boldness === "high") {
+    if (text.includes("statement") || text.includes("impacto") || text.includes("recorte") || text.includes("textura") || text.includes("contraste")) {
+      score += 3;
+    }
+  } else if (consultation.boldness === "low") {
+    if (text.includes("base") || text.includes("neutro") || text.includes("limpo") || text.includes("silencioso") || text.includes("versátil")) {
+      score += 3;
+    }
+    if (text.includes("statement") || text.includes("impacto") || text.includes("recorte") || text.includes("textura") || text.includes("contraste")) {
+      score -= 2;
+    }
+  }
+
+  if (consultationRestrictions.length > 0 && consultationRestrictions.some((restriction) => restriction && text.includes(restriction))) {
+    score -= 12;
+  }
+
+  if (consultationPreferredColors.length > 0 && productColors.length > 0 && productColors.some((color) => consultationPreferredColors.some((preferred) => color.toLowerCase().includes(preferred)))) {
+    score += 2;
+  }
+
+  if (consultationAvoidColors.length > 0 && productColors.length > 0 && productColors.some((color) => consultationAvoidColors.some((avoid) => color.toLowerCase().includes(avoid)))) {
+    score -= 6;
+  }
+
+  if (normalizedStylistDirection === normalizeStyleDirectionPreference(profile.styleDirection)) score += 10;
+  if ((normalizedStylistDirection === "neutral" || normalizedStylistDirection === "no_preference") && isExplicitNeutralStyleDirection(profile.styleDirection)) score += 4;
+  if ((normalizedStylistDirection === "masculine" || normalizedStylistDirection === "feminine") && isExplicitNeutralStyleDirection(profile.styleDirection)) score -= 4;
   if (stylist.visualWeight === "Alta" && blueprint.type !== "Expansão Direcionada") score += 3;
   if (stylist.visualWeight === "Pontual" && blueprint.type === "Expansão Direcionada") score += 4;
   if (stylist.formality === "Alta" && blueprint.type === "Híbrido Premium") score += 4;
@@ -870,11 +943,15 @@ function formatCatalogProductLine(product: Product): string {
 
 export function filterCatalogForRecommendation(catalog: Product[], userData: OnboardingData): Product[] {
   const profile = getProfileSignals(userData);
+  const consultationRestrictionTokens = profile.consultation.restrictions.map((value) => matchText(value));
   return catalog.filter((product) => {
     const stylist = deriveCatalogStylistProfile(product);
-    return isDirectionCompatible(
-      stylist.direction,
+    const productSignals = [stylist.summary, stylist.authorityRationale, stylist.conversionCopy, ...stylist.styleTags, ...stylist.useCases].map(matchText).join(" ");
+    const restrictionHit = consultationRestrictionTokens.some((restriction) => restriction && productSignals.includes(restriction));
+
+    return !restrictionHit && isProductCompatibleWithStyleDirection(
       profile.styleDirection,
+      stylist.direction,
       [stylist.summary, stylist.authorityRationale, stylist.conversionCopy, ...stylist.styleTags, ...stylist.useCases],
     );
   });
@@ -885,7 +962,8 @@ export function summarizeOnboardingProfile(userData: OnboardingData): string {
   const essence = deriveEssenceProfile(userData);
   const lines = [
     `essence: ${essence.label} | ${essence.summary}`,
-    `style_direction: ${profile.styleDirection}`,
+    `style_direction: ${getStyleDirectionDisplayLabel(profile.styleDirection)}`,
+    `consultation: ${buildConsultationProfileSummary(profile.consultation)}`,
     `goal: ${profile.goal}`,
     `satisfaction: ${profile.satisfaction}/10`,
     `main_pain: ${profile.mainPain}`,
@@ -922,6 +1000,7 @@ export function buildCatalogAwareFallbackResult(userData: OnboardingData, catalo
   const essence = deriveEssenceProfile(userData);
   const filteredCatalog = filterCatalogForRecommendation(catalog, userData);
   const onboardingPalette = buildPersonalizedPalette(profileSignals);
+  const fallbackCode = catalog.length > 0 && filteredCatalog.length === 0 ? CATALOG_NO_MATCH_FOR_STYLE_DIRECTION : undefined;
   const profile: NormalizedProfile = {
     ...profileSignals,
     heroStyle: essence.label,
@@ -952,6 +1031,8 @@ export function buildCatalogAwareFallbackResult(userData: OnboardingData, catalo
   const accessoryNames = looks.flatMap((look) => look.accessories);
 
   return {
+    ...(fallbackCode ? { recommendationFallbackCode: fallbackCode } : {}),
+    consultation: profileSignals.consultation,
     hero: buildHero(profile),
     palette: buildPersonalizedPalette(profile),
     diagnostic: buildDiagnostic(profile, selectedNames),
@@ -980,6 +1061,7 @@ export function normalizeOpenAIRecommendationPayload(
   const essence = deriveEssenceProfile(userData);
   const filteredCatalog = filterCatalogForRecommendation(catalog, userData);
   const onboardingPalette = buildPersonalizedPalette(profileSignals);
+  const fallbackCode = catalog.length > 0 && filteredCatalog.length === 0 ? CATALOG_NO_MATCH_FOR_STYLE_DIRECTION : raw.recommendationFallbackCode;
   const profile: NormalizedProfile = {
     ...profileSignals,
     heroStyle: essence.label,
@@ -1014,6 +1096,8 @@ export function normalizeOpenAIRecommendationPayload(
   const paletteEvidence = profile.paletteEvidence;
 
   return {
+    ...(fallbackCode ? { recommendationFallbackCode: fallbackCode } : {}),
+    consultation: profile.consultation,
     hero: {
       dominantStyle: compactText(raw.hero?.dominantStyle, profile.heroStyle, 60),
       subtitle: compactText(raw.hero?.subtitle, profile.heroSubtitle, 120),

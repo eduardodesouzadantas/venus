@@ -4,6 +4,7 @@ import type { CanonicalProduct } from "./types";
 import { queryCatalogForConversation, getCatalogLink } from "./engine";
 import type { CatalogQueryParams } from "./types";
 import type { UserMemory, ConversationContext } from "@/lib/ai/conversation-engine-types";
+import { normalizeConsultationProfile } from "@/lib/consultation-profile";
 
 export interface CatalogRecommendationOutput {
   recommendations: CanonicalProduct[];
@@ -128,10 +129,21 @@ function extractSearchIntent(userMessage: string, context: ConversationContext):
 
 function buildContextFromMemory(memory: UserMemory | null, conversationContext: ConversationContext) {
   if (!memory) return undefined;
+  const consultation = normalizeConsultationProfile(memory.consultationProfile);
 
   return {
     conversation_state: conversationContext.currentState,
     user_style_identity: memory.styleIdentity,
+    user_style_direction: memory.styleDirection,
+    user_desired_perception: consultation.desiredPerception || undefined,
+    user_occasion: consultation.occasion || undefined,
+    user_boldness: consultation.boldness || undefined,
+    user_restrictions: consultation.restrictions || undefined,
+    user_preferred_colors: consultation.preferredColors || undefined,
+    user_avoid_colors: consultation.avoidColors || undefined,
+    user_body_focus: consultation.bodyFocus || undefined,
+    user_aesthetic_vibe: consultation.aestheticVibe || undefined,
+    user_confidence_source: consultation.confidenceSource || undefined,
     user_image_goal: memory.imageGoal,
     user_palette_family: memory.paletteFamily,
     user_fit_preference: memory.fit,

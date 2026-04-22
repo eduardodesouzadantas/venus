@@ -1,3 +1,5 @@
+import type { ConsultationProfile } from "@/lib/consultation-profile";
+
 export interface LookItem {
   id: string;
   product_id?: string;
@@ -96,6 +98,8 @@ export interface PaletteEvidence {
 }
 
 export interface ResultPayload {
+  recommendationFallbackCode?: string;
+  consultation?: ConsultationProfile;
   hero: {
     dominantStyle: string;
     subtitle: string;

@@ -157,6 +157,32 @@ export async function queryCatalog(
   }
 
   const rankedProducts = rankProducts(allProducts, params);
+  if (params.context?.user_style_direction && rankedProducts.length > 0 && rankedProducts[0].score <= -1000) {
+    logQueryEntry({
+      org_id: params.org_id,
+      source_type: primarySource.type,
+      source_id: primarySource.id,
+      action: "no_results",
+      products_found: allProducts.length,
+      params,
+      error: "CATALOG_NO_MATCH_FOR_STYLE_DIRECTION",
+    });
+
+    return {
+      products: [],
+      source_used: primarySource,
+      fallback_used: fallbackSource,
+      total_found: allProducts.length,
+      query_params: params,
+      metadata: {
+        sources_tried: sourcesTried,
+        sources_failed: sourcesFailed,
+        no_results: true,
+        ranking_applied: true,
+      },
+    };
+  }
+
   const topProducts = rankedProducts.slice(0, limit);
   const recommendations = rankedProducts.slice(0, MAX_RECOMMENDATIONS);
 

@@ -3,11 +3,29 @@ import "server-only";
 import type {
   CanonicalProduct,
   CatalogQueryParams,
-  CatalogQueryContext,
   ProductRankingScore,
   RankingConfig,
 } from "./types";
 import { DEFAULT_RANKING_CONFIG } from "./types";
+import {
+  getStyleDirectionCatalogSignals,
+  getStyleDirectionDisplayLabel,
+  isProductCompatibleWithStyleDirection,
+  normalizeStyleDirectionPreference,
+} from "@/lib/style-direction";
+
+function normalizeText(value: unknown): string {
+  return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
+}
+
+function normalizeList(values: unknown): string[] {
+  return Array.isArray(values) ? values.map((value) => normalizeText(value)).filter(Boolean) : [];
+}
+
+function getProductDirection(product: CanonicalProduct): string {
+  const raw = product.raw_metadata?.style_direction || product.raw_metadata?.styleDirection || product.raw_metadata?.direction;
+  return normalizeStyleDirectionPreference(raw || normalizeText(product.category) || normalizeText(product.title));
+}
 
 export function rankProducts(
   products: CanonicalProduct[],
@@ -17,10 +35,35 @@ export function rankProducts(
   if (products.length === 0) return [];
 
   const context = params.context || {};
+  const explicitStyleDirection = normalizeStyleDirectionPreference(context.user_style_direction || "");
+  const consultationOccasion = normalizeText(context.user_occasion || params.occasion);
+  const consultationBoldness = normalizeText(context.user_boldness).toLowerCase();
+  const consultationRestrictions = normalizeList(context.user_restrictions);
+  const consultationPreferredColors = normalizeList(context.user_preferred_colors);
+  const consultationAvoidColors = normalizeList(context.user_avoid_colors);
+  const consultationBodyFocus = normalizeText(context.user_body_focus).toLowerCase();
+  const consultationVibe = normalizeText(context.user_aesthetic_vibe).toLowerCase();
+  const consultationPerception = normalizeText(context.user_desired_perception).toLowerCase();
+  const consultationConfidenceSource = normalizeText(context.user_confidence_source).toLowerCase();
 
   const scored = products.map((product) => {
     let score = 0;
     const reasons: string[] = [];
+    const productDirection = getProductDirection(product);
+    const productColors = Array.isArray(product.colors) ? product.colors : [];
+    const rawMetadata = product.raw_metadata as Record<string, unknown> | undefined;
+    const occasionTags = Array.isArray(rawMetadata?.occasion_tags) ? (rawMetadata?.occasion_tags as string[]) : [];
+    const styleTags = Array.isArray(rawMetadata?.style_tags) ? (rawMetadata?.style_tags as string[]) : [];
+    const productSignals = [
+      product.title,
+      product.description,
+      product.category,
+      ...product.style_tags,
+      ...productColors,
+      ...occasionTags,
+      ...styleTags,
+    ].filter((value): value is string => typeof value === "string" && Boolean(value));
+    const productText = productSignals.join(" ").toLowerCase();
 
     if (context.user_style_identity && product.style_tags.length > 0) {
       const styleMatch = product.style_tags.some((tag) =>
@@ -32,16 +75,160 @@ export function rankProducts(
       }
     }
 
-    if (context.user_palette_family && product.colors.length > 0) {
-      const colorMatch = product.colors.some((c) =>
+    if (context.user_style_direction) {
+      const compatible = isProductCompatibleWithStyleDirection(explicitStyleDirection, productDirection, productSignals);
+      if (compatible) {
+        score += config.style_match_weight * 2;
+        reasons.push(`Direção ${getStyleDirectionDisplayLabel(explicitStyleDirection)} compatível`);
+        const directionSignals = getStyleDirectionCatalogSignals(explicitStyleDirection);
+        if (product.style_tags.some((tag) => directionSignals.some((signal) => tag.toLowerCase().includes(signal)))) {
+          score += config.style_match_weight;
+          reasons.push("Tags compatíveis com a direção escolhida");
+        }
+      } else {
+        score -= 1000;
+        reasons.push("Bloqueado por direção de estilo");
+      }
+    }
+
+    if (consultationRestrictions.length > 0) {
+      const restrictionHit = consultationRestrictions.some((restriction) => {
+        const tokens = restriction
+          .toLowerCase()
+          .split(/[\s,;/|]+/g)
+          .map((token) => token.trim())
+          .filter(Boolean);
+
+        return tokens.some((token) => productText.includes(token));
+      });
+
+      if (restrictionHit) {
+        score -= 40;
+        reasons.push("Bloqueado por restrição de consultoria");
+      }
+    }
+
+    if (consultationPerception) {
+      const perceptionSignals = consultationPerception.includes("autor") || consultationPerception.includes("presen")
+        ? ["autoridade", "presença", "estrutura", "firme"]
+        : consultationPerception.includes("discre")
+          ? ["discreto", "limpo", "neutro", "silencioso"]
+          : consultationPerception.includes("criativ")
+            ? ["editorial", "criativo", "impacto", "expressivo"]
+            : consultationPerception.includes("eleg")
+              ? ["elegante", "refinado", "sofisticado", "limpo"]
+              : ["base", "seguro", "versátil"];
+
+      if (perceptionSignals.some((signal) => productText.includes(signal))) {
+        score += config.style_match_weight;
+        reasons.push("Leitura alinhada à percepção desejada");
+      }
+    }
+
+    if (consultationOccasion) {
+      const occasionText = consultationOccasion.toLowerCase();
+      const occasionMatch =
+        (params.occasion && product.raw_metadata.occasion_tags && (product.raw_metadata.occasion_tags as string[]).some((tag) => tag.toLowerCase().includes(params.occasion!.toLowerCase()))) ||
+        productText.includes(occasionText);
+
+      if (occasionMatch) {
+        score += config.occasion_match_weight * 1.5;
+        reasons.push("Ocasião compatível");
+      }
+    }
+
+    if (consultationPreferredColors.length > 0 && productColors.length > 0) {
+      const preferredColorMatch = productColors.some((color) =>
+        consultationPreferredColors.some((preferred) => color.toLowerCase().includes(preferred.toLowerCase()))
+      );
+      if (preferredColorMatch) {
+        score += config.color_match_weight;
+        reasons.push("Cor preferida");
+      }
+    }
+
+    if (consultationAvoidColors.length > 0 && productColors.length > 0) {
+      const avoidColorMatch = productColors.some((color) =>
+        consultationAvoidColors.some((avoid) => color.toLowerCase().includes(avoid.toLowerCase()))
+      );
+      if (avoidColorMatch) {
+        score -= config.color_match_weight * 2;
+        reasons.push("Cor evitada");
+      }
+    }
+
+    if (consultationVibe) {
+      const vibeSignals = consultationVibe.includes("clean") || consultationVibe.includes("minimal")
+        ? ["limpo", "minimal", "neutro", "base", "silencioso"]
+        : consultationVibe.includes("editor")
+          ? ["editorial", "impacto", "statement", "expressivo", "assinatura"]
+          : consultationVibe.includes("urb")
+            ? ["urbano", "street", "casual", "moderno", "atitude"]
+            : consultationVibe.includes("cláss")
+              ? ["clássico", "alfaiataria", "refinado", "tradicional"]
+              : ["versátil", "equilíbrio", "uso real"];
+
+      if (vibeSignals.some((signal) => productText.includes(signal))) {
+        score += config.style_match_weight;
+        reasons.push("Vibe estética compatível");
+      }
+    }
+
+    if (consultationBoldness) {
+      const boldSignals = productText.includes("statement") || productText.includes("impacto") || productText.includes("recorte") || productText.includes("textura") || productText.includes("contraste");
+      const safeSignals = productText.includes("base") || productText.includes("neutro") || productText.includes("limpo") || productText.includes("silencioso") || productText.includes("versátil");
+
+      if (consultationBoldness === "high") {
+        if (boldSignals) {
+          score += config.style_match_weight;
+          reasons.push("Ousadia compatível");
+        }
+        if (safeSignals) {
+          score -= 1;
+        }
+      } else if (consultationBoldness === "low") {
+        if (safeSignals) {
+          score += config.style_match_weight;
+          reasons.push("Leitura segura");
+        }
+        if (boldSignals) {
+          score -= config.style_match_weight;
+          reasons.push("Ousadia acima do desejado");
+        }
+      }
+    }
+
+    if (consultationBodyFocus) {
+      const bodyFocusSignals = consultationBodyFocus.includes("rosto")
+        ? ["rosto", "gola", "decote", "colarinho"]
+        : consultationBodyFocus.includes("tronco")
+          ? ["tronco", "ombro", "blazer", "camisa", "jaqueta"]
+          : consultationBodyFocus.includes("perna")
+            ? ["calça", "saia", "comprimento"]
+            : consultationBodyFocus.includes("silhueta")
+              ? ["linha", "estrutura", "modelagem", "caimento"]
+              : [];
+
+      if (bodyFocusSignals.some((signal) => productText.includes(signal))) {
+        score += config.category_match_weight;
+        reasons.push("Foco corporal favorecido");
+      }
+    }
+
+    if (consultationConfidenceSource === "photo" && product.availability === "available") {
+      score += 0.5;
+    }
+
+    if (context.user_palette_family && productColors.length > 0) {
+      const colorMatch = productColors.some((c) =>
         c.toLowerCase().includes(context.user_palette_family!.toLowerCase())
       );
       if (colorMatch) {
         score += config.color_match_weight;
         reasons.push("Cor da sua paleta");
       }
-    } else if (params.color && product.colors.length > 0) {
-      const colorMatch = product.colors.some((c) =>
+    } else if (params.color && productColors.length > 0) {
+      const colorMatch = productColors.some((c) =>
         c.toLowerCase().includes(params.color!.toLowerCase())
       );
       if (colorMatch) {
@@ -50,8 +237,8 @@ export function rankProducts(
       }
     }
 
-    if (product.colors.length > 0) {
-      const colorText = product.colors.join(" ").toLowerCase();
+    if (productColors.length > 0) {
+      const colorText = productColors.join(" ").toLowerCase();
       const baseMatch = context.user_palette_base?.some((color) => colorText.includes(color.toLowerCase()));
       const accentMatch = context.user_palette_accent?.some((color) => colorText.includes(color.toLowerCase()));
       const cautionMatch = context.user_palette_caution?.some((color) => colorText.includes(color.toLowerCase()));
@@ -154,6 +341,18 @@ export function buildRecommendationJustification(
   const context = params.context || {};
 
   const justifications: string[] = [];
+
+  if (context.user_style_direction) {
+    justifications.push(`considerando sua direção ${getStyleDirectionDisplayLabel(context.user_style_direction)}`);
+  }
+
+  if (context.user_occasion) {
+    justifications.push(`para a ocasião ${context.user_occasion}`);
+  }
+
+  if (context.user_desired_perception) {
+    justifications.push(`com foco em ${context.user_desired_perception}`);
+  }
 
   if (context.user_style_identity) {
     justifications.push(`considerando seu estilo ${context.user_style_identity}`);

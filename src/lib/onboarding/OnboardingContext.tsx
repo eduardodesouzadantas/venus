@@ -67,6 +67,10 @@ function hasMeaningfulJourneyData(data: OnboardingData) {
       data.scanner.facePhoto ||
       data.scanner.bodyPhoto ||
       data.scanner.skipped ||
+      data.consultation.styleDirection ||
+      data.consultation.desiredPerception ||
+      data.consultation.occasion ||
+      data.consultation.boldness ||
       data.conversation.styleDirection ||
       data.conversation.imageGoal
   );

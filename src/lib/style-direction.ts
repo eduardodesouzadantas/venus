@@ -1,89 +1,107 @@
 export const STYLE_DIRECTION_VALUES = [
-  "Masculina",
-  "Feminina",
-  "Neutra",
-  "Streetwear",
-  "Casual",
-  "Social",
-  "Sem preferência",
+  "masculine",
+  "feminine",
+  "neutral",
+  "streetwear",
+  "casual",
+  "social",
+  "no_preference",
 ] as const;
 
 export type StyleDirectionPreference = (typeof STYLE_DIRECTION_VALUES)[number];
 
-const normalizeText = (value: unknown) => (typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "");
+export type StyleDirectionChoice = {
+  value: StyleDirectionPreference;
+  label: string;
+};
+
+export const STYLE_DIRECTION_CHOICES: StyleDirectionChoice[] = [
+  { value: "masculine", label: "Masculina" },
+  { value: "feminine", label: "Feminina" },
+  { value: "neutral", label: "Neutra" },
+  { value: "streetwear", label: "Streetwear" },
+  { value: "casual", label: "Casual" },
+  { value: "social", label: "Social" },
+  { value: "no_preference", label: "Sem preferência" },
+];
+
+const STYLE_DIRECTION_LABELS: Record<StyleDirectionPreference, string> = {
+  masculine: "Masculina",
+  feminine: "Feminina",
+  neutral: "Neutra",
+  streetwear: "Streetwear",
+  casual: "Casual",
+  social: "Social",
+  no_preference: "Sem preferência",
+};
+
+function normalizeText(value: unknown): string {
+  return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
+}
+
+function stripDiacritics(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function containsAny(text: string, needles: string[]) {
+  return needles.some((needle) => text.includes(needle));
+}
 
 export function normalizeStyleDirectionPreference(value: unknown): StyleDirectionPreference {
-  const text = normalizeText(value).toLowerCase();
+  const text = stripDiacritics(normalizeText(value).toLowerCase());
 
-  if (!text) return "Sem preferência";
-  if (text.includes("sem prefer") || text.includes("no_preference")) return "Sem preferência";
-  if (text.includes("femin")) return "Feminina";
-  if (text.includes("mascul")) return "Masculina";
-  if (text.includes("street")) return "Streetwear";
-  if (text.includes("casual")) return "Casual";
-  if (text.includes("social") || text.includes("evento") || text.includes("formal")) return "Social";
-  if (text.includes("neut")) return "Neutra";
+  if (!text) return "no_preference";
+  if (text.includes("sem prefer") || text.includes("no_preference") || text.includes("no preference")) return "no_preference";
+  if (text.includes("unisex") || text.includes("unissex")) return "neutral";
+  if (text.includes("femin")) return "feminine";
+  if (text.includes("mascul")) return "masculine";
+  if (text.includes("street")) return "streetwear";
+  if (text.includes("casual")) return "casual";
+  if (text.includes("social") || text.includes("evento") || text.includes("formal")) return "social";
+  if (text.includes("neut")) return "neutral";
 
-  return "Sem preferência";
+  return "no_preference";
 }
 
 export function isGenderedStyleDirection(value: unknown) {
   const direction = normalizeStyleDirectionPreference(value);
-  return direction === "Masculina" || direction === "Feminina";
+  return direction === "masculine" || direction === "feminine";
 }
 
 export function isExplicitFeminineStyleDirection(value: unknown) {
-  return normalizeStyleDirectionPreference(value) === "Feminina";
+  return normalizeStyleDirectionPreference(value) === "feminine";
 }
 
 export function isExplicitMasculineStyleDirection(value: unknown) {
-  return normalizeStyleDirectionPreference(value) === "Masculina";
+  return normalizeStyleDirectionPreference(value) === "masculine";
 }
 
 export function isExplicitNeutralStyleDirection(value: unknown) {
   const direction = normalizeStyleDirectionPreference(value);
-  return direction === "Neutra" || direction === "Sem preferência";
+  return direction === "neutral" || direction === "no_preference";
 }
 
 export function getStyleDirectionDisplayLabel(value: unknown): string {
   const direction = normalizeStyleDirectionPreference(value);
-
-  switch (direction) {
-    case "Masculina":
-      return "Masculina";
-    case "Feminina":
-      return "Feminina";
-    case "Neutra":
-      return "Neutra";
-    case "Streetwear":
-      return "Streetwear";
-    case "Casual":
-      return "Casual";
-    case "Social":
-      return "Social";
-    case "Sem preferência":
-    default:
-      return "Sem preferência";
-  }
+  return STYLE_DIRECTION_LABELS[direction];
 }
 
 export function getStyleDirectionNarrativeLabel(value: unknown): string {
   const direction = normalizeStyleDirectionPreference(value);
 
   switch (direction) {
-    case "Masculina":
+    case "masculine":
       return "presença masculina";
-    case "Feminina":
+    case "feminine":
       return "presença feminina";
-    case "Streetwear":
+    case "streetwear":
       return "presença streetwear";
-    case "Casual":
+    case "casual":
       return "casual refinado";
-    case "Social":
+    case "social":
       return "social elegante";
-    case "Neutra":
-      return "linha neutra";
-    case "Sem preferência":
+    case "neutral":
+    case "no_preference":
     default:
       return "linha neutra";
   }
@@ -93,37 +111,37 @@ export function getStyleDirectionToneProfile(value: unknown) {
   const direction = normalizeStyleDirectionPreference(value);
 
   switch (direction) {
-    case "Masculina":
+    case "masculine":
       return {
         title: "Presença urbana",
         language: ["presença", "estrutura", "proporção", "sobriedade", "impacto", "casual refinado", "urbano", "moderno"],
       };
-    case "Feminina":
+    case "feminine":
       return {
         title: "Força visual limpa",
         language: ["presença", "leveza", "proporção", "acabamento", "impacto", "refino", "elegância", "delicadeza"],
       };
-    case "Streetwear":
+    case "streetwear":
       return {
         title: "Casual de impacto",
         language: ["urbano", "atitude", "camadas", "movimento", "contraste", "presença", "contemporâneo", "moderno"],
       };
-    case "Casual":
+    case "casual":
       return {
         title: "Look de presença",
         language: ["conforto", "uso real", "proporção", "leveza", "refino", "presença", "versatilidade", "moderno"],
       };
-    case "Social":
+    case "social":
       return {
         title: "Minimalismo marcante",
         language: ["sofisticação", "eventos", "presença", "acabamento", "equilíbrio", "impacto", "refino", "moderno"],
       };
-    case "Neutra":
-    case "Sem preferência":
+    case "neutral":
+    case "no_preference":
     default:
       return {
-        title: "Look de presença",
-        language: ["presença", "equilíbrio", "proporção", "sobriedade", "versatilidade", "acabamento", "limpeza", "moderno"],
+        title: "Linha neutra",
+        language: ["presença", "equilíbrio", "proporção", "sobriedade", "versatilidade", "acabamento", "limpeza", "neutro"],
       };
   }
 }
@@ -132,19 +150,51 @@ export function getStyleDirectionCatalogSignals(value: unknown): string[] {
   const direction = normalizeStyleDirectionPreference(value);
 
   switch (direction) {
-    case "Masculina":
-      return ["masculino", "masculina", "tailored", "alfaiataria", "estrutura", "neutro"];
-    case "Feminina":
-      return ["feminino", "feminina", "romantico", "romantica", "delicado", "neutro"];
-    case "Streetwear":
-      return ["streetwear", "street", "urbano", "casual", "neutro"];
-    case "Casual":
-      return ["casual", "daily", "uso real", "neutro"];
-    case "Social":
-      return ["social", "evento", "night", "elegante", "neutro"];
-    case "Neutra":
-    case "Sem preferência":
+    case "masculine":
+      return ["masculino", "masculina", "male", "tailored", "alfaiataria", "estrutura", "neutro", "unissex"];
+    case "feminine":
+      return ["feminino", "feminina", "female", "romantico", "romantica", "delicado", "neutro", "unissex"];
+    case "streetwear":
+      return ["streetwear", "street", "urbano", "casual", "neutro", "unissex"];
+    case "casual":
+      return ["casual", "daily", "uso real", "neutro", "unissex"];
+    case "social":
+      return ["social", "evento", "night", "elegante", "neutro", "unissex"];
+    case "neutral":
+    case "no_preference":
     default:
-      return ["neutro", "unissex", "genderless", "minimalista"];
+      return ["neutro", "unissex", "genderless", "minimalista", "safe", "base neutra"];
   }
+}
+
+export function isProductCompatibleWithStyleDirection(
+  targetDirection: unknown,
+  productDirection: unknown,
+  productSignals: string[] = [],
+) {
+  const preference = normalizeStyleDirectionPreference(targetDirection);
+  const direction = normalizeStyleDirectionPreference(productDirection);
+  const signalText = stripDiacritics(productSignals.join(" ").toLowerCase());
+  const hasSignal = (keywords: string[]) => containsAny(signalText, keywords);
+
+  if (preference === "masculine") {
+    return direction !== "feminine" && (direction === "masculine" || direction === "neutral" || direction === "no_preference" || hasSignal(getStyleDirectionCatalogSignals("masculine")));
+  }
+
+  if (preference === "feminine") {
+    return direction !== "masculine" && (direction === "feminine" || direction === "neutral" || direction === "no_preference" || hasSignal(getStyleDirectionCatalogSignals("feminine")));
+  }
+
+  if (preference === "neutral" || preference === "no_preference") {
+    if (direction === "masculine" || direction === "feminine") {
+      return false;
+    }
+
+    return direction === "neutral" || direction === "no_preference" || hasSignal(getStyleDirectionCatalogSignals("neutral"));
+  }
+
+  const preferenceSignals = getStyleDirectionCatalogSignals(preference);
+  if (direction === preference) return true;
+  if (direction === "neutral" || direction === "no_preference") return true;
+  return hasSignal(preferenceSignals);
 }

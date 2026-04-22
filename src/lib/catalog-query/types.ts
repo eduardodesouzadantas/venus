@@ -37,6 +37,16 @@ export interface CatalogQueryParams {
 export interface CatalogQueryContext {
   conversation_state?: string;
   user_style_identity?: string;
+  user_style_direction?: string;
+  user_desired_perception?: string;
+  user_occasion?: string;
+  user_boldness?: string;
+  user_restrictions?: string[];
+  user_preferred_colors?: string[];
+  user_avoid_colors?: string[];
+  user_body_focus?: string;
+  user_aesthetic_vibe?: string;
+  user_confidence_source?: string;
   user_image_goal?: string;
   user_palette_family?: string;
   user_palette_base?: string[];

@@ -51,6 +51,10 @@ export function mergeOnboardingData(parsed: Partial<OnboardingData>, queryOrgSlu
       ...defaultOnboardingData.colorimetry,
       ...(parsed.colorimetry || {}),
     },
+    consultation: {
+      ...defaultOnboardingData.consultation,
+      ...(parsed.consultation || {}),
+    },
     conversation: {
       ...defaultOnboardingData.conversation,
       ...(parsed.conversation || {}),
