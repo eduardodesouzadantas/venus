@@ -10,10 +10,12 @@ import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
 const ENVIRONMENTS = ["Rotina corporativa", "Escritório casual", "Home office", "Noites e eventos", "Lazer e viagens", "Compromissos sociais"];
 const PURCHASE_DNA = ["Poucas peças boas", "Variedade constante"];
 const PURCHASE_BEHAVIOR = ["Planejo antes de comprar", "Compro por impulso"];
+const AESTHETIC_VIBE = ["Clean", "Clássica", "Editorial", "Urbana", "Social"];
 
 export default function LifestylePage() {
   const { data, updateData } = useOnboarding();
   const { environments, purchaseDna, purchaseBehavior } = data.lifestyle;
+  const vibe = data.consultation?.aestheticVibe || "";
 
   const isValid = environments.length > 0 && purchaseDna !== "" && purchaseBehavior !== "";
 
@@ -59,6 +61,18 @@ export default function LifestylePage() {
             options={PURCHASE_BEHAVIOR}
             selected={purchaseBehavior ? [purchaseBehavior] : []}
             onChange={(sel) => updateData("lifestyle", { purchaseBehavior: sel[0] || "" })}
+          />
+        </div>
+
+        <div className="space-y-3 border-t border-white/10 pt-4 sm:space-y-4">
+          <Heading as="h4" className="text-[15px] sm:text-lg">
+            Que vibe estética te representa melhor?
+          </Heading>
+          <Text className="text-sm text-white/55">Se existir uma atmosfera visual clara, a consultoria fica mais elegante e menos genérica.</Text>
+          <PillSelector
+            options={AESTHETIC_VIBE}
+            selected={vibe ? [vibe] : []}
+            onChange={(sel) => updateData("consultation", { aestheticVibe: sel[0] || "" })}
           />
         </div>
       </GlassContainer>

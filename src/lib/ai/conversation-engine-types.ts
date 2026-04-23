@@ -1,5 +1,7 @@
 import "server-only";
 
+import type { ConsultationProfile } from "@/lib/consultation-profile";
+
 export type ConversationState =
   | "DISCOVERY"
   | "STYLE_ANALYSIS"
@@ -100,6 +102,8 @@ export interface UserMemory {
   userId: string;
   orgId: string;
   styleIdentity?: string;
+  styleDirection?: string;
+  consultationProfile?: ConsultationProfile;
   imageGoal?: string;
   paletteFamily?: string;
   fit?: string;

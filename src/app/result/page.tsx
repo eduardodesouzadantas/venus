@@ -1019,6 +1019,34 @@ function ResultDashboardContent() {
             </div>
           </div>
 
+          {stylistAudit?.report?.sections?.length ? (
+            <section className="mt-10 space-y-4">
+              <div className="text-center">
+                <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-[#C9A84C]">Relatório de consultoria</p>
+                <p className="mx-auto mt-2 max-w-xl text-[13px] leading-relaxed text-white/50">
+                  Abaixo está a leitura estruturada que conecta direção, visual, cor e curadoria sem assumir nada que o usuário não tenha declarado.
+                </p>
+              </div>
+
+              <div className="grid gap-3">
+                {stylistAudit.report.sections.map((section) => (
+                  <div key={section.eyebrow} className="rounded-[28px] border border-white/5 bg-white/[0.03] p-5">
+                    <p className="text-[9px] font-bold uppercase tracking-[0.28em] text-[#C9A84C]">{section.eyebrow}</p>
+                    <h2 className="mt-2 font-serif text-2xl text-white">{section.title}</h2>
+                    <p className="mt-2 text-[14px] leading-relaxed text-white/62">{section.body}</p>
+                    <div className="mt-4 space-y-2">
+                      {section.bullets.slice(0, 3).map((bullet) => (
+                        <div key={bullet} className="rounded-2xl border border-white/5 bg-black/25 px-4 py-3 text-[12px] leading-relaxed text-white/70">
+                          {bullet}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
           {canShowDiagnosis && stylistAudit && (
             <div className="mt-10 space-y-4">
               <div className="grid gap-3 sm:grid-cols-3">

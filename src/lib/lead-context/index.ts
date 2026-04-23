@@ -3,6 +3,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { OnboardingData } from "@/types/onboarding";
 import type { ResultPayload } from "@/types/result";
+import { normalizeConsultationProfile } from "@/lib/consultation-profile";
+import { inferConsultationConfidenceSource } from "@/lib/onboarding/consultation-flow";
 
 type LeadRecord = {
   id: string;
@@ -520,6 +522,11 @@ export function buildLeadContextProfileFromOnboarding(input: {
   intentScore?: number | null;
 }) {
   const styleIdentity = input.result.hero?.dominantStyle || input.data.intent.styleDirection || "";
+  const consultationProfile = normalizeConsultationProfile(input.data.consultation);
+  const consultationSnapshot = {
+    ...consultationProfile,
+    confidenceSource: inferConsultationConfidenceSource(input.data, consultationProfile),
+  };
 
   return {
     profileData: {
@@ -536,6 +543,7 @@ export function buildLeadContextProfileFromOnboarding(input: {
       dominantStyle: input.result.hero?.dominantStyle || styleIdentity,
       imageGoal: input.data.intent.imageGoal || "",
       styleDirection: input.data.intent.styleDirection || "",
+      consultationProfile: consultationSnapshot,
       paletteFamily: input.result.palette.family || "",
       fit: input.data.body.fit || "",
       metal: input.data.colors.metal || input.result.palette.metal || "",
@@ -563,6 +571,7 @@ export function buildLeadContextProfileFromOnboarding(input: {
     whatsappContext: {
       styleIdentity,
       imageGoal: input.data.intent.imageGoal || "",
+      consultationProfile: consultationSnapshot,
       paletteFamily: input.result.palette.family || "",
       fit: input.data.body.fit || "",
       metal: input.data.colors.metal || input.result.palette.metal || "",

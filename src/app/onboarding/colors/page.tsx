@@ -21,6 +21,16 @@ export default function ColorsPage() {
 
   const isValid = favoriteColors.length > 0 && metal !== "";
 
+  const handleFavoriteColors = (values: string[]) => {
+    updateData("colors", { favoriteColors: values });
+    updateData("consultation", { preferredColors: values });
+  };
+
+  const handleAvoidColors = (values: string[]) => {
+    updateData("colors", { avoidColors: values });
+    updateData("consultation", { avoidColors: values });
+  };
+
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-[560px] flex-col px-5 pb-7 pt-12 sm:px-6 sm:pb-8 sm:pt-14">
       <Heading as="h2" className="max-w-[12ch]">
@@ -38,7 +48,7 @@ export default function ColorsPage() {
             options={COLOR_FAMILIES}
             selected={favoriteColors}
             multiple
-            onChange={(sel) => updateData("colors", { favoriteColors: sel })}
+            onChange={(sel) => handleFavoriteColors(sel)}
           />
         </div>
 
@@ -51,7 +61,7 @@ export default function ColorsPage() {
             options={COLOR_FAMILIES}
             selected={avoidColors}
             multiple
-            onChange={(sel) => updateData("colors", { avoidColors: sel })}
+            onChange={(sel) => handleAvoidColors(sel)}
           />
         </div>
 

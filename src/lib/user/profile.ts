@@ -1,4 +1,10 @@
 import type { OnboardingData } from "@/types/onboarding";
+import { normalizeStyleDirectionPreference } from "@/lib/style-direction";
+import {
+  hasMeaningfulConsultationProfile,
+  normalizeConsultationProfile,
+} from "@/lib/consultation-profile";
+import { inferConsultationConfidenceSource } from "@/lib/onboarding/consultation-flow";
 
 export type UserProfileRecord = {
   id: string;
@@ -108,6 +114,7 @@ function scoreFromOnboarding(data?: Partial<OnboardingData> | null) {
   let score = 20;
   if (data.intent?.styleDirection) score += 10;
   if (data.intent?.imageGoal) score += 10;
+  if (hasMeaningfulConsultationProfile(data.consultation)) score += 15;
   if (data.intent?.satisfaction) score += Math.min(20, Math.max(0, Math.round(data.intent.satisfaction) * 2));
   if (data.lifestyle?.purchaseDna) score += 5;
   if (data.lifestyle?.purchaseBehavior) score += 5;
@@ -144,10 +151,15 @@ function buildColorProfile(data?: Partial<OnboardingData> | null) {
 }
 
 function buildStyleProfile(data?: Partial<OnboardingData> | null) {
+  const consultation = normalizeConsultationProfile(data?.consultation);
   return {
     styleDirection: data?.intent?.styleDirection || "",
     imageGoal: data?.intent?.imageGoal || "",
     mainPain: data?.intent?.mainPain || "",
+    consultationProfile: {
+      ...consultation,
+      confidenceSource: inferConsultationConfidenceSource(data as OnboardingData, consultation),
+    },
     lifestyle: {
       environments: data?.lifestyle?.environments || [],
       purchaseDna: data?.lifestyle?.purchaseDna || "",
@@ -164,11 +176,16 @@ function buildStyleProfile(data?: Partial<OnboardingData> | null) {
 }
 
 function buildPreferences(data?: Partial<OnboardingData> | null) {
+  const consultation = normalizeConsultationProfile(data?.consultation);
   return {
     favoriteColors: data?.favoriteColors || data?.colors?.favoriteColors || data?.colorimetry?.favoriteColors || [],
     avoidColors: data?.avoidColors || data?.colors?.avoidColors || data?.colorimetry?.avoidColors || [],
     imageGoal: data?.intent?.imageGoal || "",
     styleDirection: data?.intent?.styleDirection || "",
+    consultationProfile: {
+      ...consultation,
+      confidenceSource: inferConsultationConfidenceSource(data as OnboardingData, consultation),
+    },
     line: data?.conversation?.line || "",
     avoidColorNote: data?.conversation?.avoidColorNote || "",
     satisfaction: data?.intent?.satisfaction ?? null,
@@ -180,12 +197,18 @@ function buildPreferences(data?: Partial<OnboardingData> | null) {
 }
 
 export function buildUserProfileUpsert(userId: string, onboardingData?: Partial<OnboardingData> | null) {
+  const consultation = normalizeConsultationProfile(onboardingData?.consultation);
+  const consultationProfile = {
+    ...consultation,
+    confidenceSource: inferConsultationConfidenceSource(onboardingData as OnboardingData, consultation),
+  };
   return {
     id: userId,
     body_type: normalizeText(onboardingData?.body?.fit || onboardingData?.colors?.idealFit || onboardingData?.colorimetry?.idealFit) || null,
     color_profile: buildColorProfile(onboardingData),
     style_profile: buildStyleProfile(onboardingData),
     preferences: buildPreferences(onboardingData),
+    consultation_profile: consultationProfile,
   };
 }
 
@@ -193,6 +216,11 @@ function buildInteractionEntry(input: UserJourneyUpsertInput) {
   const onboardingData = input.onboardingData || {};
   const styleDirection = normalizeText(onboardingData.intent?.styleDirection);
   const imageGoal = normalizeText(onboardingData.intent?.imageGoal);
+  const consultation = normalizeConsultationProfile(onboardingData.consultation);
+  const consultationProfile = {
+    ...consultation,
+    confidenceSource: inferConsultationConfidenceSource(onboardingData as OnboardingData, consultation),
+  };
   const state = normalizeText(input.lastState) || "onboarding_chat";
 
   return {
@@ -202,6 +230,7 @@ function buildInteractionEntry(input: UserJourneyUpsertInput) {
     org_slug: input.orgSlug || null,
     style_direction: styleDirection || null,
     image_goal: imageGoal || null,
+    consultation_profile: consultationProfile,
     body_type: normalizeText(onboardingData.body?.fit || onboardingData.colors?.idealFit || onboardingData.colorimetry?.idealFit) || null,
     color_profile: buildColorProfile(onboardingData),
     style_profile: buildStyleProfile(onboardingData),
@@ -300,6 +329,15 @@ export function buildOnboardingSeedFromSnapshot(
   const colorProfile = asRecord(profile?.color_profile);
   const styleProfile = asRecord(profile?.style_profile);
   const preferences = asRecord(profile?.preferences);
+  const topLevelConsultation = asRecord((profile as Record<string, unknown> | null | undefined)?.consultation_profile);
+  const styleConsultation = asRecord(styleProfile.consultationProfile || styleProfile.consultation_profile);
+  const preferenceConsultation = asRecord(preferences.consultationProfile || preferences.consultation_profile);
+  const consultationProfile = normalizeConsultationProfile({
+    ...(topLevelConsultation || {}),
+    ...(styleConsultation || {}),
+    ...(preferenceConsultation || {}),
+    styleDirection: normalizeStyleDirectionPreference(styleProfile.styleDirection || styleProfile.style_direction),
+  });
   const styleLifestyle = asRecord(styleProfile.lifestyle);
   const styleBody = asRecord(styleProfile.body);
   const interactions = Array.isArray(orgProfile?.interactions) ? orgProfile.interactions : [];
@@ -308,7 +346,7 @@ export function buildOnboardingSeedFromSnapshot(
 
   return {
     intent: {
-      styleDirection: normalizeText(styleProfile.styleDirection) as OnboardingData["intent"]["styleDirection"],
+      styleDirection: normalizeStyleDirectionPreference(styleProfile.styleDirection || styleProfile.style_direction) as OnboardingData["intent"]["styleDirection"],
       imageGoal: normalizeText(styleProfile.imageGoal),
       satisfaction: typeof preferences.satisfaction === "number" ? preferences.satisfaction : 5,
       mainPain: normalizeText(styleProfile.mainPain),
@@ -371,6 +409,7 @@ export function buildOnboardingSeedFromSnapshot(
     idealFit: normalizeText(colorProfile.idealFit),
     idealFabrics: asStringArray(colorProfile.idealFabrics),
     avoidFabrics: asStringArray(colorProfile.avoidFabrics),
+    consultation: consultationProfile,
     conversation: {
       line: normalizeText(preferences.line) as OnboardingData["conversation"]["line"],
       imageGoal: normalizeText(preferences.imageGoal),

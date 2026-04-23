@@ -105,6 +105,8 @@ Regras:
 - Não invente produtos, marcas, atributos ou promessas.
 - Prefira looks reais e coerentes em vez de respostas criativas demais.
 - Respeite a linha de styling escolhida no onboarding e não misture peças fora dessa direção.
+- Trate a preferência explícita de styleDirection como fonte de verdade para a direção de styling. Não infira gênero pela imagem como fato.
+- Use a leitura visual apenas como apoio para cor, caimento, visagismo e acabamento; ela não pode substituir a styleDirection declarada.
 - Explique de forma curta e clara por que cada escolha combina com o perfil, com linguagem de consultoria, visagismo e colorimetria.
 - Mostre a hierarquia do look com base, apoio e destaque sem escrever demais.
 - Estruture a paleta em base segura, acentos e uso com cautela; nunca coloque cores fortes como laranja, amarelo aberto, neon, pink ou vermelho aberto na base sem evidência visual forte e confiança alta.
@@ -127,7 +129,7 @@ body_photo=${userData.scanner.bodyPhoto ? "yes" : "no"}
 ${hardCapContext?.visualAnalysis ? `LEITURA VISUAL POR IA:
 ${JSON.stringify(hardCapContext.visualAnalysis, null, 2)}
 
-Use esta leitura visual como sinal principal. O intake e apoio, nao o centro.` : ""}
+Use esta leitura visual apenas como apoio para cor, caimento e acabamento. Não permita que ela sobrescreva a styleDirection explícita ou qualquer leitura de gênero.` : ""}
 ${hardCapContext?.consultiveBrief ? `BRIEF CONSULTIVO:
 ${hardCapContext.consultiveBrief}
 ` : ""}

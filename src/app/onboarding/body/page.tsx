@@ -18,6 +18,15 @@ export default function BodyPage() {
 
   const isValid = fit !== "" && faceLines !== "" && hairLength !== "";
 
+  const handleHighlightChange = (values: string[]) => {
+    updateData("body", { highlight: values });
+    updateData("consultation", { bodyFocus: values[0] || "" });
+  };
+
+  const handleCamouflageChange = (values: string[]) => {
+    updateData("body", { camouflage: values });
+  };
+
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-[560px] flex-col px-5 pb-7 pt-12 sm:px-6 sm:pb-8 sm:pt-14">
       <Heading as="h2" className="max-w-[15ch]">
@@ -35,7 +44,7 @@ export default function BodyPage() {
             options={BODY_PARTS.filter((p) => !camouflage.includes(p))}
             selected={highlight}
             multiple
-            onChange={(sel) => updateData("body", { highlight: sel })}
+            onChange={(sel) => handleHighlightChange(sel)}
           />
         </div>
 
@@ -48,7 +57,7 @@ export default function BodyPage() {
             options={BODY_PARTS.filter((p) => !highlight.includes(p))}
             selected={camouflage}
             multiple
-            onChange={(sel) => updateData("body", { camouflage: sel })}
+            onChange={(sel) => handleCamouflageChange(sel)}
           />
         </div>
 
