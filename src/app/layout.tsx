@@ -22,6 +22,7 @@ import { Suspense } from "react";
 import { UserImageProvider } from "@/lib/onboarding/UserImageContext";
 import { AuthProvider } from "@/lib/auth/AuthContext";
 import { WhatsAppProvider } from "@/lib/whatsapp/WhatsAppContext";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export default function RootLayout({
   children,
@@ -47,6 +48,7 @@ export default function RootLayout({
             </Suspense>
           </AuthProvider>
         </UserImageProvider>
+        <SpeedInsights />
       </body>
     </html>
   );
