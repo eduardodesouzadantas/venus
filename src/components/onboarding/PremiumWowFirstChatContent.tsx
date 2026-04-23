@@ -84,7 +84,7 @@ export function PremiumWowFirstChatContent() {
   const followUpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasTrackedIntroRef = useRef(false);
 
-  const nextHref = useMemo(() => (resolvedOrgSlug ? `/scanner/opt-in?org=${encodeURIComponent(resolvedOrgSlug)}` : "/scanner/opt-in"), [resolvedOrgSlug]);
+  const nextHref = useMemo(() => (resolvedOrgSlug ? `/onboarding/intent?org=${encodeURIComponent(resolvedOrgSlug)}` : "/onboarding/intent"), [resolvedOrgSlug]);
   const skipHref = useMemo(() => (resolvedOrgSlug ? `/processing?org=${encodeURIComponent(resolvedOrgSlug)}` : "/processing"), [resolvedOrgSlug]);
 
   useEffect(() => {

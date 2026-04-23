@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { SendHorizonal } from "lucide-react";
+import { Check, SendHorizonal } from "lucide-react";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { VenusAvatar } from "@/components/venus/VenusAvatar";
@@ -16,7 +16,7 @@ import { buildVenusStylistIntro } from "@/lib/venus/brand";
 import { PremiumWowFirstChatContent } from "@/components/onboarding/PremiumWowFirstChatContent";
 import { normalizeTenantSlug } from "@/lib/tenant/core";
 import { resolveVenusTenantBrand } from "@/lib/venus/brand";
-import { STYLE_DIRECTION_VALUES, type StyleDirectionPreference } from "@/lib/style-direction";
+import { type StyleDirectionPreference } from "@/lib/style-direction";
 
 type ChatRole = "venus" | "client";
 
@@ -61,18 +61,24 @@ type Message = {
   text: string;
 };
 
+const STYLE_DIRECTION_CHAT_OPTIONS: ChoiceOption[] = [
+  { label: "Masculino", value: "masculine", conversationValue: "masculino" },
+  { label: "Feminino", value: "feminine", conversationValue: "feminino" },
+  { label: "Neutro / Unissex", value: "neutral", conversationValue: "neutro unissex" },
+  { label: "Streetwear", value: "streetwear", conversationValue: "streetwear" },
+  { label: "Casual", value: "casual", conversationValue: "casual" },
+  { label: "Social", value: "social", conversationValue: "social" },
+  { label: "Sem preferÃªncia", value: "no_preference", conversationValue: "sem preferencia" },
+];
+
 
 const CHAT_STEPS: ChatStep[] = [
   {
     key: "line",
     kind: "single",
-    prompt: "Antes de tudo, qual direção de estilo você quer declarar?",
-    placeholder: "Digite ou toque em uma opção.",
-    options: STYLE_DIRECTION_VALUES.map((value) => ({
-      label: value,
-      value,
-      conversationValue: value.toLowerCase(),
-    })),
+    prompt: "Qual direção você quer explorar hoje?",
+    placeholder: "Toque em uma opção ou digite sua direção.",
+    options: STYLE_DIRECTION_CHAT_OPTIONS,
   },
   {
     key: "imageGoal",
@@ -123,9 +129,9 @@ function buildVisionCue(data: OnboardingData) {
   if (safeData.colorimetry?.colorSeason) cues.push(safeData.colorimetry.colorSeason.toLowerCase());
   if (safeData.colorimetry?.contrast) cues.push(`contraste ${safeData.colorimetry.contrast.toLowerCase()}`);
   if (safeData.colorimetry?.faceShape) cues.push(`rosto ${safeData.colorimetry.faceShape}`);
-  if (safeData.body?.faceLines) cues.push(`traços ${safeData.body.faceLines.toLowerCase()}`);
+  if (safeData.body?.faceLines) cues.push(`traÃ§os ${safeData.body.faceLines.toLowerCase()}`);
   if (safeData.body?.fit) cues.push(`caimento ${safeData.body.fit.toLowerCase()}`);
-  return cues.length > 0 ? cues.slice(0, 3).join(" • ") : "a sua presença";
+  return cues.length > 0 ? cues.slice(0, 3).join(" â€¢ ") : "a sua presenÃ§a";
 }
 
 function buildStepPrompt(stepKey: ChatStep["key"], data: OnboardingData) {
@@ -135,8 +141,8 @@ function buildStepPrompt(stepKey: ChatStep["key"], data: OnboardingData) {
   switch (stepKey) {
     case "line":
       return safeData.colorimetry?.justification
-        ? `Pelo que eu já leio em você, ${visionCue}. Qual direção de estilo você quer declarar para eu calibrar a leitura?`
-        : "Antes de tudo, qual direção de estilo você quer declarar?";
+        ? `Pelo que eu já leio em você, ${visionCue}. Qual direção você quer explorar hoje para eu calibrar a leitura?`
+        : "Qual direção você quer explorar hoje?";
     case "imageGoal":
       return safeData.colorimetry?.justification
         ? "Agora eu quero afinar a intenção: o que a roupa precisa fazer pela sua presença quando alguém te vê?"
@@ -209,16 +215,24 @@ function ChoiceChip({
     <button
       type="button"
       disabled={disabled}
+      aria-pressed={selected}
       onClick={onClick}
       className={[
-        "inline-flex min-h-11 items-center justify-center rounded-full border px-4 py-2 text-[13px] font-medium transition-all duration-200 active:scale-[0.98]",
+        "inline-flex min-h-11 items-center justify-center rounded-full border px-4 py-2 text-[13px] font-medium transition-all duration-200 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C9A84C]/35 focus-visible:ring-offset-2 focus-visible:ring-offset-[#090909]",
         selected
-          ? "border-[#C9A84C]/40 bg-[#C9A84C]/18 text-[#F5E2A0] shadow-[0_12px_24px_rgba(212,175,55,0.12)]"
+          ? "border-[#C9A84C]/45 bg-[#C9A84C]/18 text-[#F5E2A0] shadow-[0_12px_24px_rgba(212,175,55,0.14)]"
           : "border-white/10 bg-white/[0.04] text-white/74 hover:border-white/18 hover:bg-white/[0.07]",
         disabled ? "cursor-not-allowed opacity-50" : "",
       ].join(" ")}
     >
-      {label}
+      <span className="inline-flex items-center gap-2">
+        {selected ? (
+          <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-white/12">
+            <Check className="h-3 w-3" />
+          </span>
+        ) : null}
+        <span>{label}</span>
+      </span>
     </button>
   );
 }
@@ -278,7 +292,7 @@ export function WowFirstChatContent() {
   const followUpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const routeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasTrackedIntroRef = useRef(false);
-  const nextHref = useMemo(() => (orgSlug ? `/scanner/opt-in?org=${encodeURIComponent(orgSlug)}` : "/scanner/opt-in"), [orgSlug]);
+  const nextHref = useMemo(() => (orgSlug ? `/onboarding/intent?org=${encodeURIComponent(orgSlug)}` : "/onboarding/intent"), [orgSlug]);
   const skipHref = useMemo(() => (orgSlug ? `/processing?org=${encodeURIComponent(orgSlug)}` : "/processing"), [orgSlug]);
 
   useEffect(() => {
@@ -409,7 +423,7 @@ export function WowFirstChatContent() {
         <VenusAvatar size={42} animated />
         <div className="space-y-0.5">
           <div className="text-[10px] font-semibold uppercase tracking-[0.38em] text-[#C9A84C]">Venus Stylist</div>
-          <div className="text-[11px] text-white/42">Primeiro wow em uma única decisão</div>
+          <div className="text-[11px] text-white/42">Primeiro wow em uma Ãºnica decisÃ£o</div>
         </div>
       </header>
 
@@ -454,7 +468,7 @@ export function WowFirstChatContent() {
           <div className="rounded-[30px] border border-white/10 bg-white/[0.045] px-4 py-4 shadow-[0_18px_50px_rgba(0,0,0,0.24)]">
             <p className="text-[10px] font-semibold uppercase tracking-[0.34em] text-[#C9A84C]">Leitura inicial</p>
             <p className="mt-2 text-[15px] leading-7 text-white/90">{copy.consultiveNote}</p>
-            <p className="mt-2 text-[13px] leading-6 text-white/50">Sem formulário. Sem etapas escondidas. Só direção.</p>
+            <p className="mt-2 text-[13px] leading-6 text-white/50">Sem formulÃ¡rio. Sem etapas escondidas. SÃ³ direÃ§Ã£o.</p>
 
             <div className="mt-4 flex flex-col gap-3 sm:flex-row">
               <WowActionButton
@@ -476,7 +490,7 @@ export function WowFirstChatContent() {
                 Foto cedo
               </span>
               <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-white/54">
-                Wow rápido
+                Wow rÃ¡pido
               </span>
               <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-white/54">
                 Continuidade consultiva
@@ -528,8 +542,8 @@ function LegacyChatContent() {
 
   const currentStep = activeStepIndex !== null ? CHAT_STEPS[activeStepIndex] : null;
   const currentPrompt = currentStep ? buildStepPrompt(currentStep.key, result) : "";
-  const nextHref = useMemo(() => {
-    return orgSlug ? `/scanner/opt-in?org=${encodeURIComponent(orgSlug)}` : "/scanner/opt-in";
+const nextHref = useMemo(() => {
+    return orgSlug ? `/onboarding/intent?org=${encodeURIComponent(orgSlug)}` : "/onboarding/intent";
   }, [orgSlug]);
 
   useEffect(() => {
@@ -604,7 +618,7 @@ function LegacyChatContent() {
         {
           id: "closing",
           role: "venus",
-          text: "Perfeito. Agora vou ler sua presença.",
+          text: "Perfeito. Agora vou ler sua presenÃ§a.",
         },
       ]);
       setActiveStepIndex(null);
@@ -752,6 +766,11 @@ function LegacyChatContent() {
               <div className="rounded-[28px] border border-white/10 bg-white/[0.045] px-4 py-4 shadow-[0_18px_50px_rgba(0,0,0,0.2)]">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.34em] text-[#C9A84C]">Venus</p>
                 <p className="mt-2 text-[15px] leading-7 text-white/90 sm:text-[16px]">{currentPrompt}</p>
+                {currentStep.key === "line" ? (
+                  <p className="mt-2 text-[13px] leading-6 text-white/55">
+                    Isso ajuda a Venus a montar uma curadoria mais precisa para você. Você pode mudar isso depois.
+                  </p>
+                ) : null}
               </div>
 
               {currentStep.kind !== "text" ? (
@@ -773,8 +792,8 @@ function LegacyChatContent() {
               ) : (
                 <div className="rounded-[24px] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/48">
                   {"optional" in currentStep && currentStep.optional
-                    ? "Opcional. Se houver uma cor que você evita por motivo pessoal, me conta; se não, eu sigo."
-                    : "Responda em texto livre. A Venus lê o contexto, não só palavras-chave."}
+                    ? "Opcional. Se houver uma cor que vocÃª evita por motivo pessoal, me conta; se nÃ£o, eu sigo."
+                    : "Responda em texto livre. A Venus lÃª o contexto, nÃ£o sÃ³ palavras-chave."}
                 </div>
               )}
             </div>
@@ -904,8 +923,8 @@ function ChatContent() {
   if (tenantResolutionStatus === "missing" || tenantResolutionStatus === "invalid") {
     return (
       <TenantResolutionFallbackScreen
-        title="Não consegui identificar a loja desta experiência."
-        message="A jornada precisa começar com uma loja ativa e reconhecida. Volte para a entrada segura e tente novamente."
+        title="NÃ£o consegui identificar a loja desta experiÃªncia."
+        message="A jornada precisa comeÃ§ar com uma loja ativa e reconhecida. Volte para a entrada segura e tente novamente."
         actionHref="/"
         actionLabel="Voltar para a entrada"
       />
@@ -922,9 +941,11 @@ function ChatContent() {
 
 export default function OnboardingChatPage() {
   return (
-    <Suspense fallback={<VenusLoadingScreen title="Abrindo o chat da Venus" subtitle="Carregando a experiência premium da sua loja." />}>
+    <Suspense fallback={<VenusLoadingScreen title="Abrindo o chat da Venus" subtitle="Carregando a experiÃªncia premium da sua loja." />}>
       <ChatContent />
     </Suspense>
   );
 }
+
+
 
