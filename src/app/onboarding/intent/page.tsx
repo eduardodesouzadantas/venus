@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Check } from "lucide-react";
 import { BottomNav } from "@/components/ui/BottomNav";
 import { GlassContainer } from "@/components/ui/GlassContainer";
@@ -106,6 +107,9 @@ function StyleDirectionSelection({
 }
 
 export default function IntentPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const orgSlug = searchParams.get("org") || "";
   const { data, updateData, updateConversation } = useOnboarding();
   const consultation = normalizeConsultationProfile(data.consultation);
   const questions = useMemo(() => getConsultationQuestions(data), [data]);
@@ -290,7 +294,11 @@ export default function IntentPage() {
         )}
       </div>
 
-      <BottomNav nextHref="/onboarding/lifestyle" backHref="/" nextDisabled={!mandatoryComplete} />
+      <BottomNav
+        nextHref={orgSlug ? `/scanner/opt-in?org=${encodeURIComponent(orgSlug)}` : "/scanner/opt-in"}
+        backHref={orgSlug ? `/onboarding/chat?org=${encodeURIComponent(orgSlug)}` : "/onboarding/chat"}
+        nextDisabled={!mandatoryComplete}
+      />
     </div>
   );
 }

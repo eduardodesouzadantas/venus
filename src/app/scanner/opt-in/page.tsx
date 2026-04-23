@@ -1,16 +1,30 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect } from "react";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { VenusButton } from "@/components/ui/VenusButton";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
+import { normalizeConsultationProfile } from "@/lib/consultation-profile";
 
 export default function OptInPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const org = searchParams.get("org");
-  const { updateData, journey } = useOnboarding();
+  const org = searchParams.get("org") || "";
+  const { data, updateData, journey } = useOnboarding();
+  const consultation = normalizeConsultationProfile(data.consultation);
+
+  useEffect(() => {
+    const hasStyleDirection = Boolean(consultation.styleDirection || data.intent.styleDirection);
+    const hasDesiredPerception = Boolean(consultation.desiredPerception || data.intent.imageGoal);
+    const hasOccasion = Boolean(consultation.occasion);
+
+    if (!hasStyleDirection || !hasDesiredPerception || !hasOccasion) {
+      router.replace(org ? `/onboarding/intent?org=${encodeURIComponent(org)}` : "/onboarding/intent");
+    }
+  }, [router, consultation, data.intent.styleDirection, data.intent.imageGoal, org]);
+
   const title =
     journey?.mode === "continue"
       ? "Retomando seu contexto."
