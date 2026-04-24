@@ -63,8 +63,9 @@ async function loadStyles(): Promise<StyleRow[]> {
     let headerMap: string[] = [];
     let lineNum = 0;
     createReadStream(filePath, { encoding: "utf8" })
-      .on("data", (chunk: string) => {
-        const lines = chunk.split("\n");
+      .on("data", (chunk: string | Buffer) => {
+        const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+        const lines = text.split("\n");
         for (let i = 0; i < lines.length; i++) {
           const line = lines[i];
           if (!line.trim()) continue;
@@ -93,8 +94,9 @@ async function loadImages(): Promise<Map<string, ImageRow>> {
     let headerMap: string[] = [];
     let lineNum = 0;
     createReadStream(filePath, { encoding: "utf8" })
-      .on("data", (chunk: string) => {
-        const lines = chunk.split("\n");
+      .on("data", (chunk: string | Buffer) => {
+        const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+        const lines = text.split("\n");
         for (let i = 0; i < lines.length; i++) {
           const line = lines[i];
           if (!line.trim()) continue;

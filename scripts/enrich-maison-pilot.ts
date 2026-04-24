@@ -87,8 +87,8 @@ async function main() {
   console.log("");
 
   console.log("[5/5] Summary by style_direction:");
-  const byDir = { masculine: 0, feminine: 0, neutral: 0 };
-  patches.forEach(({ patch }) => byDir[patch.style_direction]++);
+  const byDir: Record<string, number> = { masculine: 0, feminine: 0, neutral: 0 };
+  patches.forEach(({ patch }) => { byDir[patch.style_direction as string] = (byDir[patch.style_direction as string] || 0) + 1; });
   Object.entries(byDir).forEach(([k, v]) => console.log(`  ${k}: ${v}`));
   console.log("");
 
