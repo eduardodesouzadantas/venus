@@ -37,8 +37,8 @@ import { resolveOnboardingPhotoSignedUrl } from "@/lib/onboarding/photo-access";
 // Categorization logic for the try-on engine
 function inferTryOnCategory(product: any): "tops" | "bottoms" | "one-pieces" {
   const source = `${product.category || ""} ${product.name || ""}`.toLowerCase();
-  if (source.includes("vestido") || source.includes("dress") || source.includes("macacÃ£o")) return "one-pieces";
-  if (source.includes("calÃ§a") || source.includes("saia") || source.includes("short") || source.includes("bermuda")) return "bottoms";
+  if (source.includes("vestido") || source.includes("dress") || source.includes("macacão")) return "one-pieces";
+  if (source.includes("calça") || source.includes("saia") || source.includes("short") || source.includes("bermuda")) return "bottoms";
   return "tops";
 }
 
@@ -90,18 +90,21 @@ function ResultDashboardContent() {
 
   // â”€â”€ Derived values (safe even when surface is null) â”€â”€
   const looks = useMemo(() => (surface?.looks && Array.isArray(surface.looks) ? surface.looks : []), [surface]);
-  const essenceLabel = surface?.essence?.label ?? "Sua PresenÃ§a";
+  const curationFallbackMessage =
+    surface?.curationFallback?.message ||
+    "Ainda não tenho uma composição completa forte o suficiente. Posso refinar com uma nova foto ou levar essa leitura para o WhatsApp.";
+  const essenceLabel = surface?.essence?.label ?? "Sua Presença";
   const palette = surface?.palette ?? {
     family: "Leitura preliminar",
     colors: [] as any[],
     metal: "Prateado",
-    contrast: "MÃ©dio Alto",
+    contrast: "Médio Alto",
     evidence: {
       basePalette: [],
       accentPalette: [],
       avoidOrUseCarefully: [],
       confidence: "medium" as const,
-      evidence: "Leitura preliminar baseada nesta foto. Uma luz frontal neutra melhora a precisÃ£o.",
+      evidence: "Leitura preliminar baseada nesta foto. Uma luz frontal neutra melhora a precisão.",
     },
   };
   const paletteFamily = palette.family ?? "Personalizada";
@@ -115,7 +118,7 @@ function ResultDashboardContent() {
     () =>
       buildAssistedRecommendationSurface(looks, {
         limit: 3,
-        sourceLabel: catalogSourceLabel || tenantContext?.branchName || tenantContext?.orgSlug || "CatÃ¡logo da loja",
+        sourceLabel: catalogSourceLabel || tenantContext?.branchName || tenantContext?.orgSlug || "Catálogo da loja",
         explicit: false,
       }),
     [looks, catalogSourceLabel, tenantContext?.branchName, tenantContext?.orgSlug]
@@ -193,7 +196,7 @@ function ResultDashboardContent() {
     () =>
       buildAssistedCatalogProductCards(looks, {
         limit: 3,
-        sourceLabel: catalogSourceLabel || tenantContext?.branchName || tenantContext?.orgSlug || "CatÃ¡logo da loja",
+        sourceLabel: catalogSourceLabel || tenantContext?.branchName || tenantContext?.orgSlug || "Catálogo da loja",
       }),
     [catalogSourceLabel, looks, tenantContext?.branchName, tenantContext?.orgSlug]
   );
@@ -204,7 +207,7 @@ function ResultDashboardContent() {
   const catalogCopy = useMemo(
     () =>
       buildCatalogAccessCopy({
-        sourceLabel: catalogSourceLabel || tenantContext?.branchName || tenantContext?.orgSlug || "catÃ¡logo da loja",
+        sourceLabel: catalogSourceLabel || tenantContext?.branchName || tenantContext?.orgSlug || "catálogo da loja",
         productCount: assistedCatalogProducts.length,
         lookCount: looks.length,
         explicit: false,
@@ -214,7 +217,7 @@ function ResultDashboardContent() {
   const explicitCatalogCopy = useMemo(
     () =>
       buildCatalogAccessCopy({
-        sourceLabel: catalogSourceLabel || tenantContext?.branchName || tenantContext?.orgSlug || "catÃ¡logo da loja",
+        sourceLabel: catalogSourceLabel || tenantContext?.branchName || tenantContext?.orgSlug || "catálogo da loja",
         productCount: assistedCatalogProducts.length,
         lookCount: looks.length,
         explicit: true,
@@ -463,7 +466,7 @@ function ResultDashboardContent() {
     console.warn("[TRYON_QUALITY_LOW]", {
       resultId: id,
       orgId: resolvedOrgId || onboardingData?.tenant?.orgId || null,
-      styleDirection: getStyleDirectionDisplayLabel(onboardingData?.intent?.styleDirection || "Sem preferÃªncia"),
+      styleDirection: getStyleDirectionDisplayLabel(onboardingData?.intent?.styleDirection || "Sem preferência"),
       state: tryOnQuality.state,
       score: tryOnQuality.score,
       reason: tryOnQuality.reason,
@@ -559,7 +562,7 @@ function ResultDashboardContent() {
             if (recoveryPayload.lastTryOn) setPersistedTryOn(recoveryPayload.lastTryOn);
 
             const fallbackAnalysis = recoveryPayload.analysis || {
-              essence: { label: getStyleDirectionDisplayLabel(onboardingData?.intent?.styleDirection) || "Sua EssÃªncia", reason: "Sincronia baseada no seu perfil pessoal." },
+              essence: { label: getStyleDirectionDisplayLabel(onboardingData?.intent?.styleDirection) || "Sua Essência", reason: "Sincronia baseada no seu perfil pessoal." },
               palette: { family: "Personalizada", colors: [] },
               looks: [],
             };
@@ -767,8 +770,8 @@ function ResultDashboardContent() {
   if (redirecting) {
     return (
       <VenusLoadingScreen
-        title="A Venus estÃ¡ ajustando sua leitura"
-        subtitle="Carregando a prÃ³xima etapa sem interromper a experiÃªncia premium."
+        title="A Venus está ajustando sua leitura"
+        subtitle="Carregando a próxima etapa sem interromper a experiência premium."
       />
     );
   }
@@ -776,8 +779,8 @@ function ResultDashboardContent() {
   if (loading) {
     return (
       <VenusLoadingScreen
-        title="A Venus estÃ¡ preparando sua leitura"
-        subtitle="Aguarde um instante enquanto os dados da curadoria sÃ£o hidratados com seguranÃ§a."
+        title="A Venus está preparando sua leitura"
+        subtitle="Aguarde um instante enquanto os dados da curadoria são hidratados com segurança."
       />
     );
   }
@@ -793,9 +796,9 @@ function ResultDashboardContent() {
             </div>
           </div>
           <div className="space-y-2">
-            <p className="font-serif text-xl text-white">Sua leitura estÃ¡ a caminho...</p>
+            <p className="font-serif text-xl text-white">Sua leitura está a caminho...</p>
             <p className="max-w-xs text-sm text-white/40 leading-relaxed">
-              Estamos finalizando sua leitura premium. Se demorar um instante, a Venus estÃ¡ lapidando os Ãºltimos detalhes.
+              Estamos finalizando sua leitura premium. Se demorar um instante, a Venus está lapidando os últimos detalhes.
             </p>
           </div>
           <button
@@ -825,7 +828,7 @@ function ResultDashboardContent() {
                 </div>
                 <div>
                   <p className="text-[9px] font-bold uppercase tracking-[0.32em] text-[#C9A84C]">{VENUS_STYLIST_NAME}</p>
-                  <p className="text-[10px] text-white/45">RevelaÃ§Ã£o premium da sua leitura</p>
+                  <p className="text-[10px] text-white/45">Revelação premium da sua leitura</p>
                 </div>
               </div>
               <div className="rounded-full border border-white/10 bg-black/40 px-3 py-1 text-[8px] font-bold uppercase tracking-[0.28em] text-white/60">
@@ -841,7 +844,7 @@ function ResultDashboardContent() {
                   <Sparkles className="absolute inset-5 h-6 w-6 animate-pulse text-[#C9A84C]" />
                 </div>
                 <p className="mt-8 font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-[#C9A84C]">
-                  Venus Stylist estÃ¡ revelando seu look
+                  Venus Stylist está revelando seu look
                 </p>
                 <p className="mt-4 text-[13px] text-white/60">
                   {currentLoadingMessage}
@@ -888,7 +891,7 @@ function ResultDashboardContent() {
                     <Sparkles className="h-4 w-4" />
                     <p className="text-[10px] font-bold uppercase tracking-[0.32em]">Curadoria premium</p>
                   </div>
-                  <h3 className="mt-3 font-serif text-2xl text-white">JÃ¡ consegui identificar sua direÃ§Ã£o.</h3>
+                  <h3 className="mt-3 font-serif text-2xl text-white">Já consegui identificar sua direção.</h3>
                   <p className="mt-3 text-[13px] leading-relaxed text-white/70">
                     Vou te mostrar o que mais valoriza seu estilo enquanto refino sua leitura visual.
                   </p>
@@ -933,8 +936,8 @@ function ResultDashboardContent() {
                 </div>
                 <p className="text-balance text-[15px] font-medium leading-relaxed text-white/80">
                   {shouldShowRetryCopy
-                    ? "Essa leitura ainda nÃ£o chegou no ponto ideal. Vamos refazer com uma foto melhor."
-                    : "A Venus estÃ¡ pronta para revelar seu primeiro look."}
+                    ? "Essa leitura ainda não chegou no ponto ideal. Vamos refazer com uma foto melhor."
+                    : "A Venus está pronta para revelar seu primeiro look."}
                 </p>
                 {tryOnError && (
                   <p className="max-w-sm text-[12px] leading-relaxed text-white/45">
@@ -956,11 +959,11 @@ function ResultDashboardContent() {
                   disabled={!tryOnAvailable}
                   className="mt-8"
                 >
-                  {tryOnAvailable ? tryOnPrimaryActionLabel : "Leitura indisponÃ­vel"}
+                  {tryOnAvailable ? tryOnPrimaryActionLabel : "Leitura indisponível"}
                 </VenusButton>
                 {!tryOnAvailable && (
                   <p className="mt-3 text-[11px] leading-relaxed text-white/40">
-                    Esse resultado veio de uma leitura antiga. FaÃ§a uma nova foto para liberar a versÃ£o premium.
+                    Esse resultado veio de uma leitura antiga. Faça uma nova foto para liberar a versão premium.
                   </p>
                 )}
               </div>
@@ -973,7 +976,7 @@ function ResultDashboardContent() {
                 {isPreviousLook && (
                   <div className="flex items-center gap-2 rounded-full border border-[#C9A84C]/20 bg-black/60 px-4 py-2 backdrop-blur-md">
                     <div className="h-1.5 w-1.5 rounded-full bg-[#C9A84C]" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-[#C9A84C]">MemÃ³ria da Venus</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-[#C9A84C]">Memória da Venus</span>
                   </div>
                 )}
                 <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/40 px-4 py-2 backdrop-blur-md">
@@ -1057,7 +1060,7 @@ function ResultDashboardContent() {
             <div className="mt-10 space-y-4">
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-[24px] border border-white/5 bg-black/20 p-4">
-                  <p className="text-[9px] font-bold uppercase tracking-[0.28em] text-[#C9A84C]">O que jÃ¡ funciona</p>
+                  <p className="text-[9px] font-bold uppercase tracking-[0.28em] text-[#C9A84C]">O que já funciona</p>
                   <div className="mt-3 space-y-2">
                     {stylistAudit.diagnosis.strengths.slice(0, 3).map((item) => (
                       <p key={item} className="text-[13px] leading-relaxed text-white/70">{item}</p>
@@ -1088,7 +1091,7 @@ function ResultDashboardContent() {
                   onClick={advanceReveal}
                   className="inline-flex h-11 w-full items-center justify-center rounded-2xl border border-[#C9A84C]/20 bg-[#C9A84C]/10 px-5 text-[9px] font-black uppercase tracking-[0.24em] text-[#C9A84C] transition-colors hover:bg-[#C9A84C]/16"
                 >
-                  Ver a direÃ§Ã£o
+                  Ver a direção
                 </button>
               )}
 
@@ -1125,15 +1128,23 @@ function ResultDashboardContent() {
             </div>
           )}
 
-          {canShowCommerce && (assistedCatalogProducts.length > 0 || assistedLookStripItems.length > 0) && (
+          {canShowCommerce && looks.length === 0 && (
+            <div className="mt-10 rounded-[28px] border border-[#C9A84C]/15 bg-[#C9A84C]/8 p-5 text-left">
+              <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-[#C9A84C]">Curadoria em refinamento</p>
+              <h2 className="mt-2 font-serif text-2xl text-white">Ainda não há look completo forte o suficiente.</h2>
+              <p className="mt-3 text-[13px] leading-relaxed text-white/65">{curationFallbackMessage}</p>
+            </div>
+          )}
+
+          {canShowCommerce && looks.length > 0 && (assistedCatalogProducts.length > 0 || assistedLookStripItems.length > 0) && (
             <div id="catalog-assistido" className="mt-10 space-y-6">
               <ConversationalCatalogBlock
                 copy={catalogCopy}
                 products={assistedCatalogProducts}
                 reinforcement={[
                   "Baseado no seu corpo",
-                  "Cores ideais para vocÃª",
-                  "Look recomendado para vocÃª",
+                  "Cores ideais para você",
+                  "Look recomendado para você",
                 ]}
                 catalogAction={
                   catalogLink || "/catalog"
@@ -1230,8 +1241,8 @@ function ResultDashboardContent() {
             </div>
           )}
 
-          {/* Look Composition Gallery - Looks completos do catÃ¡logo */}
-          {canShowCommerce && tryOnQuality.state !== "retry_required" && resolvedOrgId && (
+          {/* Look Composition Gallery - Looks completos do catálogo */}
+          {canShowCommerce && looks.length > 0 && tryOnQuality.state !== "retry_required" && resolvedOrgId && (
             <div id="look-composition-gallery" className="mt-10">
               <LookCompositionGallery
                 orgId={resolvedOrgId}
@@ -1247,7 +1258,7 @@ function ResultDashboardContent() {
                 customerName={onboardingData?.contact?.name}
                 resultUrl={typeof window !== "undefined" && hasValidResultId ? `${window.location.origin}/result?id=${id}` : undefined}
                 onTryOnStart={(composition: LookComposition) => {
-                  // Iniciar try-on com a peÃ§a Ã¢ncora do look
+                  // Iniciar try-on com a peça âncora do look
                   if (composition.anchorPiece.id) {
                     handleGenerateTryOn(composition.anchorPiece.id);
                   }
@@ -1278,10 +1289,10 @@ function ResultDashboardContent() {
 
           {canShowCommerce && tryOnQuality.state !== "retry_required" && (
             <div className="mt-8 rounded-[28px] border border-white/5 bg-white/[0.03] p-5">
-              <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-[#C9A84C]">{stylistAudit?.social.eyebrow || "Prova social e memÃ³ria"}</p>
+              <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-[#C9A84C]">{stylistAudit?.social.eyebrow || "Prova social e memória"}</p>
               <h2 className="mt-2 font-serif text-2xl text-white">{stylistAudit?.social.title || "Registrar a postagem ou o link da leitura"}</h2>
               <p className="mt-2 text-[13px] leading-relaxed text-white/60">
-                {stylistAudit?.social.prompt || "Se vocÃª jÃ¡ publicou, a Venus guarda o sinal para refinar a prÃ³xima leitura."}
+                {stylistAudit?.social.prompt || "Se você já publicou, a Venus guarda o sinal para refinar a próxima leitura."}
               </p>
               <div className="mt-4 grid gap-3">
                 <input
@@ -1304,10 +1315,10 @@ function ResultDashboardContent() {
                   </VenusButton>
                   <span className="text-[11px] text-white/45">
                     {socialFeedbackStatus === "saved"
-                      ? "MemÃ³ria registrada."
+                      ? "Memória registrada."
                       : socialFeedbackStatus === "error"
-                        ? "NÃ£o foi possÃ­vel registrar agora."
-                        : "Opcional, mas Ãºtil para a prÃ³xima leitura."}
+                        ? "Não foi possível registrar agora."
+                        : "Opcional, mas útil para a próxima leitura."}
                   </span>
                 </div>
               </div>
@@ -1320,9 +1331,9 @@ function ResultDashboardContent() {
       <section className="mt-16 border-y border-white/5 bg-white/[0.02] py-12 px-5">
         <div className="mx-auto max-w-lg space-y-10">
           <div className="rounded-[28px] border border-[#C9A84C]/15 bg-[#C9A84C]/8 p-5 text-left">
-            <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-[#C9A84C]">{stylistAudit?.whatsapp.eyebrow || "ContinuaÃ§Ã£o natural"}</p>
+            <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-[#C9A84C]">{stylistAudit?.whatsapp.eyebrow || "Continuação natural"}</p>
             <h2 className="mt-2 font-serif text-2xl text-white">{stylistAudit?.whatsapp.title || `Continuar com ${VENUS_STYLIST_NAME}`}</h2>
-            <p className="mt-2 max-w-lg text-[13px] leading-relaxed text-white/65">{stylistAudit?.whatsapp.subtitle || "A conversa segue com a mesma leitura, sem comeÃ§ar do zero."}</p>
+            <p className="mt-2 max-w-lg text-[13px] leading-relaxed text-white/65">{stylistAudit?.whatsapp.subtitle || "A conversa segue com a mesma leitura, sem começar do zero."}</p>
             <div className="mt-5 flex flex-col gap-3">
               <Link
                 href={whatsappUrl}

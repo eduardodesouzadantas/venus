@@ -90,6 +90,20 @@ type BuildVenusStylistAuditInput = {
 };
 
 const normalizeText = (value: unknown) => (typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "");
+const TECHNICAL_REASON_CODES = new Set([
+  "INVALID_OUTFIT_COMPOSITION",
+  "SAME_SLOT_CONFLICT",
+  "INVALID_HERO_SLOT",
+  "PROFILE_DIRECTION_CONFLICT",
+  "CONTEXT_FORMALITY_CONFLICT",
+]);
+const CURATION_FALLBACK_MESSAGE =
+  "Ainda não tenho uma composição completa forte o suficiente. Posso refinar com uma nova foto ou levar essa leitura para o WhatsApp.";
+
+function publicReason(value: unknown): string {
+  const text = normalizeText(value);
+  return TECHNICAL_REASON_CODES.has(text) ? CURATION_FALLBACK_MESSAGE : text;
+}
 
 function uniqueStrings(values: Array<string | null | undefined>) {
   return Array.from(new Set(values.map((value) => normalizeText(value)).filter(Boolean)));
@@ -159,6 +173,7 @@ export function buildVenusStylistAudit({
   const topLook = surface.looks[0] || null;
   const topLookName = normalizeText(topLook?.name) || surface.lookHierarchy[0]?.title || "seu look principal";
   const buyNowLooks = collectBuyNowLooks(surface);
+  const hasRenderableLook = Boolean(surface.looks[0]?.product_id && surface.looks[0]?.items?.length);
   const onboardingGoal = normalizeText(onboardingData?.intent?.imageGoal);
   const onboardingStyle = normalizeText(onboardingData?.intent?.styleDirection);
   const perception = normalizeText(consultation.desiredPerception) || onboardingGoal || surface.essence.label;
@@ -253,7 +268,7 @@ export function buildVenusStylistAudit({
             ? "A imagem está muito perto do ponto ideal."
             : "A leitura ainda não fechou para vitrine premium.",
       subtitle: tryOnSubtitle,
-      helper: tryOnQuality.reason,
+      helper: publicReason(tryOnQuality.reason) || CURATION_FALLBACK_MESSAGE,
     },
     buyNow: {
       eyebrow: "O que comprar agora",
@@ -365,22 +380,26 @@ export function buildVenusStylistAudit({
             surface.lookHierarchy[2]?.title,
           ]).slice(0, 3),
         },
-        {
-          eyebrow: "Próximo look recomendado",
-          title: surface.lookHierarchy[0]?.title || "Look principal",
-          body: compactSentence(
-            joinPieces([
-              surface.lookHierarchy[0]?.description,
-              surface.looks[0]?.explanation,
-              `Próxima leitura: ${perception.toLowerCase()} para ${occasion.toLowerCase()}.`,
-            ]),
-          ),
-          bullets: uniqueStrings([
-            surface.looks[0]?.name,
-            surface.looks[0]?.items[0]?.name,
-            surface.looks[0]?.accessories[0],
-          ]).slice(0, 3),
-        },
+        ...(hasRenderableLook
+          ? [
+              {
+                eyebrow: "Próximo look recomendado",
+                title: surface.lookHierarchy[0]?.title || "Look principal",
+                body: compactSentence(
+                  joinPieces([
+                    surface.lookHierarchy[0]?.description,
+                    surface.looks[0]?.explanation,
+                    `Próxima leitura: ${perception.toLowerCase()} para ${occasion.toLowerCase()}.`,
+                  ]),
+                ),
+                bullets: uniqueStrings([
+                  surface.looks[0]?.name,
+                  surface.looks[0]?.items[0]?.name,
+                  surface.looks[0]?.accessories[0],
+                ]).slice(0, 3),
+              },
+            ]
+          : []),
       ],
     },
   };

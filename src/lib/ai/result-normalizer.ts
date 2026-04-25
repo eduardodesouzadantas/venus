@@ -142,10 +142,30 @@ export const RECOMMENDATION_REASON_CODES = {
   INVALID_HERO_SLOT: "INVALID_HERO_SLOT",
   INVALID_OUTFIT_COMPOSITION: "INVALID_OUTFIT_COMPOSITION",
   SAME_SLOT_CONFLICT: "SAME_SLOT_CONFLICT",
+  CONTEXT_FORMALITY_CONFLICT: "CONTEXT_FORMALITY_CONFLICT",
   ENCODING_GUARD_FAILED: "ENCODING_GUARD_FAILED",
 } as const;
 
 const MOJIBAKE_PATTERN = /[\xC3\xC2][\x80-\xBF]|[ÃÂ]|�/;
+const CURATION_FALLBACK_MESSAGE =
+  "Ainda não tenho uma composição completa forte o suficiente. Posso refinar com uma nova foto ou levar essa leitura para o WhatsApp.";
+
+export function getRecommendationReasonCopy(code: string | undefined): string {
+  switch (code) {
+    case RECOMMENDATION_REASON_CODES.INVALID_OUTFIT_COMPOSITION:
+      return "Ainda não encontrei uma composição completa forte o suficiente.";
+    case RECOMMENDATION_REASON_CODES.SAME_SLOT_CONFLICT:
+      return "As peças encontradas ainda não fecham um look completo.";
+    case RECOMMENDATION_REASON_CODES.INVALID_HERO_SLOT:
+      return "Essa peça funciona melhor como complemento, não como base do look.";
+    case RECOMMENDATION_REASON_CODES.CONTEXT_FORMALITY_CONFLICT:
+      return "Essa peça está casual demais para a intenção desta leitura.";
+    case RECOMMENDATION_REASON_CODES.PROFILE_DIRECTION_CONFLICT:
+      return "Essa peça não respeita a direção declarada para esta leitura.";
+    default:
+      return "Ainda não encontrei uma composição completa forte o suficiente.";
+  }
+}
 
 export function detectMojibake(text: string): boolean {
   // Detects UTF-8 text decoded as Latin-1 (mojibake): e.g. JÃ¡ for Já
@@ -244,7 +264,15 @@ function inferProductSlot(product: Product): string {
   if (source.includes("vestido") || source.includes("macacao") || source.includes("macacão")) return "one_piece";
   if (source.includes("calca") || source.includes("saia") || source.includes("short") || source.includes("bermuda")) return "bottom";
   if (source.includes("blazer") || source.includes("casaco") || source.includes("jaqueta")) return "layer";
-  if (source.includes("sapato") || source.includes("sandal") || source.includes("tenis") || source.includes("bota")) return "shoes";
+  if (
+    source.includes("sapato") ||
+    source.includes("sandal") ||
+    source.includes("tenis") ||
+    source.includes("bota") ||
+    source.includes("flip flop") ||
+    source.includes("chinelo") ||
+    source.includes("slipper")
+  ) return "shoes";
   if (source.includes("camisa") || source.includes("blusa") || source.includes("camiseta")) return "top";
   const stylist = deriveCatalogStylistProfile(product);
   if (stylist.role === "accessory") return "accessory";
@@ -278,8 +306,7 @@ export function validateOutfitComposition(products: Product[]): { valid: boolean
 }
 
 function buildAssistedCurationExplanation(code: string | undefined): string {
-  const codeLabel = code ? ` (${code})` : "";
-  return `Curadoria assistida — composição requer ajuste${codeLabel}. Fale com sua stylista ou envie uma nova foto para afinar o look.`;
+  return `${getRecommendationReasonCopy(code)} Posso refinar com uma nova foto ou levar essa leitura para o WhatsApp.`;
 }
 
 function compactText(value: unknown, fallback: string, maxLength: number): string {
@@ -564,6 +591,74 @@ function looksGeneric(value: unknown): boolean {
   return !text || GENERIC_MARKETING_PATTERNS.some((pattern) => pattern.test(text));
 }
 
+function hasFormalContext(profile: Pick<ProfileSignals, "goal" | "goalKey" | "consultation" | "keywords">): boolean {
+  const text = matchText([
+    profile.goal,
+    profile.goalKey,
+    profile.consultation.desiredPerception,
+    profile.consultation.occasion,
+    profile.consultation.aestheticVibe,
+    ...profile.keywords,
+  ].join(" "));
+
+  return [
+    "autoridade",
+    "social",
+    "presenca firme",
+    "assinatura de comando",
+    "elegante",
+    "elegancia",
+    "refinado",
+    "refinada",
+    "sofisticado",
+    "trabalho",
+    "corporativo",
+    "reuniao",
+  ].some((signal) => text.includes(signal));
+}
+
+function validateContextFormality(
+  product: Product,
+  profile: Pick<ProfileSignals, "goal" | "goalKey" | "consultation" | "keywords">,
+): { valid: boolean; code?: string } {
+  if (!hasFormalContext(profile)) return { valid: true };
+
+  const source = matchText([
+    product.name,
+    product.category,
+    product.type,
+    product.style,
+    product.description,
+    product.catalog_notes,
+    ...(product.tags || []),
+    ...(product.style_tags || []),
+    ...(product.category_tags || []),
+    ...(product.use_cases || []),
+    ...(product.occasion_tags || []),
+  ].join(" "));
+
+  const casualConflict = [
+    "flip flop",
+    "flip-flop",
+    "chinelo",
+    "chinelos",
+    "slipper",
+    "slippers",
+    "beach",
+    "praia",
+    "beachwear",
+    "sports only",
+    "sports-only",
+    "treino",
+    "academia",
+    "pool",
+  ].some((signal) => source.includes(signal));
+
+  return casualConflict
+    ? { valid: false, code: RECOMMENDATION_REASON_CODES.CONTEXT_FORMALITY_CONFLICT }
+    : { valid: true };
+}
+
 function scoreDirectionMatch(text: string, direction: ProfileSignals["styleDirection"]): number {
   const preference = normalizeStyleDirectionPreference(direction);
   const masculineSignals = ["mascul", "homem", "men", "male"];
@@ -661,6 +756,9 @@ function scoreProduct(product: Product, blueprint: LookBlueprint, profile: Profi
   ].filter(Boolean).join(" "));
 
   let score = 0;
+  if (!validateContextFormality(product, profile).valid) {
+    return -1000;
+  }
   const normalizedStylistDirection = normalizeStyleDirectionPreference(stylist.direction);
   const consultation = profile.consultation;
   const consultationRestrictions = consultation.restrictions.map((value) => matchText(value));
@@ -779,32 +877,51 @@ function scoreProduct(product: Product, blueprint: LookBlueprint, profile: Profi
 }
 
 function rankProductsForBlueprint(products: Product[], blueprint: LookBlueprint, profile: ProfileSignals): Product[] {
-  return [...products].sort((a, b) => {
+  return products.filter((product) => validateContextFormality(product, profile).valid).sort((a, b) => {
     const scoreDiff = scoreProduct(b, blueprint, profile) - scoreProduct(a, blueprint, profile);
     if (scoreDiff !== 0) return scoreDiff;
     return normalizeText(a.name).localeCompare(normalizeText(b.name), "pt-BR");
   });
 }
 
-function pickUniqueProducts(rankedProducts: Product[], usedIds: Set<string>, limit: number): Product[] {
-  const selected: Product[] = [];
+function hasCompleteOutfit(products: Product[], styleDirection: StyleDirectionPreference): boolean {
+  const slots = products.map(inferProductSlot);
+  const hasOnePiece = slots.includes("one_piece");
+  const hasTopAndBottom = slots.includes("top") && slots.includes("bottom");
+  const feminine = normalizeStyleDirectionPreference(styleDirection) === "feminine";
 
-  for (const product of rankedProducts) {
-    if (selected.length >= limit) break;
-    if (usedIds.has(product.id)) continue;
-    selected.push(product);
-    usedIds.add(product.id);
+  return feminine ? hasOnePiece || hasTopAndBottom : hasTopAndBottom;
+}
+
+function pickCompleteOutfitProducts(
+  rankedProducts: Product[],
+  usedIds: Set<string>,
+  styleDirection: StyleDirectionPreference,
+): Product[] {
+  const candidates = rankedProducts.filter((product) => !usedIds.has(product.id));
+  const bySlot = (slot: string) => candidates.find((product) => inferProductSlot(product) === slot);
+  const top = bySlot("top");
+  const bottom = bySlot("bottom");
+  const onePiece = bySlot("one_piece");
+  const layer = bySlot("layer");
+  const shoes = bySlot("shoes");
+
+  const selected = top && bottom
+    ? [top, bottom, layer, shoes].filter((product): product is Product => Boolean(product))
+    : onePiece
+      ? [onePiece, layer, shoes].filter((product): product is Product => Boolean(product))
+      : [];
+
+  const unique = selected.filter((product, index, list) => list.findIndex((entry) => entry.id === product.id) === index);
+  const composition = validateOutfitComposition(unique);
+  const hero = unique[0] ? validateHeroRole(unique[0]) : { valid: false, code: RECOMMENDATION_REASON_CODES.INVALID_HERO_SLOT };
+
+  if (!composition.valid || !hero.valid || !hasCompleteOutfit(unique, styleDirection)) {
+    return [];
   }
 
-  if (selected.length < limit) {
-    for (const product of rankedProducts) {
-      if (selected.length >= limit) break;
-      if (selected.some((entry) => entry.id === product.id)) continue;
-      selected.push(product);
-    }
-  }
-
-  return selected;
+  unique.forEach((product) => usedIds.add(product.id));
+  return unique;
 }
 
 function buildProductLookItem(
@@ -1014,10 +1131,16 @@ function buildLookFromBlueprint(
   sourceLook?: Partial<LookData>,
 ): LookData {
   const ranked = rankProductsForBlueprint(products, blueprint, profile);
-  const selectedProducts = pickUniqueProducts(ranked, usedIds, products.length > 1 ? 2 : 1);
+  const selectedProducts = pickCompleteOutfitProducts(ranked, usedIds, profile.styleDirection);
 
   if (selectedProducts.length === 0) {
-    return buildFallbackLook(blueprint, profile, index);
+    return {
+      ...buildFallbackLook(blueprint, profile, index),
+      product_id: "",
+      items: [],
+      accessories: [],
+      explanation: buildAssistedCurationExplanation(RECOMMENDATION_REASON_CODES.INVALID_OUTFIT_COMPOSITION),
+    };
   }
 
   // Hero role gate: prefer hero-eligible products as the principal item
@@ -1097,8 +1220,9 @@ export function filterCatalogForRecommendation(catalog: Product[], userData: Onb
     const productSignals = collectProductDirectionSignals(product).join(" ");
     const restrictionHit = consultationRestrictionTokens.some((restriction) => restriction && productSignals.includes(restriction));
     const directionConflict = validateProfileDirectionConflict(product, profile.styleDirection);
+    const formalityConflict = validateContextFormality(product, profile);
 
-    return !restrictionHit && directionConflict.valid && isProductCompatibleWithStyleDirection(
+    return !restrictionHit && formalityConflict.valid && directionConflict.valid && isProductCompatibleWithStyleDirection(
       profile.styleDirection,
       stylist.direction,
       collectProductDirectionSignals(product),
@@ -1175,12 +1299,17 @@ export function buildCatalogAwareFallbackResult(userData: OnboardingData, catalo
   };
 
   const usedIds = new Set<string>();
-  const looks = LOOK_BLUEPRINTS.map((blueprint, index) => buildLookFromBlueprint(blueprint, profile, filteredCatalog, usedIds, index));
+  const looks = LOOK_BLUEPRINTS
+    .map((blueprint, index) => buildLookFromBlueprint(blueprint, profile, filteredCatalog, usedIds, index))
+    .filter((look) => look.items.length > 0 && Boolean(look.product_id));
   const selectedNames = looks.flatMap((look) => look.items.map((item) => item.name)).filter(Boolean);
   const accessoryNames = looks.flatMap((look) => look.accessories);
 
   return {
     ...(fallbackCode ? { recommendationFallbackCode: fallbackCode } : {}),
+    ...(looks.length === 0
+      ? { curationFallback: { reason: RECOMMENDATION_REASON_CODES.INVALID_OUTFIT_COMPOSITION, message: CURATION_FALLBACK_MESSAGE } }
+      : {}),
     consultation: profileSignals.consultation,
     hero: buildHero(profile),
     palette: buildPersonalizedPalette(profile),
@@ -1236,9 +1365,11 @@ export function normalizeOpenAIRecommendationPayload(
   };
 
   const usedIds = new Set<string>();
-  const looks = LOOK_BLUEPRINTS.map((blueprint, index) =>
-    buildLookFromBlueprint(blueprint, profile, filteredCatalog, usedIds, index, raw.looks?.[index]),
-  );
+  const looks = LOOK_BLUEPRINTS
+    .map((blueprint, index) =>
+      buildLookFromBlueprint(blueprint, profile, filteredCatalog, usedIds, index, raw.looks?.[index]),
+    )
+    .filter((look) => look.items.length > 0 && Boolean(look.product_id));
   const selectedNames = looks.flatMap((look) => look.items.map((item) => item.name)).filter(Boolean);
   const accessoryNames = looks.flatMap((look) => look.accessories);
   const palette = raw.palette || buildPersonalizedPalette(profile);
@@ -1246,6 +1377,9 @@ export function normalizeOpenAIRecommendationPayload(
 
   return {
     ...(fallbackCode ? { recommendationFallbackCode: fallbackCode } : {}),
+    ...(looks.length === 0
+      ? { curationFallback: { reason: RECOMMENDATION_REASON_CODES.INVALID_OUTFIT_COMPOSITION, message: CURATION_FALLBACK_MESSAGE } }
+      : {}),
     consultation: profile.consultation,
     hero: {
       dominantStyle: compactText(raw.hero?.dominantStyle, profile.heroStyle, 60),

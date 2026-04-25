@@ -100,6 +100,10 @@ export interface PaletteEvidence {
 export interface ResultPayload {
   recommendationFallbackCode?: string;
   consultation?: ConsultationProfile;
+  curationFallback?: {
+    reason: string;
+    message: string;
+  };
   hero: {
     dominantStyle: string;
     subtitle: string;

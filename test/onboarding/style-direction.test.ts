@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -6,6 +8,7 @@ import { buildResultSurface } from "../../src/lib/result/surface.ts";
 import { buildShareableLookCardModel } from "../../src/lib/tryon/share-card.ts";
 import { buildVenusResultNarrative } from "../../src/lib/venus/brand.ts";
 import { buildVenusStylistAudit } from "../../src/lib/venus/audit/engine.ts";
+import { buildAssistedCatalogProductCards, buildAssistedLookStripItems } from "../../src/lib/catalog-query/presentation.ts";
 import {
   buildCatalogAwareFallbackResult,
   filterCatalogForRecommendation,
@@ -542,7 +545,9 @@ run("missing compatible catalog match falls back safely", () => {
   );
 
   assert.equal(fallback.recommendationFallbackCode, "CATALOG_NO_MATCH_FOR_STYLE_DIRECTION");
-  assert.ok(fallback.looks.length > 0);
+  assert.equal(fallback.looks.length, 0);
+  assert.equal(fallback.curationFallback?.reason, RECOMMENDATION_REASON_CODES.INVALID_OUTFIT_COMPOSITION);
+  assert.match(fallback.curationFallback?.message || "", /composição completa forte o suficiente/);
 });
 
 run("fallback result keeps conflicting feminine items out of hero and looks", () => {
@@ -694,7 +699,36 @@ run("recommendation ranking uses consultation profile for restrictions and perce
 
 run("result audit includes the requested report sections", () => {
   const onboarding = buildOnboarding("masculine");
-  const surface = buildResultSurface(onboarding, null, null);
+  const surface = buildResultSurface(onboarding, null, {
+    looks: [
+      {
+        id: "complete-authority-look",
+        product_id: "complete-authority-look",
+        name: "Look completo de presenca",
+        intention: "autoridade social",
+        type: "Hibrido Seguro",
+        items: [
+          {
+            id: "shirt",
+            product_id: "shirt",
+            name: "Camisa azul",
+            premiumTitle: "Camisa azul",
+            category: "Camisas",
+          },
+          {
+            id: "trouser",
+            product_id: "trouser",
+            name: "Calca reta",
+            premiumTitle: "Calca reta",
+            category: "Calcas",
+          },
+        ],
+        accessories: [],
+        explanation: "Composicao completa para presenca firme.",
+        whenToWear: "Reunioes e eventos sociais.",
+      },
+    ],
+  });
   const audit = buildVenusStylistAudit({
     surface,
     tryOnQuality: {
@@ -814,10 +848,161 @@ run("copy guard emits curadoria assistida for invalid composition", () => {
 
   const fallback = buildCatalogAwareFallbackResult(buildOnboarding("masculine"), allShoes as any);
 
-  const hasAssistedCuration = fallback.looks.some(
-    (look) => look.explanation?.toLowerCase().includes("curadoria assistida"),
+  assert.equal(fallback.looks.length, 0);
+  assert.match(fallback.curationFallback?.message || "", /composição completa forte o suficiente/);
+  assert.doesNotMatch(fallback.curationFallback?.message || "", /INVALID_OUTFIT_COMPOSITION|SAME_SLOT_CONFLICT|INVALID_HERO_SLOT/);
+});
+
+run("technical reason codes stay out of rendered result UI copy", () => {
+  const surface = buildResultSurface(buildOnboarding("masculine"), null, {
+    looks: [
+      {
+        id: "invalid",
+        product_id: "shoe-1",
+        name: "INVALID_OUTFIT_COMPOSITION",
+        intention: "SAME_SLOT_CONFLICT",
+        type: "Híbrido Seguro",
+        items: [
+          { id: "shoe-1", product_id: "shoe-1", name: "Flip Flops", category: "Flip Flops", photoUrl: "", brand: "Store" },
+        ],
+        accessories: ["INVALID_HERO_SLOT"],
+        explanation: "INVALID_OUTFIT_COMPOSITION",
+        whenToWear: "PROFILE_DIRECTION_CONFLICT",
+      },
+    ],
+  } as any);
+  const audit = buildVenusStylistAudit({
+    surface,
+    tryOnQuality: {
+      state: "retry_required",
+      reason: "INVALID_OUTFIT_COMPOSITION",
+      badgeLabel: "Ajuste",
+      score: 10,
+      reasons: ["INVALID_OUTFIT_COMPOSITION"],
+      showBeforeAfter: false,
+      showWhatsappCta: true,
+      structural: { score: 0, reasons: [] },
+      visual: { score: 0, reasons: [] },
+    } as any,
+    onboardingData: buildOnboarding("masculine"),
+  });
+
+  const renderedCopy = JSON.stringify({
+    helper: audit.tryOn.helper,
+    report: audit.report.sections,
+    buyNow: audit.buyNow,
+    fallbackMessage: surface.curationFallback?.message,
+  });
+
+  assert.equal(surface.looks.length, 0);
+  assert.doesNotMatch(renderedCopy, /INVALID_OUTFIT_COMPOSITION|SAME_SLOT_CONFLICT|INVALID_HERO_SLOT|PROFILE_DIRECTION_CONFLICT/);
+  assert.match(renderedCopy, /composição completa forte o suficiente/);
+});
+
+run("context formality gate excludes flip flops from authority and social curation", () => {
+  const top = { ...sampleCatalog[0], id: "formal-top", name: "Camisa social branca", category: "Camisas", type: "Camisa", tags: ["top"], style_tags: ["social"] };
+  const bottom = { ...sampleCatalog[0], id: "formal-bottom", name: "Calça de alfaiataria", category: "Calças", type: "Calça", tags: ["bottom"], style_tags: ["alfaiataria"] };
+  const flipFlop = { ...sampleCatalog[0], id: "flip-flop", name: "Beach Flip Flops", category: "Flip Flops", type: "Flip Flops", tags: ["shoes"], style_tags: ["beachwear", "casual"] };
+
+  const result = buildCatalogAwareFallbackResult(buildOnboarding("masculine"), [flipFlop, top, bottom] as any);
+  const rendered = JSON.stringify(result.looks);
+
+  assert.ok(result.looks.length > 0);
+  assert.doesNotMatch(rendered, /flip-flop|Beach Flip Flops|Flip Flops/i);
+});
+
+run("invalid and shoe-only looks are not promoted to cards or next look", () => {
+  const shoeOnlyLook = {
+    id: "shoe-only",
+    product_id: "shoe-1",
+    name: "Assinatura de comando",
+    intention: "Autoridade",
+    type: "Híbrido Seguro",
+    items: [
+      { id: "shoe-1", product_id: "shoe-1", name: "Flip Flops", category: "Flip Flops", photoUrl: "", brand: "Store" },
+    ],
+    accessories: [],
+    explanation: "INVALID_OUTFIT_COMPOSITION",
+    whenToWear: "social",
+  } as any;
+
+  const surface = buildResultSurface(buildOnboarding("masculine"), null, { looks: [shoeOnlyLook] });
+  const audit = buildVenusStylistAudit({
+    surface,
+    tryOnQuality: {
+      state: "hero",
+      reason: "ok",
+      badgeLabel: "Hero",
+      score: 100,
+      reasons: [],
+      showBeforeAfter: true,
+      showWhatsappCta: true,
+      structural: { score: 100, reasons: [] },
+      visual: { score: 100, reasons: [] },
+    } as any,
+    onboardingData: buildOnboarding("masculine"),
+  });
+
+  assert.equal(surface.looks.length, 0);
+  assert.equal(buildAssistedCatalogProductCards([shoeOnlyLook]).length, 0);
+  assert.equal(buildAssistedLookStripItems([shoeOnlyLook]).length, 0);
+  assert.ok(!audit.report.sections.some((section) => section.eyebrow === "Próximo look recomendado"));
+});
+
+run("complete top and bottom look remains renderable", () => {
+  const completeLook = {
+    id: "complete",
+    product_id: "top-1",
+    name: "Base social completa",
+    intention: "Autoridade",
+    type: "Híbrido Seguro",
+    items: [
+      { id: "top-1", product_id: "top-1", name: "Camisa social", category: "Camisas", photoUrl: "", brand: "Store" },
+      { id: "bottom-1", product_id: "bottom-1", name: "Calça de alfaiataria", category: "Calças", photoUrl: "", brand: "Store" },
+    ],
+    accessories: [],
+    explanation: "Camisa e calça fecham uma base social real.",
+    whenToWear: "trabalho",
+  } as any;
+
+  const surface = buildResultSurface(buildOnboarding("masculine"), null, { looks: [completeLook] });
+
+  assert.equal(surface.looks.length, 1);
+  assert.equal(buildAssistedLookStripItems(surface.looks).length, 1);
+});
+
+run("result page and surface keep mojibake out of visible header and top card copy", () => {
+  const pageSource = fs.readFileSync(path.join(process.cwd(), "src/app/result/page.tsx"), "utf8");
+  const surface = buildResultSurface(
+    buildOnboarding("masculine"),
+    {
+      source: "ai",
+      essenceLabel: "RevelaÃƒÂ§ÃƒÂ£o",
+      essenceSummary: "JÃƒÂ¡ existe direÃƒÂ§ÃƒÂ£o",
+      confidenceLabel: "MÃƒÂ©dio",
+      keySignals: ["direÃƒÂ§ÃƒÂ£o"],
+      lookNames: ["JÃƒÂ¡", "RevelaÃƒÂ§ÃƒÂ£o", "direÃƒÂ§ÃƒÂ£o"],
+      toAvoid: ["Ã‚"],
+      hero: { dominantStyle: "RevelaÃƒÂ§ÃƒÂ£o", subtitle: "JÃƒÂ¡ existe direÃƒÂ§ÃƒÂ£o", coverImageUrl: "" },
+      paletteFamily: "RevelaÃƒÂ§ÃƒÂ£o",
+      paletteDescription: "direÃƒÂ§ÃƒÂ£o",
+      metal: "Prateado",
+      contrast: "MÃƒÂ©dio",
+      diagnostic: { currentPerception: "JÃƒÂ¡", desiredGoal: "direÃƒÂ§ÃƒÂ£o", gapSolution: "RevelaÃƒÂ§ÃƒÂ£o" },
+      bodyVisagism: { shoulders: "JÃƒÂ¡", face: "direÃƒÂ§ÃƒÂ£o", generalFit: "RevelaÃƒÂ§ÃƒÂ£o" },
+    } as any,
+    null,
   );
-  assert.ok(hasAssistedCuration, "expected curadoria assistida copy for invalid shoe-only composition");
+  const rendered = JSON.stringify({
+    pageSource,
+    hero: surface.hero,
+    headline: surface.headline,
+    subheadline: surface.subheadline,
+    hierarchy: surface.lookHierarchy,
+  });
+
+  assert.ok(!detectMojibake(rendered));
+  assert.doesNotMatch(rendered, /RevelaÃ|JÃ|direÃ|Ãƒ|Ã‚|�/);
 });
 
 run("RECOMMENDATION_REASON_CODES has expected string values", () => {
@@ -825,6 +1010,7 @@ run("RECOMMENDATION_REASON_CODES has expected string values", () => {
   assert.equal(RECOMMENDATION_REASON_CODES.INVALID_HERO_SLOT, "INVALID_HERO_SLOT");
   assert.equal(RECOMMENDATION_REASON_CODES.INVALID_OUTFIT_COMPOSITION, "INVALID_OUTFIT_COMPOSITION");
   assert.equal(RECOMMENDATION_REASON_CODES.SAME_SLOT_CONFLICT, "SAME_SLOT_CONFLICT");
+  assert.equal(RECOMMENDATION_REASON_CODES.CONTEXT_FORMALITY_CONFLICT, "CONTEXT_FORMALITY_CONFLICT");
   assert.equal(RECOMMENDATION_REASON_CODES.ENCODING_GUARD_FAILED, "ENCODING_GUARD_FAILED");
 });
 

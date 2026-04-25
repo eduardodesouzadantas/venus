@@ -4,6 +4,91 @@ function normalizeText(value: unknown): string {
   return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
 }
 
+const TECHNICAL_REASON_CODES = new Set([
+  "INVALID_OUTFIT_COMPOSITION",
+  "SAME_SLOT_CONFLICT",
+  "INVALID_HERO_SLOT",
+  "PROFILE_DIRECTION_CONFLICT",
+  "CONTEXT_FORMALITY_CONFLICT",
+]);
+const CURATION_FALLBACK_MESSAGE =
+  "Ainda não tenho uma composição completa forte o suficiente. Posso refinar com uma nova foto ou levar essa leitura para o WhatsApp.";
+
+function publicText(value: unknown, fallback = ""): string {
+  const text = normalizeText(value);
+  return TECHNICAL_REASON_CODES.has(text) ? fallback : text;
+}
+
+function inferItemSlot(item: Record<string, unknown>): string {
+  const source = normalizeText([
+    item.name,
+    item.title,
+    item.category,
+    item.role,
+    item.baseDescription,
+    item.premiumTitle,
+    ...(Array.isArray(item.styleTags) ? item.styleTags : []),
+    ...(Array.isArray(item.categoryTags) ? item.categoryTags : []),
+  ].join(" "))
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  if (source.includes("one_piece") || source.includes("vestido") || source.includes("dress") || source.includes("macacao")) return "one_piece";
+  if (source.includes("bottom") || source.includes("calca") || source.includes("trouser") || source.includes("jeans") || source.includes("short")) return "bottom";
+  if (source.includes("top") || source.includes("camisa") || source.includes("blusa") || source.includes("camiseta")) return "top";
+  if (source.includes("shoes") || source.includes("sapato") || source.includes("tenis") || source.includes("sandal") || source.includes("flip flop") || source.includes("chinelo") || source.includes("slipper")) return "shoes";
+  if (source.includes("accessory") || source.includes("acessorio") || source.includes("bolsa") || source.includes("handbag")) return "accessory";
+  return "unknown";
+}
+
+function getLookSlots(look: LookData): string[] {
+  return (look.items || []).map((item) => inferItemSlot(item as unknown as Record<string, unknown>));
+}
+
+function hasSlotConflict(slots: string[]): boolean {
+  const counts = slots.reduce<Record<string, number>>((current, slot) => {
+    current[slot] = (current[slot] || 0) + 1;
+    return current;
+  }, {});
+
+  return (counts.shoes || 0) > 1 || (counts.accessory || 0) > 1 || (counts.top || 0) > 1 || (counts.bottom || 0) > 1;
+}
+
+function isRenderableRecommendation(look: LookData): boolean {
+  const slots = getLookSlots(look);
+  const knownSlots = slots.filter((slot) => slot !== "unknown");
+
+  if (slots.length === 0 || hasSlotConflict(slots)) {
+    return false;
+  }
+
+  if (knownSlots.length === 0) {
+    return true;
+  }
+
+  if (knownSlots.length === 1) {
+    return knownSlots[0] === "top" || knownSlots[0] === "bottom" || knownSlots[0] === "one_piece";
+  }
+
+  return true;
+}
+
+function isCompleteRenderableLook(look: LookData): boolean {
+  const slots = (look.items || []).map((item) => inferItemSlot(item as unknown as Record<string, unknown>));
+  const knownSlots = slots.filter((slot) => slot !== "unknown");
+
+  if (slots.length === 0 || hasSlotConflict(slots)) {
+    return false;
+  }
+
+  if (knownSlots.length === 0) {
+    return true;
+  }
+
+  return slots.includes("one_piece") || (slots.includes("top") && slots.includes("bottom"));
+}
+
 function normalizeList(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.map((entry) => normalizeText(entry)).filter(Boolean);
@@ -108,7 +193,7 @@ function resolveSizes(item: CatalogRecommendationSource): string[] {
 }
 
 function resolveJustification(item: CatalogRecommendationSource, fallback: string): string {
-  return normalizeText(
+  const text = normalizeText(
     item.justification ||
       item.reason ||
       item.conversionCopy ||
@@ -119,6 +204,7 @@ function resolveJustification(item: CatalogRecommendationSource, fallback: strin
       item.description ||
     fallback,
   );
+  return publicText(text, CURATION_FALLBACK_MESSAGE);
 }
 
 function truncateSentence(value: string, limit = 88): string {
@@ -197,6 +283,7 @@ export function buildAssistedCatalogProductCards(
   const sourceLabel = normalizeText(options?.sourceLabel) || "Catálogo da loja";
 
   return looks
+    .filter(isRenderableRecommendation)
     .slice(0, limit)
     .map((look, index) => {
       const primaryItem = look.items?.[0] ? (look.items[0] as unknown as CatalogRecommendationSource) : null;
@@ -253,7 +340,7 @@ export function buildAssistedLookStripItems(
 
   const limit = Math.max(1, Math.min(options?.limit || 3, 3));
 
-  return looks.slice(0, limit).map((look, index) => {
+  return looks.filter(isCompleteRenderableLook).slice(0, limit).map((look, index) => {
     const anchorItem = look.items?.[0] || null;
     const supportingPieces = look.items?.slice(1, 4).map((item) => normalizeText(item.premiumTitle || item.name)).filter(Boolean) || [];
     const imageUrl = normalizeText(anchorItem?.photoUrl || look.tryOnUrl);

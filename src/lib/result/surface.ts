@@ -2,7 +2,7 @@
 import type { LookData, ResultPayload } from "@/types/result";
 import type { VisualAnalysisPayload } from "@/types/visual-analysis";
 import { deriveEssenceProfile, type EssenceProfile } from "@/lib/result/essence";
-import { getStyleDirectionDisplayLabel } from "@/lib/style-direction";
+import { getStyleDirectionDisplayLabel, isExplicitNeutralStyleDirection } from "@/lib/style-direction";
 import { buildColorStyleEvidence, buildColorStyleEvidenceInputFromOnboarding, flattenColorStyleEvidence } from "@/lib/color-style-evidence";
 
 type GoalKey = "Autoridade" | "Elegância" | "Atração" | "Criatividade" | "Discrição sofisticada";
@@ -27,6 +27,10 @@ export type ResultSurface = {
   bodyVisagism: ResultPayload["bodyVisagism"];
   accessories: ResultPayload["accessories"];
   looks: LookData[];
+  curationFallback?: {
+    reason: string;
+    message: string;
+  };
   toAvoid: string[];
   headline: string;
   subheadline: string;
@@ -56,7 +60,72 @@ const LOOK_IMAGES = [
 ];
 
 function normalizeText(value: unknown): string {
-  return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
+  if (typeof value !== "string") return "";
+  const text = value.trim().replace(/\s+/g, " ");
+  if (!/[ÃÂ�]/.test(text)) return text;
+
+  try {
+    const bytes = Uint8Array.from(text, (char) => char.charCodeAt(0) & 0xff);
+    const repaired = new TextDecoder("utf-8", { fatal: false }).decode(bytes).trim().replace(/\s+/g, " ");
+    return repaired || text;
+  } catch {
+    return text;
+  }
+}
+
+const CURATION_FALLBACK_MESSAGE =
+  "Ainda não tenho uma composição completa forte o suficiente. Posso refinar com uma nova foto ou levar essa leitura para o WhatsApp.";
+const TECHNICAL_REASON_CODES = new Set([
+  "INVALID_OUTFIT_COMPOSITION",
+  "SAME_SLOT_CONFLICT",
+  "INVALID_HERO_SLOT",
+  "PROFILE_DIRECTION_CONFLICT",
+  "CONTEXT_FORMALITY_CONFLICT",
+]);
+
+function stripTechnicalReasonCodes(value: string): string {
+  return TECHNICAL_REASON_CODES.has(value) ? "" : value;
+}
+
+function inferLookItemSlot(item: LookData["items"][number]): string {
+  const source = normalizeText([
+    item.name,
+    item.category,
+    item.role,
+    item.baseDescription,
+    item.premiumTitle,
+    ...(item.styleTags || []),
+    ...(item.categoryTags || []),
+    ...(item.useCases || []),
+  ].join(" "))
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  if (source.includes("one_piece") || source.includes("vestido") || source.includes("dress") || source.includes("macacao")) return "one_piece";
+  if (source.includes("bottom") || source.includes("calca") || source.includes("trouser") || source.includes("jeans") || source.includes("bermuda") || source.includes("short")) return "bottom";
+  if (source.includes("layer") || source.includes("blazer") || source.includes("casaco") || source.includes("jaqueta")) return "layer";
+  if (source.includes("shoes") || source.includes("sapato") || source.includes("tenis") || source.includes("sandal") || source.includes("flip flop") || source.includes("chinelo") || source.includes("slipper")) return "shoes";
+  if (source.includes("accessory") || source.includes("acessorio") || source.includes("bolsa") || source.includes("handbag")) return "accessory";
+  if (source.includes("top") || source.includes("camisa") || source.includes("blusa") || source.includes("camiseta")) return "top";
+  return "unknown";
+}
+
+function isCompleteRenderableLook(look: LookData, styleDirection: string): boolean {
+  const slots = (look.items || []).map(inferLookItemSlot);
+  const hasOnePiece = slots.includes("one_piece");
+  const hasTopAndBottom = slots.includes("top") && slots.includes("bottom");
+  const feminine = normalizeText(styleDirection).toLowerCase().includes("femin");
+  const slotCounts = slots.reduce<Record<string, number>>((counts, slot) => {
+    counts[slot] = (counts[slot] || 0) + 1;
+    return counts;
+  }, {});
+
+  if ((slotCounts.shoes || 0) > 1 || (slotCounts.accessory || 0) > 1 || (slotCounts.top || 0) > 1 || (slotCounts.bottom || 0) > 1) {
+    return false;
+  }
+
+  return feminine ? hasOnePiece || hasTopAndBottom : hasTopAndBottom;
 }
 
 export function hasLegacyTryOnProducts(looks: LookData[] | null | undefined): boolean {
@@ -216,7 +285,9 @@ function buildPaletteHex(name: string, fallbackHex: string): string {
 
 function buildPaletteFromOnboarding(data: OnboardingData, essence: EssenceProfile): ResultPayload["palette"] {
   const evidence = buildColorStyleEvidence(buildColorStyleEvidenceInputFromOnboarding(data));
-  const directionLabel = getStyleDirectionDisplayLabel(data?.intent?.styleDirection || essence.styleDirection);
+  const directionLabel = isExplicitNeutralStyleDirection(data?.intent?.styleDirection || essence.styleDirection)
+    ? "Base neutra"
+    : getStyleDirectionDisplayLabel(data?.intent?.styleDirection || essence.styleDirection);
   const contrast = evidence.confidence === "high" ? "Alto" : evidence.confidence === "medium" ? "Médio Alto" : "Médio";
 
   return {
@@ -448,7 +519,7 @@ function buildLooks(goal: string, fit: string, lookNames: [string, string, strin
  * Normalize API looks to ensure they have valid product UUIDs.
  * API looks come from finalResult.looks and contain real items with real product IDs.
  */
-function normalizeApiLooks(apiLooks: any[] | null | undefined): LookData[] {
+function normalizeApiLooks(apiLooks: any[] | null | undefined, styleDirection: string): LookData[] {
   if (!Array.isArray(apiLooks) || apiLooks.length === 0) return [];
 
   return apiLooks
@@ -461,6 +532,13 @@ function normalizeApiLooks(apiLooks: any[] | null | undefined): LookData[] {
           id: item.id || "",
           product_id: normalizeText(item.product_id) || normalizeText(item.productId) || "",
           photoUrl: item.photoUrl || item.image_url || "",
+          brand: normalizeText(item.brand),
+          name: normalizeText(item.name),
+          premiumTitle: stripTechnicalReasonCodes(normalizeText(item.premiumTitle)),
+          impactLine: stripTechnicalReasonCodes(normalizeText(item.impactLine)),
+          functionalBenefit: stripTechnicalReasonCodes(normalizeText(item.functionalBenefit)),
+          socialEffect: stripTechnicalReasonCodes(normalizeText(item.socialEffect)),
+          contextOfUse: stripTechnicalReasonCodes(normalizeText(item.contextOfUse)),
         }))
         : [];
       const productId = normalizeText(look.product_id) || normalizeText(look.productId) || normalizeText(items[0]?.product_id);
@@ -468,24 +546,24 @@ function normalizeApiLooks(apiLooks: any[] | null | undefined): LookData[] {
       return {
         id: look.id || "",
         product_id: productId || "",
-        name: look.name || "Look",
-        intention: look.intention || "",
-        type: look.type || "Híbrido Seguro",
+        name: stripTechnicalReasonCodes(normalizeText(look.name)) || "Look",
+        intention: stripTechnicalReasonCodes(normalizeText(look.intention)),
+        type: normalizeText(look.type) === "Híbrido Premium" || normalizeText(look.type) === "Expansão Direcionada" ? normalizeText(look.type) : "Híbrido Seguro",
         items,
-        accessories: Array.isArray(look.accessories) ? look.accessories : [],
-        explanation: look.explanation || "",
-        whenToWear: look.whenToWear || "",
+        accessories: Array.isArray(look.accessories) ? look.accessories.map((item: unknown) => stripTechnicalReasonCodes(normalizeText(item))).filter(Boolean) : [],
+        explanation: stripTechnicalReasonCodes(normalizeText(look.explanation)),
+        whenToWear: stripTechnicalReasonCodes(normalizeText(look.whenToWear)),
         popularityRank: look.popularityRank,
         isDailyPick: look.isDailyPick,
       } as LookData;
     })
-    .filter((look) => look.items.length > 0);
+    .filter((look) => look.items.length > 0 && isCompleteRenderableLook(look, styleDirection));
 }
 
 export function buildResultSurface(
   data: OnboardingData,
   visualAnalysis?: VisualAnalysisPayload | null,
-  apiResult?: { looks?: any[] } | null,
+  apiResult?: { looks?: any[]; curationFallback?: { reason?: string; message?: string } } | null,
 ): ResultSurface {
   const essence = deriveEssenceProfile(data);
   const goal = normalizeText(data?.intent?.imageGoal) || "Elegância";
@@ -506,7 +584,7 @@ export function buildResultSurface(
         Array.isArray(visualAnalysis.keySignals) && visualAnalysis.keySignals.length > 0
           ? visualAnalysis.keySignals.slice(0, 4).map((value) => normalizeText(value)).filter(Boolean)
           : essence.keySignals,
-      styleDirection: visualAnalysis.styleDirection || essence.styleDirection,
+      styleDirection: essence.styleDirection,
       lookNames:
         Array.isArray(visualAnalysis.lookNames) && visualAnalysis.lookNames.length === 3
           ? [
@@ -572,10 +650,19 @@ export function buildResultSurface(
   const accessories = buildAccessories(goalKey, metal, essence);
 
   // Prefer real API looks (with real product UUIDs) over synthetic looks
-  const realLooks = normalizeApiLooks(apiResult?.looks);
+  const apiLooksProvided = Array.isArray(apiResult?.looks);
+  const realLooks = normalizeApiLooks(apiResult?.looks, essence.styleDirection);
   const looks = realLooks.length > 0
     ? realLooks
+    : apiLooksProvided
+      ? []
     : buildLooks(goal, fit, resolvedEssence.lookNames as [string, string, string], essence);
+  const curationFallback = looks.length === 0
+    ? {
+        reason: normalizeText(apiResult?.curationFallback?.reason) || "INVALID_OUTFIT_COMPOSITION",
+        message: normalizeText(apiResult?.curationFallback?.message) || CURATION_FALLBACK_MESSAGE,
+      }
+    : undefined;
 
   return {
     essence: {
@@ -601,6 +688,7 @@ export function buildResultSurface(
     bodyVisagism,
     accessories,
     looks,
+    ...(curationFallback ? { curationFallback } : {}),
     toAvoid: resolvedEssence.toAvoid,
     headline: visualAnalysis?.source === "ai" ? `Essência captada pela foto: ${resolvedEssence.label}` : `Essência captada: ${resolvedEssence.label}`,
     subheadline: resolvedEssence.summary,
