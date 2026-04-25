@@ -1,5 +1,11 @@
 import type { ColorimetryAnalysisData, OnboardingData } from "@/types/onboarding";
-import { getStyleDirectionDisplayLabel, getStyleDirectionToneProfile, normalizeStyleDirectionPreference, type StyleDirectionPreference } from "@/lib/style-direction";
+import {
+  getStyleDirectionDisplayLabel,
+  getStyleDirectionToneProfile,
+  normalizeStyleDirectionPreference,
+  type StyleDirectionPreference,
+} from "@/lib/style-direction";
+import { normalizeConsultationProfile } from "@/lib/consultation-profile";
 
 export type PaletteConfidence = "low" | "medium" | "high";
 
@@ -152,13 +158,13 @@ function buildBaseCandidates(input: ColorStyleInput, direction: StyleDirectionPr
     .filter((value) => value && isSafeBaseColor(value));
 
   const directionDefaults: Record<StyleDirectionPreference, string[]> = {
-    Masculina: ["Preto", "Grafite", "Marinho", "Off white"],
-    Feminina: ["Off white", "Grafite", "Marinho", "Bege"],
-    Neutra: ["Preto", "Grafite", "Marinho", "Off white"],
-    Streetwear: ["Preto", "Grafite", "Marinho", "Verde oliva fechado"],
-    Casual: ["Grafite", "Marinho", "Bege", "Off white"],
-    Social: ["Preto", "Marinho", "Grafite", "Off white"],
-    "Sem preferência": ["Preto", "Grafite", "Marinho", "Off white"],
+    masculine: ["Preto", "Grafite", "Marinho", "Off white"],
+    feminine: ["Off white", "Grafite", "Marinho", "Bege"],
+    neutral: ["Preto", "Grafite", "Marinho", "Off white"],
+    streetwear: ["Preto", "Grafite", "Marinho", "Verde oliva fechado"],
+    casual: ["Grafite", "Marinho", "Bege", "Off white"],
+    social: ["Preto", "Marinho", "Grafite", "Off white"],
+    no_preference: ["Preto", "Grafite", "Marinho", "Off white"],
   };
 
   return pickColorList(safeFavorites, directionDefaults[direction], 4);
@@ -176,13 +182,13 @@ function buildAccentCandidates(input: ColorStyleInput, direction: StyleDirection
     .filter((value) => isStrongColor(value));
 
   const directionDefaults: Record<StyleDirectionPreference, string[]> = {
-    Masculina: ["Verde oliva fechado", "Vinho fechado", "Prata"],
-    Feminina: ["Vinho fechado", "Prata", "Dourado suave"],
-    Neutra: ["Prata", "Verde oliva fechado", "Vinho fechado"],
-    Streetwear: ["Azul profundo", "Verde oliva fechado", "Vinho fechado"],
-    Casual: ["Vinho fechado", "Verde oliva fechado", "Prata"],
-    Social: ["Dourado", "Prata", "Vinho fechado"],
-    "Sem preferência": ["Prata", "Verde oliva fechado", "Vinho fechado"],
+    masculine: ["Verde oliva fechado", "Vinho fechado", "Prata"],
+    feminine: ["Vinho fechado", "Prata", "Dourado suave"],
+    neutral: ["Prata", "Verde oliva fechado", "Vinho fechado"],
+    streetwear: ["Azul profundo", "Verde oliva fechado", "Vinho fechado"],
+    casual: ["Vinho fechado", "Verde oliva fechado", "Prata"],
+    social: ["Dourado", "Prata", "Vinho fechado"],
+    no_preference: ["Prata", "Verde oliva fechado", "Vinho fechado"],
   };
 
   const source = confidence === "high" ? [...preferredAccents, ...strongFavorites] : preferredAccents;
@@ -224,7 +230,7 @@ function inferConfidence(input: ColorStyleInput, direction: StyleDirectionPrefer
   if (contrast === "médio") score += 1;
   if (hasEvidenceTokens) score += 1;
   if (strongColorExposure) score += 1;
-  if (direction === "Sem preferência" || direction === "Neutra") score -= 1;
+  if (direction === "neutral" || direction === "no_preference") score -= 1;
   if (contrast === "baixo") score -= 2;
 
   if (score >= 4) return "high";
@@ -341,10 +347,19 @@ export function buildColorStyleEvidenceInputFromOnboarding(data: OnboardingData)
   const conversation = data.conversation || ({} as OnboardingData["conversation"]);
   const colors = data.colors || ({} as OnboardingData["colors"]);
   const colorimetry = (data.colorimetry || {}) as Partial<ColorimetryAnalysisData>;
+  const consultation = normalizeConsultationProfile(data.consultation);
   return {
-    styleDirection: intent.styleDirection || conversation.styleDirection || "Sem preferência",
-    favoriteColors: colorimetry.basePalette?.length ? colorimetry.basePalette : colors.favoriteColors,
-    avoidColors: colorimetry.avoidOrUseCarefully?.length ? colorimetry.avoidOrUseCarefully : colors.avoidColors,
+    styleDirection: normalizeStyleDirectionPreference(intent.styleDirection || conversation.styleDirection || "Sem preferÃªncia"),
+    favoriteColors: consultation.preferredColors.length > 0
+      ? consultation.preferredColors
+      : colorimetry.basePalette?.length
+        ? colorimetry.basePalette
+        : colors.favoriteColors,
+    avoidColors: consultation.avoidColors.length > 0
+      ? consultation.avoidColors
+      : colorimetry.avoidOrUseCarefully?.length
+        ? colorimetry.avoidOrUseCarefully
+        : colors.avoidColors,
     colorSeason: colorimetry.colorSeason || colors.colorSeason,
     undertone: colorimetry.undertone || colors.undertone,
     skinTone: colorimetry.skinTone || colors.skinTone,
