@@ -10,6 +10,10 @@ import { processAndPersistLead } from "@/lib/recommendation/actions";
 import { isValidResultId } from "@/lib/result/id";
 import { buildVenusBodyScannerIntro } from "@/lib/venus/brand";
 
+const PROCESSING_TIMEOUT_MS = 45_000;
+const PROCESSING_CHECKPOINT_TIMEOUT = "processing_timeout";
+const PROCESSING_CHECKPOINT_FALLBACK = "processing_fallback_used";
+
 const PHASES = [
   "Foto recebida. Analisando...",
   "Decifrando proporções e linhas...",
@@ -56,6 +60,8 @@ export default function ProcessingPage() {
   const [savedResultId, setSavedResultId] = useState<string | null>(null);
   const [status, setStatus] = useState<"processing" | "completed">("processing");
   const isGenerating = useRef(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timeoutReachedRef = useRef(false);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -116,7 +122,7 @@ export default function ProcessingPage() {
         setStatus("processing");
         setSavedResultId(null);
         console.info("[PROCESSING] persistence flow started", {
-          commitSha: "4d65c5b",
+          commitSha: "b890612",
           currentUrl: typeof window !== "undefined" ? window.location.href : null,
           isLoaded,
           isJourneyLoaded,
@@ -132,6 +138,25 @@ export default function ProcessingPage() {
           hasScannerPhotos: Boolean(payload.scanner?.facePhoto || payload.scanner?.bodyPhoto),
           hasFallback: Boolean(payload.scanner?.skipped),
         });
+
+        timeoutRef.current = setTimeout(() => {
+          if (timeoutReachedRef.current) return;
+          timeoutReachedRef.current = true;
+          console.warn("[PROCESSING] checkpoint", {
+            checkpoint: PROCESSING_CHECKPOINT_TIMEOUT,
+            reasonCode: "PROCESSING_TIMEOUT",
+            message: "Processing exceeded timeout, showing fallback UI",
+          });
+        }, PROCESSING_TIMEOUT_MS);
+
+        if (timeoutReachedRef.current) {
+          console.warn("[PROCESSING] checkpoint", {
+            checkpoint: PROCESSING_CHECKPOINT_FALLBACK,
+            reasonCode: "PROCESSING_TIMEOUT",
+          });
+          router.replace(`/result?preview=1`);
+          return;
+        }
 
         const dbReferenceId = await processAndPersistLead(payload);
         console.info("[PROCESSING] processAndPersistLead returned", { dbReferenceId });
@@ -204,6 +229,11 @@ export default function ProcessingPage() {
           router.push(`/result?id=${dbReferenceId}`);
         }
       } catch (e) {
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+          timeoutRef.current = null;
+        }
+
         if (e instanceof Error && e.message === "TENANT_RESOLUTION_FAILED") {
           console.warn("[PROCESSING] tenant resolution failed; falling back to preview result", {
             orgId: payload?.tenant?.orgId || null,
@@ -219,11 +249,13 @@ export default function ProcessingPage() {
         const errorCode = mapProcessingFailureCode(failureReason);
         const safeMessage = mapProcessingSafeMessage(failureReason);
         console.error("[PROCESSING] critical persistence failure", {
-          commitSha: "4d65c5b",
+          commitSha: "b890612",
           currentUrl: typeof window !== "undefined" ? window.location.href : null,
           isLoaded,
           isJourneyLoaded,
           failureReason,
+          reasonCode: errorCode,
+          checkpoint: timeoutReachedRef.current ? PROCESSING_CHECKPOINT_TIMEOUT : null,
           orgSlug: payload?.tenant?.orgSlug || null,
           orgId: payload?.tenant?.orgId || null,
           hasTenant: Boolean(payload?.tenant && Object.keys(payload.tenant).some((k) => (payload.tenant as Record<string, unknown>)[k])),

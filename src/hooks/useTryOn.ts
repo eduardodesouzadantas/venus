@@ -24,6 +24,7 @@ export const TRYON_LOADING_MESSAGES = [
 
 const TRYON_POLL_INTERVAL_MS = 3_000;
 const TRYON_MAX_WAIT_MS = 25_000;
+const TRYON_STATUS_STALLED = "TRYON_STATUS_STALLED";
 
 type TryOnAutoResponse = {
   status?: string;
@@ -272,7 +273,7 @@ export function useTryOn(): UseTryOnResult {
             return;
           }
 
-          activateFallback("poll_timeout", {
+          activateFallback(TRYON_STATUS_STALLED, {
             orgId: org_id,
             requestId,
             status: "processing",

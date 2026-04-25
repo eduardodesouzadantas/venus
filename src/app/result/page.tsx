@@ -586,10 +586,16 @@ function ResultDashboardContent() {
 
         const builtSurface = buildResultSurface(onboardingData, payload.analysis, payload.finalResult);
         setSurface(builtSurface);
-      } catch (err) {
+} catch (err) {
         if (!shouldAbort) {
-          console.error(`[DEBUG][RESULT_PAGE] Load error:`, err);
-          setError(err instanceof Error ? err.message : "Sintonizando...");
+          const errorMessage = err instanceof Error ? err.message : "RESULT_RENDER_FAILED";
+          console.error(`[RESULT] checkpoint`, {
+            checkpoint: "result_render_failed",
+            reasonCode: errorMessage,
+            resultId: id,
+            hasValidResultId,
+          });
+          setError(errorMessage);
         }
       } finally {
         if (!shouldAbort) {
