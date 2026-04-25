@@ -64,15 +64,15 @@ function buildShareStyleName(surface: ResultSurface, look: LookData) {
     .join(" ")
     .toLowerCase();
 
-  if (preference === "Feminina") {
+  if (preference === "feminine") {
     return getStyleDirectionToneProfile(preference).title;
   }
 
-  if (preference === "Masculina") {
+  if (preference === "masculine") {
     return getStyleDirectionToneProfile(preference).title;
   }
 
-  if (preference === "Streetwear" || preference === "Casual" || preference === "Social") {
+  if (preference === "streetwear" || preference === "casual" || preference === "social") {
     return getStyleDirectionToneProfile(preference).title;
   }
 
