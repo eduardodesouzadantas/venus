@@ -61,6 +61,9 @@ type Message = {
   text: string;
 };
 
+const TENANT_RESOLUTION_TIMEOUT_MS = 9000;
+const TENANT_RESOLUTION_TIMEOUT_REASON = "TENANT_RESOLUTION_TIMEOUT";
+
 const STYLE_DIRECTION_CHAT_OPTIONS: ChoiceOption[] = [
   { label: "Masculino", value: "masculine", conversationValue: "masculino" },
   { label: "Feminino", value: "feminine", conversationValue: "feminino" },
@@ -263,6 +266,59 @@ function WowActionButton({
     >
       {label}
     </button>
+  );
+}
+
+function TenantLoadingScreen({ orgSlug }: { orgSlug: string }) {
+  return (
+    <VenusLoadingScreen
+      title="Abrindo o chat da Venus"
+      subtitle={`Validando a loja ${orgSlug || "informada"}.`}
+    />
+  );
+}
+
+function TenantResolutionTimeoutScreen({
+  orgSlug,
+  onRetry,
+}: {
+  orgSlug: string;
+  onRetry: () => void;
+}) {
+  const safeOrg = orgSlug || "loja";
+
+  return (
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#090909] px-5 py-8 text-white">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute left-[-10%] top-[-8%] h-72 w-72 rounded-full bg-[#C9A84C]/10 blur-[110px]" />
+        <div className="absolute right-[-14%] top-[14%] h-64 w-64 rounded-full bg-white/5 blur-[120px]" />
+        <div className="absolute bottom-[-12%] left-[14%] h-80 w-80 rounded-full bg-[#C9A84C]/6 blur-[140px]" />
+      </div>
+
+      <div className="relative z-10 w-full max-w-[560px] rounded-[34px] border border-white/10 bg-white/[0.045] p-6 text-center shadow-[0_24px_80px_rgba(0,0,0,0.28)] backdrop-blur-2xl sm:p-8">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-[#C9A84C]/20 bg-[#C9A84C]/10">
+          <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-[#C9A84C]" />
+        </div>
+
+        <p className="mt-5 text-[9px] font-semibold uppercase tracking-[0.38em] text-[#C9A84C]">
+          {TENANT_RESOLUTION_TIMEOUT_REASON}
+        </p>
+        <h1 className="mt-3 text-[2rem] font-semibold leading-[1.02] tracking-[-0.04em] sm:text-[2.35rem]">
+          Ainda estou validando a loja.
+        </h1>
+        <p className="mt-4 text-[15px] leading-7 text-white/70 sm:text-[16px]">
+          A entrada da {safeOrg} demorou mais que o esperado. Tente novamente sem perder esta jornada.
+        </p>
+
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-6 inline-flex min-h-12 items-center justify-center rounded-full bg-[linear-gradient(180deg,#F1D77A_0%,#D4AF37_100%)] px-6 py-3.5 text-[12px] font-semibold uppercase tracking-[0.18em] text-[#0A0A0A] shadow-[0_18px_40px_rgba(212,175,55,0.18)] transition-transform active:scale-[0.98]"
+        >
+          Tentar novamente
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -833,18 +889,19 @@ const nextHref = useMemo(() => {
 }
 
 function ChatContent() {
-  const { data, updateData, journey, isLoaded, isJourneyLoaded } = useOnboarding();
+  const { data, updateData, journey, isLoaded } = useOnboarding();
   const searchParams = useSearchParams();
   const orgSlug = normalizeTenantSlug(
     searchParams.get("org") || data?.tenant?.orgSlug || journey?.onboardingSeed?.tenant?.orgSlug || ""
   );
   const orgId = data?.tenant?.orgId || journey?.onboardingSeed?.tenant?.orgId || "";
-  const [tenantResolutionStatus, setTenantResolutionStatus] = useState<"loading" | "ready" | "missing" | "invalid">("loading");
+  const [tenantResolutionStatus, setTenantResolutionStatus] = useState<"loading" | "ready" | "missing" | "invalid" | "timeout">("loading");
+  const [tenantRetryNonce, setTenantRetryNonce] = useState(0);
   const validatedTenantSlugRef = useRef<string>("");
   const validationInFlightRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!isLoaded || !isJourneyLoaded) {
+    if (!isLoaded) {
       return;
     }
 
@@ -914,10 +971,36 @@ function ChatContent() {
     return () => {
       cancelled = true;
     };
-  }, [data?.tenant, isJourneyLoaded, isLoaded, orgSlug, updateData]);
+  }, [data?.tenant, isLoaded, orgSlug, tenantRetryNonce, updateData]);
+
+  useEffect(() => {
+    if (tenantResolutionStatus !== "loading") {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      if (validatedTenantSlugRef.current !== orgSlug) {
+        validationInFlightRef.current = null;
+        setTenantResolutionStatus("timeout");
+      }
+    }, TENANT_RESOLUTION_TIMEOUT_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [orgSlug, tenantResolutionStatus, tenantRetryNonce]);
+
+  const retryTenantResolution = () => {
+    validationInFlightRef.current = null;
+    validatedTenantSlugRef.current = "";
+    setTenantResolutionStatus("loading");
+    setTenantRetryNonce((current) => current + 1);
+  };
 
   if (tenantResolutionStatus === "loading") {
-    return <div className="min-h-screen bg-[#090909]" />;
+    return <TenantLoadingScreen orgSlug={orgSlug} />;
+  }
+
+  if (tenantResolutionStatus === "timeout") {
+    return <TenantResolutionTimeoutScreen orgSlug={orgSlug} onRetry={retryTenantResolution} />;
   }
 
   if (tenantResolutionStatus === "missing" || tenantResolutionStatus === "invalid") {

@@ -171,6 +171,30 @@ run("public entry and chat validate the tenant before onboarding continues", () 
   assert.match(chatSource, /TenantResolutionFallbackScreen/);
 });
 
+run("onboarding chat tenant loading is visible and recoverable", () => {
+  const chatSource = fs.readFileSync(path.join(process.cwd(), "src/app/onboarding/chat/page.tsx"), "utf8");
+
+  assert.doesNotMatch(chatSource, /return <div className="min-h-screen bg=\{?["']#090909["']\}?["']?\s*\/>/);
+  assert.match(chatSource, /function TenantLoadingScreen/);
+  assert.match(chatSource, /Abrindo o chat da Venus/);
+  assert.match(chatSource, /Validando a loja/);
+  assert.match(chatSource, /TENANT_RESOLUTION_TIMEOUT/);
+  assert.match(chatSource, /TENANT_RESOLUTION_TIMEOUT_MS = 9000/);
+  assert.match(chatSource, /Tentar novamente/);
+  assert.match(chatSource, /retryTenantResolution/);
+  assert.match(chatSource, /<TenantResolutionTimeoutScreen orgSlug=\{orgSlug\} onRetry=\{retryTenantResolution\} \/>/);
+});
+
+run("onboarding chat resolves public tenant without waiting for journey hydration", () => {
+  const chatSource = fs.readFileSync(path.join(process.cwd(), "src/app/onboarding/chat/page.tsx"), "utf8");
+
+  assert.match(chatSource, /if \(!isLoaded\) \{/);
+  assert.doesNotMatch(chatSource, /if \(!isLoaded \|\| !isJourneyLoaded\) \{/);
+  assert.match(chatSource, /fetch\(`\/api\/public\/org\/\$\{encodeURIComponent\(orgSlug\)\}`/);
+  assert.match(chatSource, /searchParams\.get\("org"\)/);
+  assert.match(chatSource, /orgSlug=\{orgSlug\}/);
+});
+
 run("body photo upload keeps gallery separate from camera capture", () => {
   const source = fs.readFileSync(path.join(process.cwd(), "src/components/ui/BodyPhotoUpload.tsx"), "utf8");
   const pageSource = fs.readFileSync(path.join(process.cwd(), "src/app/scanner/body/page.tsx"), "utf8");
