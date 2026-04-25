@@ -3,6 +3,7 @@ import type { ResultSurface } from "@/lib/result/surface";
 import type { DecisionResult } from "@/lib/decision-engine/types";
 import type { TryOnQualityAssessment } from "@/lib/tryon/result-quality";
 import { buildVenusResultNarrative, buildVenusWhatsAppLeadIn, VENUS_STYLIST_NAME } from "@/lib/venus/brand";
+import { normalizeConsultationProfile } from "@/lib/consultation-profile";
 
 type NormalizedLookCard = {
   id: string;
@@ -67,6 +68,14 @@ export type VenusStylistAudit = {
     title: string;
     subtitle: string;
     prompt: string;
+  };
+  report: {
+    sections: Array<{
+      eyebrow: string;
+      title: string;
+      body: string;
+      bullets: string[];
+    }>;
   };
 };
 
@@ -138,6 +147,7 @@ export function buildVenusStylistAudit({
   resultId,
   orgName,
 }: BuildVenusStylistAuditInput): VenusStylistAudit {
+  const consultation = normalizeConsultationProfile(onboardingData?.consultation);
   const narrative = buildVenusResultNarrative({
     state: tryOnQuality.state,
     reason: tryOnQuality.reason,
@@ -151,6 +161,8 @@ export function buildVenusStylistAudit({
   const buyNowLooks = collectBuyNowLooks(surface);
   const onboardingGoal = normalizeText(onboardingData?.intent?.imageGoal);
   const onboardingStyle = normalizeText(onboardingData?.intent?.styleDirection);
+  const perception = normalizeText(consultation.desiredPerception) || onboardingGoal || surface.essence.label;
+  const occasion = normalizeText(consultation.occasion) || "contexto principal";
   const strengths = uniqueStrings([
     surface.essence.summary,
     surface.palette.description,
@@ -163,6 +175,9 @@ export function buildVenusStylistAudit({
     surface.lookHierarchy[1]?.description,
     surface.lookHierarchy[2]?.description,
   ]);
+  const paletteBase = surface.palette.evidence.basePalette.slice(0, 3).map((entry) => `${entry.name}: ${entry.reason}`);
+  const paletteAccent = surface.palette.evidence.accentPalette.slice(0, 3).map((entry) => `${entry.name}: ${entry.reason}`);
+  const paletteCaution = surface.palette.evidence.avoidOrUseCarefully.slice(0, 3).map((entry) => `${entry.name}: ${entry.reason}`);
 
   const openingTitle =
     tryOnQuality.state === "hero"
@@ -269,6 +284,104 @@ export function buildVenusStylistAudit({
       prompt: orgName
         ? `Se quiser, registre o post para manter a memória da leitura viva na próxima conversa da ${orgName}.`
         : "Se quiser, registre o post para manter a memória da leitura viva na próxima conversa.",
+    },
+    report: {
+      sections: [
+        {
+          eyebrow: "Essência de estilo",
+          title: surface.essence.label,
+          body: compactSentence(
+            joinPieces([
+              surface.essence.summary,
+              onboardingStyle ? `Direção explícita: ${onboardingStyle}.` : null,
+              consultation.aestheticVibe ? `Vibe: ${consultation.aestheticVibe}.` : null,
+            ]),
+          ),
+          bullets: uniqueStrings([
+            surface.essence.keySignals[0],
+            surface.essence.keySignals[1],
+            consultation.desiredPerception,
+          ]).slice(0, 3),
+        },
+        {
+          eyebrow: "Leitura visual",
+          title: "O que a imagem sustenta hoje",
+          body: compactSentence(
+            joinPieces([
+              surface.diagnostic.currentPerception,
+              surface.bodyVisagism.generalFit,
+              consultation.bodyFocus ? `Foco corporal: ${consultation.bodyFocus}.` : null,
+            ]),
+          ),
+          bullets: uniqueStrings([
+            surface.bodyVisagism.shoulders,
+            surface.bodyVisagism.face,
+            surface.bodyVisagism.generalFit,
+          ]).slice(0, 3),
+        },
+        {
+          eyebrow: "Cores base / acentos / cautela",
+          title: surface.palette.family,
+          body: compactSentence(surface.palette.description),
+          bullets: uniqueStrings([
+            ...paletteBase.slice(0, 2),
+            ...paletteAccent.slice(0, 2),
+            ...paletteCaution.slice(0, 2),
+          ]).slice(0, 3),
+        },
+        {
+          eyebrow: "O que valorizar",
+          title: "Sinais que merecem reforço",
+          body: "A leitura fica mais forte quando a curadoria valoriza coerência, presença e uso real.",
+          bullets: uniqueStrings([
+            surface.lookHierarchy[0]?.title,
+            surface.lookHierarchy[1]?.title,
+            consultation.preferredColors.length > 0 ? `Cores preferidas: ${consultation.preferredColors.slice(0, 2).join(", ")}` : null,
+          ]).slice(0, 3),
+        },
+        {
+          eyebrow: "O que evitar",
+          title: "Zonas de ruído",
+          body: "Evitar aqui não é censura visual. É cortar o que enfraquece a leitura e quebra a linha escolhida.",
+          bullets: uniqueStrings([
+            ...surface.toAvoid.slice(0, 3),
+            ...consultation.restrictions.slice(0, 2),
+            consultation.avoidColors.length > 0 ? `Cores de cautela: ${consultation.avoidColors.slice(0, 2).join(", ")}` : null,
+          ]).slice(0, 3),
+        },
+        {
+          eyebrow: "Curadoria da loja",
+          title: "Peças do catálogo real com melhor aderência",
+          body: compactSentence(
+            joinPieces([
+              surface.lookHierarchy[0]?.description,
+              surface.lookHierarchy[1]?.description,
+              consultation.occasion ? `Ocasião: ${consultation.occasion}.` : null,
+            ]),
+          ),
+          bullets: uniqueStrings([
+            surface.lookHierarchy[0]?.title,
+            surface.lookHierarchy[1]?.title,
+            surface.lookHierarchy[2]?.title,
+          ]).slice(0, 3),
+        },
+        {
+          eyebrow: "Próximo look recomendado",
+          title: surface.lookHierarchy[0]?.title || "Look principal",
+          body: compactSentence(
+            joinPieces([
+              surface.lookHierarchy[0]?.description,
+              surface.looks[0]?.explanation,
+              `Próxima leitura: ${perception.toLowerCase()} para ${occasion.toLowerCase()}.`,
+            ]),
+          ),
+          bullets: uniqueStrings([
+            surface.looks[0]?.name,
+            surface.looks[0]?.items[0]?.name,
+            surface.looks[0]?.accessories[0],
+          ]).slice(0, 3),
+        },
+      ],
     },
   };
 }
