@@ -47,6 +47,85 @@ function containsAny(text: string, needles: string[]) {
   return needles.some((needle) => text.includes(needle));
 }
 
+function hasAnySignal(text: string, signals: string[]) {
+  const tokens = text.split(/[^a-z0-9]+/g).filter(Boolean);
+  return signals.some((signal) => {
+    const normalizedSignal = stripDiacritics(signal).toLowerCase();
+    if (!normalizedSignal) return false;
+    if (normalizedSignal.includes(" ")) {
+      return text.includes(normalizedSignal);
+    }
+    return tokens.includes(normalizedSignal);
+  });
+}
+
+const MASCULINE_CONFLICT_SIGNALS = [
+  "women",
+  "womens",
+  "woman",
+  "female",
+  "feminine",
+  "feminino",
+  "ladies",
+  "girl",
+  "girls",
+  "wedge",
+  "wedges",
+  "handbag",
+  "purse",
+  "clutch",
+  "pump",
+  "heel",
+  "heels",
+];
+
+const FEMININE_CONFLICT_SIGNALS = [
+  "men",
+  "mens",
+  "man",
+  "male",
+  "masculine",
+  "masculino",
+  "brogue",
+  "oxford",
+  "loafer",
+  "tie",
+  "ties",
+];
+
+export function getStyleDirectionConflictCode(
+  targetDirection: unknown,
+  productDirection: unknown,
+  productSignals: string[] = [],
+): "PROFILE_DIRECTION_CONFLICT" | null {
+  const preference = normalizeStyleDirectionPreference(targetDirection);
+  const direction = normalizeStyleDirectionPreference(productDirection);
+  const signalText = stripDiacritics(productSignals.join(" ").toLowerCase());
+
+  if (preference === "masculine") {
+    if (direction === "feminine" || hasAnySignal(signalText, MASCULINE_CONFLICT_SIGNALS)) {
+      return "PROFILE_DIRECTION_CONFLICT";
+    }
+    return null;
+  }
+
+  if (preference === "feminine") {
+    if (direction === "masculine" || hasAnySignal(signalText, FEMININE_CONFLICT_SIGNALS)) {
+      return "PROFILE_DIRECTION_CONFLICT";
+    }
+    return null;
+  }
+
+  if (preference === "neutral" || preference === "no_preference") {
+    if (direction === "masculine" || direction === "feminine") {
+      return "PROFILE_DIRECTION_CONFLICT";
+    }
+    return null;
+  }
+
+  return null;
+}
+
 export function normalizeStyleDirectionPreference(value: unknown): StyleDirectionPreference {
   const text = stripDiacritics(normalizeText(value).toLowerCase());
 
@@ -176,6 +255,10 @@ export function isProductCompatibleWithStyleDirection(
   const direction = normalizeStyleDirectionPreference(productDirection);
   const signalText = stripDiacritics(productSignals.join(" ").toLowerCase());
   const hasSignal = (keywords: string[]) => containsAny(signalText, keywords);
+
+  if (getStyleDirectionConflictCode(preference, direction, productSignals)) {
+    return false;
+  }
 
   if (preference === "masculine") {
     return direction !== "feminine" && (direction === "masculine" || direction === "neutral" || direction === "no_preference" || hasSignal(getStyleDirectionCatalogSignals("masculine")));

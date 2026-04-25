@@ -9,6 +9,7 @@ import type {
 import { DEFAULT_RANKING_CONFIG } from "./types";
 import {
   getStyleDirectionCatalogSignals,
+  getStyleDirectionConflictCode,
   getStyleDirectionDisplayLabel,
   isProductCompatibleWithStyleDirection,
   normalizeStyleDirectionPreference,
@@ -20,6 +21,24 @@ function normalizeText(value: unknown): string {
 
 function normalizeList(values: unknown): string[] {
   return Array.isArray(values) ? values.map((value) => normalizeText(value)).filter(Boolean) : [];
+}
+
+function collectProductDirectionSignals(product: CanonicalProduct): string[] {
+  const rawMetadata = product.raw_metadata as Record<string, unknown> | undefined;
+  return [
+    product.title,
+    product.description,
+    product.category,
+    ...(product.style_tags || []),
+    ...(product.colors || []),
+    ...(Array.isArray(rawMetadata?.target_profile) ? (rawMetadata?.target_profile as string[]) : []),
+    ...(Array.isArray(rawMetadata?.use_cases) ? (rawMetadata?.use_cases as string[]) : []),
+    ...(Array.isArray(rawMetadata?.occasion_tags) ? (rawMetadata?.occasion_tags as string[]) : []),
+    ...(Array.isArray(rawMetadata?.style_tags) ? (rawMetadata?.style_tags as string[]) : []),
+    ...(Array.isArray(rawMetadata?.category_tags) ? (rawMetadata?.category_tags as string[]) : []),
+  ]
+    .map((value) => normalizeText(value))
+    .filter(Boolean);
 }
 
 function getProductDirection(product: CanonicalProduct): string {
@@ -64,6 +83,13 @@ export function rankProducts(
       ...styleTags,
     ].filter((value): value is string => typeof value === "string" && Boolean(value));
     const productText = productSignals.join(" ").toLowerCase();
+    const directionConflict = context.user_style_direction
+      ? getStyleDirectionConflictCode(explicitStyleDirection, productDirection, collectProductDirectionSignals(product))
+      : null;
+
+    if (directionConflict) {
+      return { product, score: -1000, reasons: [directionConflict] };
+    }
 
     if (context.user_style_identity && product.style_tags.length > 0) {
       const styleMatch = product.style_tags.some((tag) =>
@@ -327,7 +353,10 @@ export function getTopRecommendations(
   maxRecommendations: number = 3
 ): CanonicalProduct[] {
   const ranked = rankProducts(products, params);
-  return ranked.slice(0, maxRecommendations).map((r) => r.product);
+  return ranked
+    .filter((r) => r.score > -1000 && !r.reasons.includes("PROFILE_DIRECTION_CONFLICT"))
+    .slice(0, maxRecommendations)
+    .map((r) => r.product);
 }
 
 export function buildRecommendationJustification(

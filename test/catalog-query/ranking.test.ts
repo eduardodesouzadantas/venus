@@ -79,7 +79,7 @@ run("rankProducts applies style match weight", () => {
   
   const result = rankProducts(products, params);
   const classicMatch = result.find(r => r.product.id === "p2");
-  assert.ok(classicMatch?.reasons.some(r => r.includes("estilo")));
+  assert.ok(classicMatch?.reasons.some(r => /estilo/i.test(r)));
 });
 
 run("rankProducts applies color match weight", () => {
@@ -95,7 +95,7 @@ run("rankProducts applies color match weight", () => {
   
   const result = rankProducts(products, params);
   const pretoMatch = result.find(r => r.product.id === "p2");
-  assert.ok(pretoMatch?.reasons.some(r => r.includes("cor")));
+  assert.ok(pretoMatch?.reasons.some(r => /cor/i.test(r)));
 });
 
 run("rankProducts applies price match weight", () => {
@@ -113,7 +113,7 @@ run("rankProducts applies price match weight", () => {
   
   const result = rankProducts(products, params);
   const inRange = result.find(r => r.product.id === "p2");
-  assert.ok(inRange?.reasons.some(r => r.includes("orçamento")));
+  assert.ok(inRange?.reasons.some(r => /orç|orc/i.test(r)));
 });
 
 run("rankProducts penalizes out of stock products", () => {
@@ -170,7 +170,7 @@ run("buildRecommendationJustification includes context hints", () => {
 });
 
 run("buildNextStepSuggestion returns appropriate step for LOOK_RECOMMENDATION", () => {
-  const products = [createMockProduct({ raw_metadata: { face_effect: true } })];
+  const products = [{ product: createMockProduct({ raw_metadata: { face_effect: true } }), score: 10, reasons: [] }];
   const params = {
     org_id: "org-1",
     context: { conversation_state: "LOOK_RECOMMENDATION" },
@@ -181,7 +181,7 @@ run("buildNextStepSuggestion returns appropriate step for LOOK_RECOMMENDATION", 
 });
 
 run("buildNextStepSuggestion returns purchase step for CLOSING state", () => {
-  const products = [createMockProduct()];
+  const products = [{ product: createMockProduct(), score: 10, reasons: [] }];
   const params = {
     org_id: "org-1",
     context: { conversation_state: "CLOSING" },
@@ -208,7 +208,7 @@ run("rankProducts handles context relevance for LOOK_RECOMMENDATION state", () =
 });
 
 run("buildNextStepSuggestion suggests try-on when count is low", () => {
-  const products = [createMockProduct()];
+  const products = [{ product: createMockProduct(), score: 10, reasons: [] }];
   const params = {
     org_id: "org-1",
     context: { conversation_state: "DISCOVERY", try_on_count: 1 },

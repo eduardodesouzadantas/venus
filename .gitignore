@@ -43,3 +43,6 @@ next-env.d.ts
 .vercel
 .env*.local
 .claude/
+
+# datasets — large binary/CSV archives, never commit
+data/archive/

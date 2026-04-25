@@ -6,7 +6,7 @@ import { buildColorStyleEvidence, flattenColorStyleEvidence, type ColorStyleEvid
 import { buildConsultationProfileSummary, normalizeConsultationProfile, type ConsultationProfile } from "@/lib/consultation-profile";
 import { deriveEssenceProfile } from "@/lib/result/essence";
 import {
-  getStyleDirectionCatalogSignals,
+  getStyleDirectionConflictCode,
   getStyleDirectionDisplayLabel,
   isProductCompatibleWithStyleDirection,
   isExplicitNeutralStyleDirection,
@@ -137,8 +137,34 @@ const GENERIC_MARKETING_PATTERNS = [
 
 const CATALOG_NO_MATCH_FOR_STYLE_DIRECTION = "CATALOG_NO_MATCH_FOR_STYLE_DIRECTION";
 
+export const RECOMMENDATION_REASON_CODES = {
+  PROFILE_DIRECTION_CONFLICT: "PROFILE_DIRECTION_CONFLICT",
+  INVALID_HERO_SLOT: "INVALID_HERO_SLOT",
+  INVALID_OUTFIT_COMPOSITION: "INVALID_OUTFIT_COMPOSITION",
+  SAME_SLOT_CONFLICT: "SAME_SLOT_CONFLICT",
+  ENCODING_GUARD_FAILED: "ENCODING_GUARD_FAILED",
+} as const;
+
+const MOJIBAKE_PATTERN = /[\xC3\xC2][\x80-\xBF]|[ÃÂ]|�/;
+
+export function detectMojibake(text: string): boolean {
+  // Detects UTF-8 text decoded as Latin-1 (mojibake): e.g. JÃ¡ for Já
+  return MOJIBAKE_PATTERN.test(text);
+}
+
 function normalizeText(value: unknown): string {
-  return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
+  if (typeof value !== "string") return "";
+  const text = value.trim().replace(/\s+/g, " ");
+  if (!detectMojibake(text) && !text.includes("Â") && !text.includes("�")) {
+    return text;
+  }
+
+  try {
+    const repaired = Buffer.from(text, "latin1").toString("utf8").trim().replace(/\s+/g, " ");
+    return repaired || text;
+  } catch {
+    return text;
+  }
 }
 
 function uniq(values: string[]): string[] {
@@ -151,6 +177,109 @@ function stripDiacritics(value: string): string {
 
 function matchText(value: string): string {
   return stripDiacritics(normalizeText(value)).toLowerCase();
+}
+
+function collectProductDirectionSignals(product: Product): string[] {
+  const stylist = deriveCatalogStylistProfile(product);
+  return [
+    product.name,
+    product.category,
+    product.type,
+    product.style,
+    product.description,
+    product.persuasive_description,
+    product.emotional_copy,
+    product.catalog_notes,
+    ...(product.tags || []),
+    ...(product.style_tags || []),
+    ...(product.category_tags || []),
+    ...(product.fit_tags || []),
+    ...(product.color_tags || []),
+    ...(product.target_profile || []),
+    ...(product.use_cases || []),
+    ...(product.occasion_tags || []),
+    ...(product.season_tags || []),
+    stylist.title,
+    stylist.summary,
+    stylist.authorityRationale,
+    stylist.conversionCopy,
+    ...stylist.styleTags,
+    ...stylist.categoryTags,
+    ...stylist.fitTags,
+    ...stylist.colorTags,
+    ...stylist.targetProfile,
+    ...stylist.useCases,
+  ]
+    .map((value) => matchText(value || ""))
+    .filter(Boolean);
+}
+
+export function validateProfileDirectionConflict(
+  product: Product,
+  styleDirection: unknown,
+): { valid: boolean; code?: string } {
+  const stylist = deriveCatalogStylistProfile(product);
+  const conflictCode = getStyleDirectionConflictCode(
+    styleDirection,
+    stylist.direction,
+    collectProductDirectionSignals(product),
+  );
+
+  return conflictCode ? { valid: false, code: conflictCode } : { valid: true };
+}
+
+const HERO_ELIGIBLE_SLOTS = new Set(["top", "bottom", "layer", "one_piece"]);
+const SLOT_TAG_VALUES = ["top", "bottom", "layer", "one_piece", "shoes", "accessory", "underwear_or_excluded", "beauty_or_excluded"];
+
+function inferProductSlot(product: Product): string {
+  if (product.catalog_notes) {
+    try {
+      const notes = JSON.parse(product.catalog_notes) as Record<string, unknown>;
+      if (typeof notes.slot === "string" && notes.slot) return notes.slot;
+    } catch { /* ignore malformed JSON */ }
+  }
+  const slotFromTags = SLOT_TAG_VALUES.find((slot) => product.tags?.includes(slot));
+  if (slotFromTags) return slotFromTags;
+  const source = matchText(`${product.name} ${product.category} ${product.type}`);
+  if (source.includes("vestido") || source.includes("macacao") || source.includes("macacão")) return "one_piece";
+  if (source.includes("calca") || source.includes("saia") || source.includes("short") || source.includes("bermuda")) return "bottom";
+  if (source.includes("blazer") || source.includes("casaco") || source.includes("jaqueta")) return "layer";
+  if (source.includes("sapato") || source.includes("sandal") || source.includes("tenis") || source.includes("bota")) return "shoes";
+  if (source.includes("camisa") || source.includes("blusa") || source.includes("camiseta")) return "top";
+  const stylist = deriveCatalogStylistProfile(product);
+  if (stylist.role === "accessory") return "accessory";
+  if (stylist.role === "anchor") return "layer";
+  if (stylist.role === "base") return "top";
+  return "unknown";
+}
+
+export function validateHeroRole(product: Product): { valid: boolean; code?: string } {
+  const slot = inferProductSlot(product);
+  if (!HERO_ELIGIBLE_SLOTS.has(slot)) {
+    return { valid: false, code: RECOMMENDATION_REASON_CODES.INVALID_HERO_SLOT };
+  }
+  return { valid: true };
+}
+
+export function validateOutfitComposition(products: Product[]): { valid: boolean; code?: string } {
+  if (products.length < 2) return { valid: true };
+  const slotCounts: Record<string, number> = {};
+  for (const product of products) {
+    const slot = inferProductSlot(product);
+    slotCounts[slot] = (slotCounts[slot] ?? 0) + 1;
+  }
+  if ((slotCounts["shoes"] ?? 0) >= 2 || (slotCounts["accessory"] ?? 0) >= 2) {
+    return { valid: false, code: RECOMMENDATION_REASON_CODES.INVALID_OUTFIT_COMPOSITION };
+  }
+  if ((slotCounts["top"] ?? 0) >= 2 || (slotCounts["bottom"] ?? 0) >= 2) {
+    return { valid: false, code: RECOMMENDATION_REASON_CODES.SAME_SLOT_CONFLICT };
+  }
+  return { valid: true };
+}
+
+function buildAssistedCurationExplanation(code: string | undefined): string {
+  const codeLabel = code ? ` (${code})` : "";
+  return `Curadoria assistida — composição requer ajuste${codeLabel}. Fale com sua stylista ou envie uma nova foto para afinar o look.`;
 }
 
 function compactText(value: unknown, fallback: string, maxLength: number): string {
@@ -891,8 +1020,25 @@ function buildLookFromBlueprint(
     return buildFallbackLook(blueprint, profile, index);
   }
 
+  // Hero role gate: prefer hero-eligible products as the principal item
+  const heroSorted = selectedProducts.length > 1
+    ? [...selectedProducts].sort((a, b) => {
+        const aOk = HERO_ELIGIBLE_SLOTS.has(inferProductSlot(a)) ? 0 : 1;
+        const bOk = HERO_ELIGIBLE_SLOTS.has(inferProductSlot(b)) ? 0 : 1;
+        return aOk - bOk;
+      })
+    : selectedProducts;
+
+  // Composition guard
+  const compositionResult = validateOutfitComposition(heroSorted);
+  const heroResult: { valid: boolean; code?: string } = heroSorted[0]
+    ? validateHeroRole(heroSorted[0])
+    : { valid: true };
+  const isValidComposition = compositionResult.valid && heroResult.valid;
+  const violationCode = !compositionResult.valid ? compositionResult.code : heroResult.code;
+
   const sourceItems = Array.isArray(sourceLook?.items) ? sourceLook?.items : [];
-  const items = selectedProducts.map((product, itemIndex) => {
+  const items = heroSorted.map((product, itemIndex) => {
     const sourceItem = sourceItems?.[itemIndex];
     const item = buildProductLookItem(product, blueprint, profile);
     if (sourceItem && !looksGeneric(sourceItem.premiumTitle)) {
@@ -906,13 +1052,15 @@ function buildLookFromBlueprint(
 
   return {
     id: String(index + 1),
-    product_id: selectedProducts[0]?.id || items[0]?.product_id || "",
+    product_id: heroSorted[0]?.id || items[0]?.product_id || "",
     name: compactText(sourceLook?.name, blueprint.name, 60),
-    intention: buildLookIntention(blueprint, profile, selectedProducts, sourceLook?.intention),
+    intention: buildLookIntention(blueprint, profile, heroSorted, sourceLook?.intention),
     type: normalizeLookType(sourceLook?.type, blueprint.type),
     items,
-    accessories: buildAccessoryHints(selectedProducts, blueprint, profile),
-    explanation: buildLookExplanation(blueprint, profile, selectedProducts, sourceLook?.explanation),
+    accessories: buildAccessoryHints(heroSorted, blueprint, profile),
+    explanation: isValidComposition
+      ? buildLookExplanation(blueprint, profile, heroSorted, sourceLook?.explanation)
+      : buildAssistedCurationExplanation(violationCode),
     whenToWear: compactText(sourceLook?.whenToWear, blueprint.whenToWear, 80),
     popularityRank: index + 1,
   };
@@ -946,13 +1094,14 @@ export function filterCatalogForRecommendation(catalog: Product[], userData: Onb
   const consultationRestrictionTokens = profile.consultation.restrictions.map((value) => matchText(value));
   return catalog.filter((product) => {
     const stylist = deriveCatalogStylistProfile(product);
-    const productSignals = [stylist.summary, stylist.authorityRationale, stylist.conversionCopy, ...stylist.styleTags, ...stylist.useCases].map(matchText).join(" ");
+    const productSignals = collectProductDirectionSignals(product).join(" ");
     const restrictionHit = consultationRestrictionTokens.some((restriction) => restriction && productSignals.includes(restriction));
+    const directionConflict = validateProfileDirectionConflict(product, profile.styleDirection);
 
-    return !restrictionHit && isProductCompatibleWithStyleDirection(
+    return !restrictionHit && directionConflict.valid && isProductCompatibleWithStyleDirection(
       profile.styleDirection,
       stylist.direction,
-      [stylist.summary, stylist.authorityRationale, stylist.conversionCopy, ...stylist.styleTags, ...stylist.useCases],
+      collectProductDirectionSignals(product),
     );
   });
 }

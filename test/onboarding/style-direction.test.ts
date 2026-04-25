@@ -5,9 +5,22 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { buildResultSurface } from "../../src/lib/result/surface.ts";
 import { buildShareableLookCardModel } from "../../src/lib/tryon/share-card.ts";
 import { buildVenusResultNarrative } from "../../src/lib/venus/brand.ts";
-import { filterCatalogForRecommendation } from "../../src/lib/ai/result-normalizer.ts";
+import { buildVenusStylistAudit } from "../../src/lib/venus/audit/engine.ts";
+import {
+  buildCatalogAwareFallbackResult,
+  filterCatalogForRecommendation,
+  detectMojibake,
+  normalizeOpenAIRecommendationPayload,
+  validateProfileDirectionConflict,
+  validateHeroRole,
+  validateOutfitComposition,
+  RECOMMENDATION_REASON_CODES,
+} from "../../src/lib/ai/result-normalizer.ts";
+import { rankProducts } from "../../src/lib/catalog-query/ranking.ts";
 import { buildLeadContextProfileFromOnboarding } from "../../src/lib/lead-context/index.ts";
+import { buildOnboardingSeedFromSnapshot, buildUserProfileUpsert } from "../../src/lib/user/profile.ts";
 import { deriveEssenceProfile } from "../../src/lib/result/essence.ts";
+import { getConsultationQuestions } from "../../src/lib/onboarding/consultation-flow.ts";
 import { normalizeStyleDirectionPreference } from "../../src/lib/style-direction.ts";
 import { VenusLoadingScreen } from "../../src/components/ui/VenusLoadingScreen.tsx";
 
@@ -85,6 +98,18 @@ function buildOnboarding(styleDirection: OnboardingData["intent"]["styleDirectio
       idealFit: "Slim",
       idealFabrics: ["Algodão"],
       avoidFabrics: ["Brilho"],
+      consultation: {
+        styleDirection,
+        desiredPerception: "Autoridade clara",
+        occasion: "Trabalho",
+        boldness: "medium",
+        restrictions: ["Sem transparência"],
+        preferredColors: ["Marinho intenso"],
+        avoidColors: ["Amarelo"],
+        bodyFocus: "Rosto",
+        aestheticVibe: "Clássica",
+        confidenceSource: "conversation",
+      },
       conversation: {
         line: "",
         imageGoal: "autoridade",
@@ -119,7 +144,7 @@ const sampleCatalog = [
     tags: ["alfaiataria"],
     size_type: "",
     created_at: new Date().toISOString(),
-    style_direction: "Masculina",
+    style_direction: "masculine",
     style_tags: ["presença"],
     category_tags: ["base"],
     fit_tags: ["estrutura"],
@@ -155,7 +180,7 @@ const sampleCatalog = [
     tags: ["romântico"],
     size_type: "",
     created_at: new Date().toISOString(),
-    style_direction: "Feminina",
+    style_direction: "feminine",
     style_tags: ["delicado"],
     category_tags: ["base"],
     fit_tags: ["fluido"],
@@ -191,7 +216,7 @@ const sampleCatalog = [
     tags: ["clean"],
     size_type: "",
     created_at: new Date().toISOString(),
-    style_direction: "Neutra",
+    style_direction: "neutral",
     style_tags: ["minimalista"],
     category_tags: ["base"],
     fit_tags: ["leve"],
@@ -206,21 +231,93 @@ const sampleCatalog = [
     formality: "",
     catalog_notes: "",
   },
+  {
+    id: "prod-wedges",
+    org_id: "org-1",
+    name: "Catwalk Women Slim Casual Beige Wedges",
+    category: "Wedges",
+    primary_color: "Bege",
+    style: "feminine",
+    type: "look",
+    price_range: "R$ 499",
+    image_url: "",
+    external_url: "",
+    stock: null,
+    stock_qty: null,
+    reserved_qty: null,
+    stock_status: "available",
+    description: "",
+    persuasive_description: "",
+    emotional_copy: "",
+    tags: ["women", "feminine"],
+    size_type: "",
+    created_at: new Date().toISOString(),
+    style_direction: null,
+    style_tags: ["feminine"],
+    category_tags: ["footwear"],
+    fit_tags: ["slim"],
+    color_tags: ["bege"],
+    target_profile: ["feminine"],
+    use_cases: ["casual"],
+    occasion_tags: ["casual"],
+    season_tags: ["all"],
+    body_effect: "",
+    face_effect: "",
+    visual_weight: "",
+    formality: "",
+    catalog_notes: "",
+  },
+  {
+    id: "prod-handbag",
+    org_id: "org-1",
+    name: "Murcia Women Casual Brown Handbag",
+    category: "Handbags",
+    primary_color: "Brown",
+    style: "feminine",
+    type: "look",
+    price_range: "R$ 699",
+    image_url: "",
+    external_url: "",
+    stock: null,
+    stock_qty: null,
+    reserved_qty: null,
+    stock_status: "available",
+    description: "",
+    persuasive_description: "",
+    emotional_copy: "",
+    tags: ["women"],
+    size_type: "",
+    created_at: new Date().toISOString(),
+    style_direction: null,
+    style_tags: ["feminine"],
+    category_tags: ["accessory"],
+    fit_tags: ["structured"],
+    color_tags: ["brown"],
+    target_profile: ["feminine"],
+    use_cases: ["casual"],
+    occasion_tags: ["casual"],
+    season_tags: ["all"],
+    body_effect: "",
+    face_effect: "",
+    visual_weight: "",
+    formality: "",
+    catalog_notes: "",
+  },
 ] as const;
 
 run("normalizeStyleDirectionPreference keeps explicit preference and safe default", () => {
-  assert.equal(normalizeStyleDirectionPreference("Masculina"), "Masculina");
-  assert.equal(normalizeStyleDirectionPreference("Feminina"), "Feminina");
-  assert.equal(normalizeStyleDirectionPreference(""), "Sem preferência");
-  assert.equal(normalizeStyleDirectionPreference("streetwear"), "Streetwear");
+  assert.equal(normalizeStyleDirectionPreference("Masculina"), "masculine");
+  assert.equal(normalizeStyleDirectionPreference("Feminina"), "feminine");
+  assert.equal(normalizeStyleDirectionPreference(""), "no_preference");
+  assert.equal(normalizeStyleDirectionPreference("streetwear"), "streetwear");
 });
 
 run("buildVenusResultNarrative does not emit feminine wording without explicit feminine preference", () => {
-  const noPref = buildVenusResultNarrative({ state: "hero", styleDirection: "Sem preferência" });
-  const masculine = buildVenusResultNarrative({ state: "hero", styleDirection: "Masculina" });
+  const noPref = buildVenusResultNarrative({ state: "hero", styleDirection: "no_preference" });
+  const masculine = buildVenusResultNarrative({ state: "hero", styleDirection: "masculine" });
 
   assert.doesNotMatch(noPref.title, /femin/i);
-  assert.match(noPref.title, /Presença|Look/);
+  assert.match(noPref.title, /Linha neutra/);
   assert.doesNotMatch(masculine.title, /femin/i);
   assert.match(masculine.title, /Presença urbana|Look de presença|Casual de impacto|Minimalismo marcante|Força visual limpa/);
   assert.equal(noPref.primaryCta, "Ver minha curadoria");
@@ -228,16 +325,33 @@ run("buildVenusResultNarrative does not emit feminine wording without explicit f
 });
 
 run("buildVenusResultNarrative uses editorial CTA for preview instead of refazer foto", () => {
-  const preview = buildVenusResultNarrative({ state: "preview", styleDirection: "Masculina" });
+  const preview = buildVenusResultNarrative({ state: "preview", styleDirection: "masculine" });
 
   assert.equal(preview.primaryCta, "Gerar versão editorial");
   assert.doesNotMatch(preview.primaryCta, /refazer foto/i);
 });
 
 run("styleDirection is persisted in the journey and result surfaces", () => {
-  const onboarding = buildOnboarding("Masculina");
+  const onboarding = buildOnboarding("masculine");
   const essence = deriveEssenceProfile(onboarding);
   const resultSurface = buildResultSurface(onboarding, null, null);
+  const profileUpsert = buildUserProfileUpsert("user-1", onboarding);
+  const seed = buildOnboardingSeedFromSnapshot(
+    {
+      profile: {
+        id: "user-1",
+        body_type: "Slim",
+        color_profile: profileUpsert.color_profile,
+        style_profile: profileUpsert.style_profile,
+        preferences: profileUpsert.preferences,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      orgProfile: null,
+      tags: [],
+    },
+    { id: "org-1", slug: "maison-elite" },
+  );
   const leadContext = buildLeadContextProfileFromOnboarding({
     data: onboarding,
     result: resultSurface as any,
@@ -246,23 +360,370 @@ run("styleDirection is persisted in the journey and result surfaces", () => {
     savedResultId: "result-1",
   });
 
-  assert.equal(essence.styleDirection, "Masculina");
-  assert.equal(resultSurface.essence.styleDirection, "Masculina");
-  assert.equal(leadContext.styleProfile.styleDirection, "Masculina");
+  assert.equal(essence.styleDirection, "masculine");
+  assert.equal(resultSurface.essence.styleDirection, "masculine");
+  assert.equal(leadContext.styleProfile.styleDirection, "masculine");
+  assert.equal(seed.intent?.styleDirection, "masculine");
+  assert.equal(profileUpsert.style_profile.styleDirection, "masculine");
+  assert.equal(profileUpsert.style_profile.consultationProfile.desiredPerception, "Autoridade clara");
+  assert.equal(seed.consultation?.occasion, "Trabalho");
+});
+
+run("consultation profile questions stay adaptive and short by default", () => {
+  const onboarding = {
+    ...buildOnboarding("masculine"),
+    intent: {
+      ...buildOnboarding("masculine").intent,
+      styleDirection: "",
+      imageGoal: "",
+    },
+    lifestyle: {
+      environments: [],
+      purchaseDna: "",
+      purchaseBehavior: "",
+    },
+    colors: {
+      favoriteColors: [],
+      avoidColors: [],
+      metal: "",
+      colorSeason: "",
+      skinTone: "",
+      undertone: "",
+      contrast: "",
+      faceShape: "",
+      idealNeckline: "",
+      idealFit: "",
+      idealFabrics: [],
+      avoidFabrics: [],
+    },
+    body: {
+      highlight: [],
+      camouflage: [],
+      fit: "",
+      faceLines: "",
+      hairLength: "",
+    },
+    colorimetry: {
+      ...buildOnboarding("masculine").colorimetry,
+      favoriteColors: [],
+      avoidColors: [],
+      colorSeason: "",
+      skinTone: "",
+      undertone: "",
+      contrast: "",
+      faceShape: "",
+      idealNeckline: "",
+      idealFit: "",
+      idealFabrics: [],
+      avoidFabrics: [],
+      justification: "",
+    },
+    consultation: {
+      styleDirection: "",
+      desiredPerception: "",
+      occasion: "",
+      boldness: "",
+      restrictions: [],
+      preferredColors: [],
+      avoidColors: [],
+      bodyFocus: "",
+      aestheticVibe: "",
+      confidenceSource: "conversation",
+    },
+  } as OnboardingData;
+  const questions = getConsultationQuestions(onboarding);
+
+  assert.ok(questions.some((step) => step.key === "styleDirection"));
+  assert.ok(questions.some((step) => step.key === "desiredPerception"));
+  assert.ok(questions.some((step) => step.key === "occasion"));
+  assert.ok(!questions.some((step) => step.key === "restrictions"));
+});
+
+run("conditional consultation questions appear when the profile is ambiguous", () => {
+  const onboarding = buildOnboarding("neutral");
+  const questions = getConsultationQuestions({
+    ...onboarding,
+    consultation: {
+      ...onboarding.consultation,
+      styleDirection: "neutral",
+      desiredPerception: "Autoridade clara",
+      occasion: "Trabalho",
+      boldness: "",
+      restrictions: [],
+      preferredColors: [],
+      avoidColors: [],
+      bodyFocus: "",
+      aestheticVibe: "",
+      confidenceSource: "",
+    },
+  });
+
+  assert.ok(questions.some((step) => step.key === "boldness"));
+  assert.ok(questions.some((step) => step.key === "aestheticVibe"));
 });
 
 run("catalog filtering rejects feminine recommendations for masculine preference", () => {
-  const masculineCatalog = filterCatalogForRecommendation(sampleCatalog as any, buildOnboarding("Masculina"));
-  const neutralCatalog = filterCatalogForRecommendation(sampleCatalog as any, buildOnboarding("Sem preferência"));
+  const masculineCatalog = filterCatalogForRecommendation(sampleCatalog as any, buildOnboarding("masculine"));
+  const neutralCatalog = filterCatalogForRecommendation(sampleCatalog as any, buildOnboarding("neutral"));
 
   assert.ok(masculineCatalog.some((item) => item.id === "prod-m"));
   assert.ok(masculineCatalog.some((item) => item.id === "prod-n"));
   assert.ok(!masculineCatalog.some((item) => item.id === "prod-f"));
+  assert.ok(neutralCatalog.some((item) => item.id === "prod-n"));
   assert.ok(!neutralCatalog.some((item) => item.id === "prod-f"));
+  assert.ok(!neutralCatalog.some((item) => item.id === "prod-m"));
+});
+
+run("catalog filtering rejects masculine recommendations for feminine preference", () => {
+  const feminineCatalog = filterCatalogForRecommendation(sampleCatalog as any, buildOnboarding("feminine"));
+
+  assert.ok(feminineCatalog.some((item) => item.id === "prod-f"));
+  assert.ok(feminineCatalog.some((item) => item.id === "prod-n"));
+  assert.ok(!feminineCatalog.some((item) => item.id === "prod-m"));
+});
+
+run("profile direction conflict validator blocks real feminine cues in masculine profiles", () => {
+  const wedges = sampleCatalog.find((item) => item.id === "prod-wedges");
+  const handbag = sampleCatalog.find((item) => item.id === "prod-handbag");
+
+  const wedgesConflict = validateProfileDirectionConflict(wedges as any, "masculine");
+  const handbagConflict = validateProfileDirectionConflict(handbag as any, "masculine");
+
+  assert.equal(wedgesConflict.valid, false);
+  assert.equal(wedgesConflict.code, RECOMMENDATION_REASON_CODES.PROFILE_DIRECTION_CONFLICT);
+  assert.equal(handbagConflict.valid, false);
+  assert.equal(handbagConflict.code, RECOMMENDATION_REASON_CODES.PROFILE_DIRECTION_CONFLICT);
+});
+
+run("masculine filtering and ranking exclude women wedges and handbags before promotion", () => {
+  const masculineCatalog = filterCatalogForRecommendation(sampleCatalog as any, buildOnboarding("masculine"));
+
+  assert.ok(!masculineCatalog.some((item) => item.id === "prod-wedges"));
+  assert.ok(!masculineCatalog.some((item) => item.id === "prod-handbag"));
+
+  const ranked = rankProducts(
+    sampleCatalog as any,
+    {
+      org_id: "org-1",
+      context: { user_style_direction: "masculine" },
+    } as any,
+  );
+
+  const topProductIds = ranked.slice(0, 3).map((item) => item.product.id);
+  assert.ok(topProductIds.includes("prod-m"));
+  assert.ok(!topProductIds.includes("prod-wedges"));
+  assert.ok(!topProductIds.includes("prod-handbag"));
+  assert.ok(ranked.find((item) => item.product.id === "prod-wedges")?.reasons.includes(RECOMMENDATION_REASON_CODES.PROFILE_DIRECTION_CONFLICT));
+  assert.ok(ranked.find((item) => item.product.id === "prod-handbag")?.reasons.includes(RECOMMENDATION_REASON_CODES.PROFILE_DIRECTION_CONFLICT));
+});
+
+run("neutral and no preference keep neutral language", () => {
+  const neutralNarrative = buildVenusResultNarrative({ state: "hero", styleDirection: "neutral" });
+  const noPreferenceNarrative = buildVenusResultNarrative({ state: "hero", styleDirection: "no_preference" });
+  const neutralSurface = buildResultSurface(buildOnboarding("neutral"), null, null);
+
+  assert.doesNotMatch(neutralNarrative.title, /femin/i);
+  assert.doesNotMatch(noPreferenceNarrative.title, /femin/i);
+  assert.match(neutralSurface.palette.family, /Base neutra/);
+});
+
+run("unisex items remain eligible for explicit style directions", () => {
+  const masculineCatalog = filterCatalogForRecommendation(sampleCatalog as any, buildOnboarding("masculine"));
+  const feminineCatalog = filterCatalogForRecommendation(sampleCatalog as any, buildOnboarding("feminine"));
+
+  assert.ok(masculineCatalog.some((item) => item.id === "prod-n"));
+  assert.ok(feminineCatalog.some((item) => item.id === "prod-n"));
+});
+
+run("missing compatible catalog match falls back safely", () => {
+  const fallback = buildCatalogAwareFallbackResult(
+    buildOnboarding("masculine"),
+    sampleCatalog.filter((item) => item.id === "prod-f") as any,
+  );
+
+  assert.equal(fallback.recommendationFallbackCode, "CATALOG_NO_MATCH_FOR_STYLE_DIRECTION");
+  assert.ok(fallback.looks.length > 0);
+});
+
+run("fallback result keeps conflicting feminine items out of hero and looks", () => {
+  const fallback = buildCatalogAwareFallbackResult(
+    buildOnboarding("masculine"),
+    sampleCatalog.filter((item) => item.id === "prod-wedges" || item.id === "prod-handbag") as any,
+  );
+
+  assert.equal(fallback.recommendationFallbackCode, "CATALOG_NO_MATCH_FOR_STYLE_DIRECTION");
+  assert.ok(
+    fallback.looks.every((look) =>
+      look.items.every((item) => item.product_id !== "prod-wedges" && item.product_id !== "prod-handbag"),
+    ),
+  );
+});
+
+run("normalized recommendation payload repairs mojibake in rendered strings", () => {
+  const payload = {
+    hero: {
+      dominantStyle: "JÃ¡",
+      subtitle: "direÃ§Ã£o clara",
+      coverImageUrl: "",
+    },
+    palette: {
+      family: "RevelaÃ§Ã£o",
+      description: "Â base",
+      contrast: "MÃ©dio",
+      colors: [],
+      evidence: {},
+    },
+    diagnostic: {
+      currentPerception: "JÃ¡",
+      desiredGoal: "direÃ§Ã£o",
+      gapSolution: "RevelaÃ§Ã£o",
+    },
+    bodyVisagism: {
+      shoulders: "JÃ¡",
+      face: "direÃ§Ã£o",
+      generalFit: "Â",
+    },
+    accessories: {
+      scale: "JÃ¡",
+      focalPoint: "direÃ§Ã£o",
+      advice: "RevelaÃ§Ã£o",
+    },
+    looks: [
+      {
+        id: "1",
+        name: "Look JÃ¡",
+        intention: "direÃ§Ã£o",
+        type: "HÃ­brido Seguro",
+        items: [
+          {
+            id: "1",
+            product_id: "prod-n",
+            photoUrl: "",
+            brand: "Marca JÃ¡",
+            name: "Camisa JÃ¡",
+            premiumTitle: "JÃ¡",
+            impactLine: "direÃ§Ã£o",
+            functionalBenefit: "RevelaÃ§Ã£o",
+            socialEffect: "Â",
+            contextOfUse: "JÃ¡",
+          },
+        ],
+        accessories: ["JÃ¡"],
+        explanation: "RevelaÃ§Ã£o",
+        whenToWear: "Â",
+      },
+    ],
+    toAvoid: ["JÃ¡"],
+  } as any;
+
+  const result = normalizeOpenAIRecommendationPayload(payload, buildOnboarding("masculine"), sampleCatalog.filter((item) => item.id === "prod-n") as any);
+  const rendered = [
+    result.hero.dominantStyle,
+    result.hero.subtitle,
+    result.palette.family,
+    result.diagnostic.currentPerception,
+    result.diagnostic.desiredGoal,
+    result.looks[0]?.name,
+    result.looks[0]?.items[0]?.premiumTitle,
+    result.looks[0]?.items[0]?.impactLine,
+    result.looks[0]?.explanation,
+  ].join(" ");
+
+  assert.ok(!detectMojibake(rendered));
+  assert.doesNotMatch(rendered, /JÃ|direÃ|RevelaÃ|Â|�/);
+});
+
+run("recommendation ranking uses consultation profile for restrictions and perception", () => {
+  const ranked = rankProducts(
+    [
+      {
+        id: "clean",
+        source_type: "manual",
+        source_id: "1",
+        title: "Camisa clean",
+        description: "Peça limpa e elegante para trabalho",
+        image_url: "",
+        price: 399,
+        currency: "BRL",
+        colors: ["Branco"],
+        sizes: ["M"],
+        category: "Camisas",
+        style_tags: ["clean", "discreto"],
+        availability: "available",
+        product_url: "",
+        raw_metadata: { style_direction: "neutral", occasion_tags: ["trabalho"] },
+      },
+      {
+        id: "noisy",
+        source_type: "manual",
+        source_id: "2",
+        title: "Blusa transparente statement",
+        description: "Peça mais ousada e com transparência",
+        image_url: "",
+        price: 499,
+        currency: "BRL",
+        colors: ["Amarelo"],
+        sizes: ["M"],
+        category: "Blusas",
+        style_tags: ["statement", "ousado"],
+        availability: "available",
+        product_url: "",
+        raw_metadata: { style_direction: "feminine", occasion_tags: ["evento"] },
+      },
+    ] as any,
+    {
+      org_id: "org-1",
+      context: {
+        user_style_direction: "neutral",
+        user_desired_perception: "Discrição sofisticada",
+        user_occasion: "trabalho",
+        user_boldness: "low",
+        user_restrictions: ["transparência"],
+        user_preferred_colors: ["Branco"],
+        user_avoid_colors: ["Amarelo"],
+        user_body_focus: "Rosto",
+        user_aesthetic_vibe: "clean",
+        user_confidence_source: "conversation",
+      },
+    } as any,
+  );
+
+  assert.equal(ranked[0].product.id, "clean");
+  assert.ok(ranked[0].reasons.some((reason) => /percep|ocasi|segura/i.test(reason)));
+});
+
+run("result audit includes the requested report sections", () => {
+  const onboarding = buildOnboarding("masculine");
+  const surface = buildResultSurface(onboarding, null, null);
+  const audit = buildVenusStylistAudit({
+    surface,
+    tryOnQuality: {
+      state: "hero",
+      reason: "ok",
+      badgeLabel: "Hero",
+      score: 100,
+      reasons: [],
+      showBeforeAfter: true,
+      showWhatsappCta: true,
+      structural: { score: 100, reasons: [] },
+      visual: { score: 100, reasons: [] },
+    } as any,
+    onboardingData: onboarding,
+  });
+
+  const reportTitles = audit.report.sections.map((section) => section.eyebrow);
+
+  assert.ok(reportTitles.includes("Essência de estilo"));
+  assert.ok(reportTitles.includes("Leitura visual"));
+  assert.ok(reportTitles.includes("Cores base / acentos / cautela"));
+  assert.ok(reportTitles.includes("O que valorizar"));
+  assert.ok(reportTitles.includes("O que evitar"));
+  assert.ok(reportTitles.includes("Curadoria da loja"));
+  assert.ok(reportTitles.includes("Próximo look recomendado"));
 });
 
 run("share card uses premium neutral copy instead of soft power feminino for non-feminine preferences", () => {
-  const surface = buildResultSurface(buildOnboarding("Masculina"), null, null);
+  const surface = buildResultSurface(buildOnboarding("masculine"), null, null);
   const model = buildShareableLookCardModel({
     surface,
     look: surface.looks[0],
@@ -287,6 +748,84 @@ run("VenusLoadingScreen renders a visible premium shell", () => {
   assert.match(markup, /A Venus está preparando sua experiência/);
   assert.match(markup, /Carregando a consultoria premium da sua loja\./);
   assert.match(markup, /Consultoria premium/);
+});
+
+run("detectMojibake detects mojibake strings and passes clean text", () => {
+  assert.ok(detectMojibake("JÃ¡ estava"), "Ã¡ is mojibake for á");
+  assert.ok(detectMojibake("direÃ§Ã£o clara"), "multiple mojibake sequences");
+  assert.ok(!detectMojibake("Já estava"), "clean Portuguese passes");
+  assert.ok(!detectMojibake("direção"), "clean diacritics pass");
+  assert.ok(!detectMojibake("Plain ASCII text"), "ASCII passes");
+});
+
+run("detectMojibake also flags lone encoding artifacts and replacement chars", () => {
+  assert.ok(detectMojibake("JÃ"), "dangling accent artifact");
+  assert.ok(detectMojibake("Â"), "lone Â artifact");
+  assert.ok(detectMojibake("�"), "replacement character artifact");
+});
+
+run("hero role gate rejects accessories as look principal", () => {
+  const accessoryProduct = {
+    ...sampleCatalog[0],
+    id: "prod-accessory",
+    name: "Bolsa de couro",
+    category: "Acessórios",
+    type: "Acessório",
+    style_direction: "neutral" as const,
+    tags: ["accessory"],
+  };
+
+  const result = validateHeroRole(accessoryProduct as any);
+  assert.equal(result.valid, false);
+  assert.equal(result.code, RECOMMENDATION_REASON_CODES.INVALID_HERO_SLOT);
+
+  const shirtResult = validateHeroRole(sampleCatalog[0] as any);
+  assert.equal(shirtResult.valid, true);
+});
+
+run("outfit composition gate rejects two shoes in a look", () => {
+  const shoe1 = { ...sampleCatalog[0], id: "shoe-1", name: "Tênis branco", category: "Calçados", type: "Tênis", tags: ["shoes"] };
+  const shoe2 = { ...sampleCatalog[0], id: "shoe-2", name: "Oxford preto", category: "Calçados", type: "Sapato", tags: ["shoes"] };
+
+  const result = validateOutfitComposition([shoe1, shoe2] as any);
+  assert.equal(result.valid, false);
+  assert.equal(result.code, RECOMMENDATION_REASON_CODES.INVALID_OUTFIT_COMPOSITION);
+});
+
+run("same-slot conflict gate rejects two tops in a look", () => {
+  const top1 = { ...sampleCatalog[0], id: "top-1", name: "Camisa azul", tags: ["top"] };
+  const top2 = { ...sampleCatalog[0], id: "top-2", name: "Camiseta branca", tags: ["top"] };
+
+  const result = validateOutfitComposition([top1, top2] as any);
+  assert.equal(result.valid, false);
+  assert.equal(result.code, RECOMMENDATION_REASON_CODES.SAME_SLOT_CONFLICT);
+});
+
+run("outfit composition allows valid top+bottom combination", () => {
+  const top = { ...sampleCatalog[0], id: "valid-top", name: "Camisa estruturada", tags: ["top"] };
+  const bottom = { ...sampleCatalog[0], id: "valid-bottom", name: "Calça slim", tags: ["bottom"] };
+
+  const result = validateOutfitComposition([top, bottom] as any);
+  assert.equal(result.valid, true);
+});
+
+run("copy guard emits curadoria assistida for invalid composition", () => {
+  const allShoes = sampleCatalog.map((item) => ({ ...item, tags: ["shoes"] }));
+
+  const fallback = buildCatalogAwareFallbackResult(buildOnboarding("masculine"), allShoes as any);
+
+  const hasAssistedCuration = fallback.looks.some(
+    (look) => look.explanation?.toLowerCase().includes("curadoria assistida"),
+  );
+  assert.ok(hasAssistedCuration, "expected curadoria assistida copy for invalid shoe-only composition");
+});
+
+run("RECOMMENDATION_REASON_CODES has expected string values", () => {
+  assert.equal(RECOMMENDATION_REASON_CODES.PROFILE_DIRECTION_CONFLICT, "PROFILE_DIRECTION_CONFLICT");
+  assert.equal(RECOMMENDATION_REASON_CODES.INVALID_HERO_SLOT, "INVALID_HERO_SLOT");
+  assert.equal(RECOMMENDATION_REASON_CODES.INVALID_OUTFIT_COMPOSITION, "INVALID_OUTFIT_COMPOSITION");
+  assert.equal(RECOMMENDATION_REASON_CODES.SAME_SLOT_CONFLICT, "SAME_SLOT_CONFLICT");
+  assert.equal(RECOMMENDATION_REASON_CODES.ENCODING_GUARD_FAILED, "ENCODING_GUARD_FAILED");
 });
 
 console.log("\n--- Style direction tests passed ---");
