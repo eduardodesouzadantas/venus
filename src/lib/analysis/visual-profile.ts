@@ -72,7 +72,7 @@ function buildOnboardingPaletteColors(data: OnboardingData, essenceKey: string):
   const preference = normalizeStyleDirectionPreference(data.intent.styleDirection);
   const third =
     favoriteColors[2] ||
-    (preference === "Feminina" ? "Vinho profundo" : preference === "Masculina" ? "Grafite intenso" : "Contraste controlado");
+    (preference === "feminine" ? "Vinho profundo" : preference === "masculine" ? "Grafite intenso" : "Contraste controlado");
 
   return [
     { hex: buildColorHex(first, "#1F2937"), name: first },
