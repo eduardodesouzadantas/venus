@@ -2,6 +2,7 @@ import { OnboardingData } from "@/types/onboarding";
 import { ResultPayload, LookData } from "@/types/result";
 import { normalizeStyleDirectionPreference } from "@/lib/style-direction";
 import { buildColorStyleEvidence, flattenColorStyleEvidence } from "@/lib/color-style-evidence";
+import { normalizeConsultationProfile } from "@/lib/consultation-profile";
 
 function normalizeText(value: unknown): string {
   return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
@@ -12,7 +13,7 @@ function normalizeDirection(value: string | undefined) {
 }
 
 function buildDirectionTags(direction: ReturnType<typeof normalizeDirection>) {
-  if (direction === "Masculina") {
+  if (direction === "masculine") {
     return {
       dominantStyle: "Linha masculina precisa",
       firstLook: "Blazer estruturado",
@@ -22,7 +23,7 @@ function buildDirectionTags(direction: ReturnType<typeof normalizeDirection>) {
     };
   }
 
-  if (direction === "Feminina") {
+  if (direction === "feminine") {
     return {
       dominantStyle: "Linha feminina precisa",
       firstLook: "Blazer estruturado",
@@ -32,7 +33,7 @@ function buildDirectionTags(direction: ReturnType<typeof normalizeDirection>) {
     };
   }
 
-  if (direction === "Streetwear") {
+  if (direction === "streetwear") {
     return {
       dominantStyle: "Linha streetwear precisa",
       firstLook: "Base urbana",
@@ -42,7 +43,7 @@ function buildDirectionTags(direction: ReturnType<typeof normalizeDirection>) {
     };
   }
 
-  if (direction === "Casual") {
+  if (direction === "casual") {
     return {
       dominantStyle: "Linha casual precisa",
       firstLook: "Base limpa",
@@ -52,7 +53,7 @@ function buildDirectionTags(direction: ReturnType<typeof normalizeDirection>) {
     };
   }
 
-  if (direction === "Social") {
+  if (direction === "social") {
     return {
       dominantStyle: "Linha social precisa",
       firstLook: "Base elegante",
@@ -103,7 +104,7 @@ export async function generateResultMock(data: OnboardingData): Promise<ResultPa
       type: "Híbrido Seguro",
       items: [
         { id: "i1", brand: "Seu Acervo", name: directionTags.firstLook, photoUrl: "" },
-        { id: "i2", brand: "Oficina Reserva", name: direction === "Feminina" ? "Blazer leve" : direction === "Streetwear" ? "Jaqueta urbana" : "Sobretudo modal", photoUrl: "" },
+        { id: "i2", brand: "Oficina Reserva", name: direction === "feminine" ? "Blazer leve" : direction === "streetwear" ? "Jaqueta urbana" : "Sobretudo modal", photoUrl: "" },
       ],
       accessories: [directionTags.accessory],
       explanation: `A leitura respeita a linha ${direction.toLowerCase()} e usa o fit ${fit} como base de coerência.`,
@@ -116,7 +117,7 @@ export async function generateResultMock(data: OnboardingData): Promise<ResultPa
       type: "Híbrido Premium",
       items: [
         { id: "i3", brand: "Seu Acervo", name: directionTags.secondLook, photoUrl: "" },
-        { id: "i4", brand: "B2B Brand", name: direction === "Feminina" ? "Sandália de impacto" : direction === "Social" ? "Camisa de presença" : "Tricot premium gola alta", photoUrl: "" },
+        { id: "i4", brand: "B2B Brand", name: direction === "feminine" ? "Sandália de impacto" : direction === "social" ? "Camisa de presença" : "Tricot premium gola alta", photoUrl: "" },
         { id: "i5", brand: "Vert", name: "Acabamento monocromático", photoUrl: "" },
       ],
       accessories: [directionTags.accessory, `Micro-jóias em ${metal}`],
@@ -138,13 +139,14 @@ export async function generateResultMock(data: OnboardingData): Promise<ResultPa
   ];
 
   return {
+    consultation: normalizeConsultationProfile(data.consultation),
     hero: {
       dominantStyle: `${directionTags.dominantStyle} • ${goal}`,
       subtitle: `A maestria da ${goal} atrelada à linha ${direction.toLowerCase()} e ao seu estilo de vida.`,
       coverImageUrl: "",
     },
     palette: {
-      family: `${paletteEvidence.confidence === "high" ? "Leitura confirmada" : "Leitura preliminar"} • ${direction === "Sem preferência" ? "Base segura" : direction}`,
+      family: `${paletteEvidence.confidence === "high" ? "Leitura confirmada" : "Leitura preliminar"} • ${direction === "no_preference" || direction === "neutral" ? "Base neutra" : direction}`,
       description: paletteEvidence.evidence,
       colors: flattenColorStyleEvidence(paletteEvidence),
       metal: metal,
