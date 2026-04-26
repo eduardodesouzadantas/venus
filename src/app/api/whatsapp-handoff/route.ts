@@ -7,8 +7,14 @@ import { recordDecisionOutcome } from "@/lib/decision-engine/learning";
 import { bumpTenantUsageDaily, resolveAppTenantOrg } from "@/lib/tenant/core";
 import { enforceTenantOperationalState } from "@/lib/tenant/enforcement";
 import { buildWhatsAppHandoffMessage } from "@/lib/whatsapp/handoff";
+import type { WhatsAppLookSummary } from "@/types/whatsapp";
 import type { VenusStylistAudit } from "@/lib/venus/audit/engine";
 import { buildWhatsAppStylistCommercePlan } from "@/lib/whatsapp/stylist-engine";
+import {
+  buildVenusWhatsAppConsultivePayload,
+  sanitizeVenusWhatsAppConsultivePayloadForLogs,
+} from "@/lib/whatsapp/consultive-payload";
+import { recordOperationalTenantEvent } from "@/lib/reliability/observability";
 
 type WhatsAppHandoffBody = {
   resultId?: string;
@@ -103,6 +109,9 @@ export async function POST(request: Request) {
     ...currentPayload,
     whatsappHandoff: body.payload,
   });
+  const lookSummary = Array.isArray(body.payload.lookSummary)
+    ? (body.payload.lookSummary as WhatsAppLookSummary[])
+    : null;
 
   const commercePlan = await buildWhatsAppStylistCommercePlan({
     orgId: org.id,
@@ -115,8 +124,20 @@ export async function POST(request: Request) {
     metal: body.payload.metal as string | undefined,
     intentScore: leadSignals.intentScore ?? null,
     resultState: (body.payload.resultState as "hero" | "preview" | "retry_required" | undefined) || undefined,
-    lookSummary: Array.isArray(body.payload.lookSummary) ? (body.payload.lookSummary as any) : null,
+    lookSummary,
   });
+  const consultivePayload = buildVenusWhatsAppConsultivePayload({
+    orgId: org.id,
+    orgSlug: org.slug,
+    isInternalShowroom: org.slug === "maison-elite",
+    payload: body.payload,
+    audit: (body.payload as Record<string, unknown> | null)?.audit as VenusStylistAudit | undefined,
+    commerce: commercePlan,
+    resultState: (body.payload.resultState as "hero" | "preview" | "retry_required" | undefined) || undefined,
+    lookSummary,
+    source: "api_whatsapp_handoff",
+  });
+  const safeConsultiveEventPayload = sanitizeVenusWhatsAppConsultivePayloadForLogs(consultivePayload);
 
   const { error: updateError } = await supabase
     .from("saved_results")
@@ -133,6 +154,7 @@ export async function POST(request: Request) {
         whatsappHandoff: {
           ...body.payload,
           commerce: commercePlan,
+          consultivePayload,
         },
       },
     })
@@ -155,8 +177,16 @@ export async function POST(request: Request) {
     },
   });
 
+  await recordOperationalTenantEvent(supabase, {
+    orgId: org.id,
+    eventType: "whatsapp.consultive_handoff_prepared",
+    eventSource: "whatsapp",
+    dedupeKeyParts: [org.id, body.resultId, consultivePayload.version],
+    payload: safeConsultiveEventPayload,
+  });
+
   let decision: ReturnType<typeof decideNextAction> | null = null;
-  let contextForMessage: any = null;
+  let contextForMessage: Awaited<ReturnType<typeof upsertLeadContextByLeadId>> | null = null;
 
   try {
     const { lead, created } = await findOrCreateLead(supabase, {
@@ -209,6 +239,7 @@ export async function POST(request: Request) {
       },
       whatsappContext: {
         ...body.payload,
+        consultivePayload,
         orgSlug: org.slug,
         orgId: org.id,
         whatsappClickedAt: new Date().toISOString(),

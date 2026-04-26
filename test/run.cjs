@@ -112,6 +112,7 @@ const {
   captureOperationalTiming,
   createOperationalEventDedupeKey,
   formatOperationalReason,
+  recordOperationalTenantEvent,
 } = require("../src/lib/reliability/observability.ts");
 const {
   checkInMemoryRateLimit,
@@ -142,6 +143,12 @@ const {
 
 require("./catalog-query/presentation.test.ts");
 require("./assisted-recommendation.presentation.test.ts");
+require("./result/experience-state.test.ts");
+require("./result/experience-state-adapter.test.ts");
+require("./result/premium-result-copy.test.ts");
+require("./result/curation-roles.test.ts");
+require("./result/premium-share-card.test.ts");
+require("./whatsapp/consultive-payload.test.ts");
 require("./onboarding/public-surface.test.ts");
 require("./onboarding/style-direction.test.ts");
 require("./onboarding/wow-surface.test.ts");
@@ -2372,6 +2379,12 @@ run("privacy sanitizer redacts identifiers and urls", () => {
     email: "cliente@exemplo.com",
     phone: "+55 (11) 99999-9999",
     url: "https://example.com/image.png?token=abc",
+    signedUrl: "https://signed.example.com/private.png?token=SECRET",
+    base64: "data:image/png;base64,ABC123",
+    rawAiResponse: "RAW_AI_RESPONSE_PRIVATE",
+    externalPayload: {
+      rawResponse: "RAW_AI_RESPONSE_PRIVATE",
+    },
     nested: {
       name: "Cliente Exemplo",
       token: "secret-token",
@@ -2384,8 +2397,13 @@ run("privacy sanitizer redacts identifiers and urls", () => {
   assert.equal(sanitized.email, "c***@exemplo.com");
   assert.equal(sanitized.phone, "***9999");
   assert.equal(sanitized.url, "https://example.com/image.png");
+  assert.equal(sanitized.signedUrl, "[REDACTED]");
+  assert.equal(sanitized.base64, "[REDACTED]");
+  assert.equal(sanitized.rawAiResponse, "[REDACTED]");
+  assert.equal(sanitized.externalPayload, "[REDACTED]");
   assert.equal(sanitized.nested.name, "[REDACTED]");
   assert.equal(sanitized.nested.token, "[REDACTED]");
+  assert.doesNotMatch(JSON.stringify(sanitized), /SECRET|ABC123|RAW_AI_RESPONSE_PRIVATE/);
 });
 
 run("tenant privacy export bundle keeps counts and strips sensitive urls", () => {
@@ -2437,6 +2455,48 @@ const VALID_ORG_ID = "org-123";
 const FRONTEND_ORG_ID = "frontend-org";
 
 ;(async () => {
+  await runAsync("operational tenant events sanitize sensitive payload values", async () => {
+    let inserted = null;
+    const supabase = {
+      from(table) {
+        assert.equal(table, "tenant_events");
+        return {
+          insert: async (row) => {
+            inserted = row;
+            return { error: null };
+          },
+        };
+      },
+    };
+
+    await recordOperationalTenantEvent(supabase, {
+      orgId: "org-1",
+      eventType: "saved_result.legacy_log",
+      eventSource: "test",
+      payload: {
+        userPhone: "+55 11 99999-1234",
+        userEmail: "cliente.real@example.com",
+        fullName: "Nome Completo Cliente",
+        imageUrl: "https://signed.example.com/private.png?token=SECRET",
+        signedUrl: "https://signed.example.com/private.png?token=SECRET",
+        base64: "data:image/png;base64,ABC123",
+        token: "SECRET_TOKEN_123",
+        rawAiResponse: "RAW_AI_RESPONSE_PRIVATE",
+        externalPayload: { rawResponse: "RAW_AI_RESPONSE_PRIVATE" },
+      },
+    });
+
+    const serialized = JSON.stringify(inserted).toLowerCase();
+    assert.doesNotMatch(serialized, /\+55 11 99999-1234|cliente\.real@example\.com|nome completo cliente/i);
+    assert.doesNotMatch(serialized, /data:image\/png;base64,abc123|secret_token_123|raw_ai_response_private/i);
+    assert.doesNotMatch(serialized, /https:\/\/signed\.example\.com\/private\.png\?token=secret/i);
+    assert.equal(inserted.payload.userPhone, "***1234");
+    assert.equal(inserted.payload.userEmail, "c***@example.com");
+    assert.equal(inserted.payload.fullName, "[REDACTED]");
+    assert.equal(inserted.payload.signedUrl, "[REDACTED]");
+    assert.equal(inserted.payload.rawAiResponse, "[REDACTED]");
+  });
+
   await runAsync("gamification rule creation and edition stay tenant scoped", async () => {
     const auditActions = [];
     const operationalEvents = [];
@@ -4533,7 +4593,7 @@ const FRONTEND_ORG_ID = "frontend-org";
 
   await runAsync("scenario 2 - tenant resolution failure throws before navigation", async () => {
     const onboarding = {
-      contact: { name: "Cliente", phone: "+5511999999999", email: "cliente@exemplo.com" },
+      contact: { name: "Nome Completo Cliente", phone: "+55 11 99999-1234", email: "cliente.real@example.com" },
       tenant: {},
       scanner: {
         facePhoto: "https://cdn.example.com/face.jpg",
@@ -4617,10 +4677,24 @@ const FRONTEND_ORG_ID = "frontend-org";
       return loadFresh("../src/lib/recommendation/actions.ts");
     });
 
-    await assert.rejects(
-      () => actions.processAndPersistLead(onboarding),
-      (error) => error instanceof Error && error.message === "TENANT_RESOLUTION_FAILED"
-    );
+    const originalWarn = console.warn;
+    const capturedWarnings = [];
+    console.warn = (...args) => {
+      capturedWarnings.push(args);
+      originalWarn(...args);
+    };
+    try {
+      await assert.rejects(
+        () => actions.processAndPersistLead(onboarding),
+        (error) => error instanceof Error && error.message === "TENANT_RESOLUTION_FAILED"
+      );
+    } finally {
+      console.warn = originalWarn;
+    }
+
+    const serializedWarnings = JSON.stringify(capturedWarnings).toLowerCase();
+    assert.doesNotMatch(serializedWarnings, /\+55 11 99999-1234|cliente\.real@example\.com|nome completo cliente/i);
+    assert.match(serializedWarnings, /\*\*\*1234|c\*\*\*@example\.com/);
 
     const processingSource = fs.readFileSync(path.join(process.cwd(), "src/app/processing/page.tsx"), "utf8");
     assert.ok(processingSource.includes("isValidResultId(dbReferenceId)"));

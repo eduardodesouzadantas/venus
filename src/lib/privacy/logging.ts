@@ -18,6 +18,9 @@ const SENSITIVE_KEY_PARTS = [
   "body",
   "message",
   "text",
+  "raw",
+  "base64",
+  "signed",
   "contact",
   "cpf",
   "cnpj",
@@ -79,6 +82,10 @@ function sanitizeString(key: string, value: string) {
     return maskPhone(value) || "[REDACTED]";
   }
 
+  if (key.includes("signed") || key.includes("base64") || key.includes("raw")) {
+    return "[REDACTED]";
+  }
+
   if (key === "url" || key.endsWith("url") || key.includes("image")) {
     return stripUrlQuery(value) || "[REDACTED]";
   }
@@ -132,13 +139,27 @@ export function sanitizePrivacyLogValue(value: PrivacyLogValue, depth = 0, key =
       continue;
     }
 
+    if (entryKey.toLowerCase().includes("signed") || entryKey.toLowerCase().includes("base64") || entryKey.toLowerCase().includes("raw")) {
+      next[entryKey] =
+        typeof entryValue === "boolean" || typeof entryValue === "number"
+          ? entryValue
+          : "[REDACTED]";
+      continue;
+    }
+
     if (entryKey.toLowerCase().includes("url") || entryKey.toLowerCase().includes("image")) {
-      next[entryKey] = stripUrlQuery(entryValue);
+      next[entryKey] =
+        typeof entryValue === "boolean" || typeof entryValue === "number"
+          ? entryValue
+          : stripUrlQuery(entryValue);
       continue;
     }
 
     if (isSensitiveKey(entryKey)) {
-      next[entryKey] = "[REDACTED]";
+      next[entryKey] =
+        typeof entryValue === "boolean" || typeof entryValue === "number"
+          ? entryValue
+          : "[REDACTED]";
       continue;
     }
 

@@ -16,6 +16,7 @@ import {
   createProcessAndPersistLeadIdempotencyKey,
   stripOnboardingBinaryArtifacts,
 } from "@/lib/reliability/idempotency";
+import { sanitizePrivacyLogEntry } from "@/lib/privacy/logging";
 import {
   captureOperationalTiming,
   formatOperationalReason,
@@ -40,6 +41,10 @@ function normalizeText(value: unknown) {
 function isInlineImageReference(value: unknown) {
   const text = normalizeText(value);
   return /^data:image\//i.test(text) || (text.length > 200_000 && !/^https?:\/\//i.test(text) && !text.startsWith("/"));
+}
+
+function safeLogEntry<T extends Record<string, unknown>>(entry: T): T {
+  return sanitizePrivacyLogEntry(entry);
 }
 
 type ProcessAndPersistLeadInput = OnboardingData & {
@@ -131,14 +136,14 @@ export async function processAndPersistLead(userData: ProcessAndPersistLeadInput
     ].some((value) => isInlineImageReference(value));
 
     if (hasInlineImagePayload) {
-      console.warn("[SAVED_RESULTS] blocked inline image payload before persistence", {
+      console.warn("[SAVED_RESULTS] blocked inline image payload before persistence", safeLogEntry({
         hasFacePhoto: Boolean(userData.scanner?.facePhoto),
         hasBodyPhoto: Boolean(userData.scanner?.bodyPhoto),
         hasFacePhotoUrl: Boolean(userData.scanner?.facePhotoUrl),
         hasBodyPhotoUrl: Boolean(userData.scanner?.bodyPhotoUrl),
         hasFacePhotoPath: Boolean(userData.scanner?.facePhotoPath),
         hasBodyPhotoPath: Boolean(userData.scanner?.bodyPhotoPath),
-      });
+      }));
       throw new Error("PAYLOAD_TOO_LARGE_PREVENTED");
     }
 
@@ -146,7 +151,7 @@ export async function processAndPersistLead(userData: ProcessAndPersistLeadInput
     const startedAtMs = Date.now();
     const explicitOrgId = normalizeText(userData.tenant?.orgId);
     const explicitOrgSlug = normalizeTenantSlug(userData.tenant?.orgSlug);
-    console.info("[SAVED_RESULTS] processAndPersistLead start", {
+    console.info("[SAVED_RESULTS] processAndPersistLead start", safeLogEntry({
       explicitOrgId,
       explicitOrgSlug,
       hasContact: Boolean(userData.contact?.phone || userData.contact?.email),
@@ -161,7 +166,7 @@ export async function processAndPersistLead(userData: ProcessAndPersistLeadInput
       hasSupabaseUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
       hasServiceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
       deploymentEnv: process.env.VERCEL_ENV || process.env.NODE_ENV || null,
-    });
+    }));
     const explicitTenantById = explicitOrgId ? await fetchTenantById(supabase, explicitOrgId) : null;
     const explicitTenantBySlug = explicitOrgSlug ? await fetchTenantBySlug(supabase, explicitOrgSlug) : null;
 
@@ -181,14 +186,14 @@ export async function processAndPersistLead(userData: ProcessAndPersistLeadInput
 
     if (!resolvedTenantResult?.org) {
       const error = new Error("TENANT_RESOLUTION_FAILED");
-      console.warn("[SAVED_RESULTS] unable to resolve canonical tenant for persisted result", {
+      console.warn("[SAVED_RESULTS] unable to resolve canonical tenant for persisted result", safeLogEntry({
         explicitOrgId,
         explicitOrgSlug,
         userPhone: userData.contact?.phone || null,
         userEmail: userData.contact?.email || null,
         hasSupabaseUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
         hasServiceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
-      });
+      }));
       throw error;
     }
 

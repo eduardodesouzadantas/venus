@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { sanitizePrivacyLogEntry } from "@/lib/privacy/logging";
 
 function normalizePart(value: unknown) {
   const raw =
@@ -87,7 +88,7 @@ export async function recordOperationalTenantEvent(
     event_type: eventType,
     event_source: normalizeText(input.eventSource) || "system",
     dedupe_key: dedupeKey,
-    payload: input.payload || {},
+    payload: sanitizePrivacyLogEntry(input.payload || {}),
   });
 
   if (error) {

@@ -27,6 +27,12 @@ import { DecisionResult } from "@/lib/decision-engine/types";
 import { buildWhatsAppHandoffMessage, buildWhatsAppHandoffUrl } from "@/lib/whatsapp/handoff";
 import { ensureTryOnProductId } from "@/lib/tryon/product-id";
 import { classifyTryOnQuality } from "@/lib/tryon/result-quality";
+import { deriveVenusPremiumExperienceState } from "@/lib/result/experience-state";
+import {
+  buildExperienceStateInputFromResultData,
+  buildExperienceStateTelemetry,
+} from "@/lib/result/experience-state-adapter";
+import { buildPremiumResultPresentationModel } from "@/lib/result/premium-result-copy";
 import { buildVenusResultNarrative, VENUS_STYLIST_NAME } from "@/lib/venus/brand";
 import { buildVenusStylistAudit, type VenusStylistAudit } from "@/lib/venus/audit/engine";
 import { TRYON_PREMIUM_FALLBACK_MESSAGE, TRYON_PREMIUM_REFINED_MESSAGE } from "@/lib/tryon/fallback-copy";
@@ -227,7 +233,7 @@ function ResultDashboardContent() {
   const progressiveRevealLimit = tryOnQuality.state === "retry_required" ? 2 : 3;
   const canShowDiagnosis = revealStage >= 1;
   const canShowDirection = revealStage >= 2;
-  const canShowCommerce = revealStage >= 3 && tryOnQuality.state !== "retry_required";
+  const commerceRevealReady = revealStage >= 3;
 
   const currentLoadingMessage = (() => {
     if (tryOnProgress < 30) return TRYON_LOADING_MESSAGES[0];
@@ -486,7 +492,86 @@ function ResultDashboardContent() {
       audit: stylistAudit,
     });
     return buildWhatsAppHandoffUrl(message, tenantContext?.whatsappNumber || "5511967011133") || "";
-  }, [surface, onboardingData, essenceLabel, looks, tryOnImageUrl, persistedTryOn, decision, tenantContext, stylistAudit]);
+  }, [surface, onboardingData, tryOnQuality.state, essenceLabel, looks, tryOnImageUrl, persistedTryOn, decision, tenantContext, stylistAudit]);
+
+  const experienceStateInput = useMemo(
+    () =>
+      buildExperienceStateInputFromResultData({
+        surface,
+        loading,
+        error,
+        whatsappUrl,
+        hasWhatsAppFallbackMessage: Boolean(curationFallbackMessage),
+        tryOnQualityState: tryOnQuality.state,
+        tryOnEnabled: tryOnAvailable || hasTryOnArtifact,
+        hasTryOnArtifact,
+        hasTryOnError: Boolean(tryOnError),
+        shareAvailable: Boolean(surface?.essence || stylistAudit),
+      }),
+    [
+      curationFallbackMessage,
+      error,
+      hasTryOnArtifact,
+      loading,
+      surface,
+      stylistAudit,
+      tryOnAvailable,
+      tryOnError,
+      tryOnQuality.state,
+      whatsappUrl,
+    ],
+  );
+  const experienceState = useMemo(
+    () => deriveVenusPremiumExperienceState(experienceStateInput),
+    [experienceStateInput],
+  );
+  const experienceStateTelemetry = useMemo(
+    () => buildExperienceStateTelemetry(experienceState),
+    [experienceState],
+  );
+  const premiumPresentation = useMemo(
+    () =>
+      buildPremiumResultPresentationModel({
+        experienceState,
+        signatureName: essenceLabel,
+        signatureSummary: stylistAudit?.diagnosis?.positioning || null,
+        styleWords: stylistAudit?.direction?.bullets || null,
+        palette: (palette.colors as string[] | undefined) || null,
+        storeName: tenantContext?.branchName || tenantContext?.orgSlug || org.name,
+        hasLooks: looks.length > 0,
+        curationPieces: looks[0]?.items?.map((item) => ({
+          productId: item.product_id || item.id,
+          name: item.name,
+          role: item.role || null,
+        })) || null,
+      }),
+    [
+      essenceLabel,
+      experienceState,
+      looks,
+      org.name,
+      palette.colors,
+      stylistAudit?.diagnosis?.positioning,
+      stylistAudit?.direction?.bullets,
+      tenantContext?.branchName,
+      tenantContext?.orgSlug,
+    ],
+  );
+  const canShowCommerce = commerceRevealReady && premiumPresentation.curation.visible;
+  const canShowPremiumAnalysis = premiumPresentation.analysis.visible;
+  const canShowShareCard = premiumPresentation.share.visible;
+  const canShowTryOn = premiumPresentation.tryOn.visible;
+  const canShowWhatsAppCta = premiumPresentation.whatsapp.visible && Boolean(whatsappUrl);
+
+  React.useEffect(() => {
+    if (loading || !surface) return;
+
+    console.info("[RESULT_EXPERIENCE_STATE]", {
+      resultId: id,
+      orgId: resolvedOrgId || onboardingData?.tenant?.orgId || null,
+      ...experienceStateTelemetry,
+    });
+  }, [experienceStateTelemetry, id, loading, onboardingData?.tenant?.orgId, resolvedOrgId, surface]);
 
   // â”€â”€ Global error instrumentation (always called) â”€â”€
   React.useEffect(() => {
@@ -828,11 +913,11 @@ function ResultDashboardContent() {
                 </div>
                 <div>
                   <p className="text-[9px] font-bold uppercase tracking-[0.32em] text-[#C9A84C]">{VENUS_STYLIST_NAME}</p>
-                  <p className="text-[10px] text-white/45">Revelação premium da sua leitura</p>
+                  <p className="text-[10px] text-white/45">Stylist digital da loja</p>
                 </div>
               </div>
               <div className="rounded-full border border-white/10 bg-black/40 px-3 py-1 text-[8px] font-bold uppercase tracking-[0.28em] text-white/60">
-                {resultNarrative.eyebrow}
+                {premiumPresentation.hero.badge}
               </div>
             </div>
             <div className="relative aspect-[3/4] overflow-hidden rounded-[32px] border border-white/10 bg-white/[0.02] shadow-[0_22px_70px_rgba(0,0,0,0.6)]">
@@ -844,7 +929,7 @@ function ResultDashboardContent() {
                   <Sparkles className="absolute inset-5 h-6 w-6 animate-pulse text-[#C9A84C]" />
                 </div>
                 <p className="mt-8 font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-[#C9A84C]">
-                  Venus Stylist está revelando seu look
+                  Venus Stylist está preparando sua curadoria
                 </p>
                 <p className="mt-4 text-[13px] text-white/60">
                   {currentLoadingMessage}
@@ -856,7 +941,7 @@ function ResultDashboardContent() {
                   />
                 </div>
               </div>
-            ) : displayImageUrl ? (
+            ) : displayImageUrl && canShowTryOn ? (
               <div className="relative h-full w-full">
                 <img
                   src={displayImageUrl}
@@ -893,7 +978,7 @@ function ResultDashboardContent() {
                   </div>
                   <h3 className="mt-3 font-serif text-2xl text-white">Já consegui identificar sua direção.</h3>
                   <p className="mt-3 text-[13px] leading-relaxed text-white/70">
-                    Vou te mostrar o que mais valoriza seu estilo enquanto refino sua leitura visual.
+                    Vou te mostrar a melhor direcao de estilo enquanto refino a visualizacao.
                   </p>
                   {lateSuccessNotice && (
                     <p className="mt-3 rounded-full border border-[#C9A84C]/18 bg-[#C9A84C]/10 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.22em] text-[#C9A84C]">
@@ -929,6 +1014,27 @@ function ResultDashboardContent() {
                   onSaveLook={() => setShowSaveModal(true)}
                 />
               </div>
+            ) : !canShowTryOn ? (
+              <div className="flex h-full w-full flex-col items-center justify-center p-8 text-center">
+                <div className="mb-5 rounded-full bg-[#C9A84C]/10 p-5">
+                  <Sparkles className="h-8 w-8 text-[#C9A84C]" />
+                </div>
+                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.32em] text-[#C9A84C]">
+                  {premiumPresentation.hero.eyebrow}
+                </p>
+                <h2 className="mt-3 font-serif text-3xl text-white">{premiumPresentation.hero.title}</h2>
+                <p className="mt-4 max-w-sm text-[14px] leading-relaxed text-white/65">
+                  {premiumPresentation.tryOn.unavailableCopy}
+                </p>
+                {canShowWhatsAppCta && (
+                  <VenusButton
+                    onClick={() => void openWhatsApp(whatsappUrl)}
+                    className="mt-8"
+                  >
+                    {premiumPresentation.whatsapp.cta}
+                  </VenusButton>
+                )}
+              </div>
             ) : (
               <div className="flex h-full w-full flex-col items-center justify-center p-12 text-center">
                 <div className="mb-6 rounded-full bg-[#C9A84C]/10 p-5">
@@ -959,7 +1065,7 @@ function ResultDashboardContent() {
                   disabled={!tryOnAvailable}
                   className="mt-8"
                 >
-                  {tryOnAvailable ? tryOnPrimaryActionLabel : "Leitura indisponível"}
+                  {tryOnAvailable ? tryOnPrimaryActionLabel : "Previa indisponivel"}
                 </VenusButton>
                 {!tryOnAvailable && (
                   <p className="mt-3 text-[11px] leading-relaxed text-white/40">
@@ -971,7 +1077,7 @@ function ResultDashboardContent() {
 
             <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-black/80 via-transparent to-transparent" />
 
-            {displayImageUrl && !isGenerating && (
+            {canShowTryOn && displayImageUrl && !isGenerating && (
               <div className="absolute top-6 left-6 flex flex-col gap-2">
                 {isPreviousLook && (
                   <div className="flex items-center gap-2 rounded-full border border-[#C9A84C]/20 bg-black/60 px-4 py-2 backdrop-blur-md">
@@ -987,7 +1093,7 @@ function ResultDashboardContent() {
             )}
           </div>
 
-          {tryOnQuality.showBeforeAfter && displayImageUrl && (
+          {canShowTryOn && tryOnQuality.showBeforeAfter && displayImageUrl && (
             <div className="mt-4 grid grid-cols-2 gap-3">
               <div className="rounded-[24px] border border-white/5 bg-white/[0.03] p-3">
                 <p className="mb-2 text-[9px] font-bold uppercase tracking-[0.25em] text-white/35">Antes</p>
@@ -998,7 +1104,7 @@ function ResultDashboardContent() {
               <div className="rounded-[24px] border border-[#C9A84C]/20 bg-[#C9A84C]/6 p-3">
                 <p className="mb-2 text-[9px] font-bold uppercase tracking-[0.25em] text-[#C9A84C]">Depois</p>
                 <div className="aspect-[3/4] overflow-hidden rounded-[18px]">
-                  <img src={displayImageUrl} alt="Try-on gerado" className="h-full w-full object-cover" />
+                  <img src={displayImageUrl} alt="Previa visual gerada" className="h-full w-full object-cover" />
                 </div>
               </div>
             </div>
@@ -1006,15 +1112,15 @@ function ResultDashboardContent() {
 
           <div className="mt-10 space-y-6 text-center">
             <div className="space-y-3">
-              <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#C9A84C]">{stylistAudit?.opening.eyebrow || resultNarrative.eyebrow}</p>
+              <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#C9A84C]">{premiumPresentation.hero.eyebrow}</p>
               <h1 className="font-serif text-3xl font-bold tracking-tight text-white">
-                {stylistAudit?.opening.title || essenceLabel}
+                {premiumPresentation.hero.title}
               </h1>
               <p className="mx-auto max-w-sm text-[16px] leading-relaxed text-white/60">
-                {stylistAudit?.opening.subtitle || resultNarrative.subtitle}
+                {premiumPresentation.hero.subtitle}
               </p>
               <p className="mx-auto max-w-sm text-[12px] leading-relaxed text-white/40">
-                {stylistAudit?.diagnosis.buyingGuidance || resultNarrative.helper}
+                {premiumPresentation.hero.helper}
               </p>
               {revealStage < 1 && (
                 <button
@@ -1028,12 +1134,12 @@ function ResultDashboardContent() {
             </div>
           </div>
 
-          {stylistAudit?.report?.sections?.length ? (
+          {canShowPremiumAnalysis && stylistAudit?.report?.sections?.length ? (
             <section className="mt-10 space-y-4">
               <div className="text-center">
-                <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-[#C9A84C]">Relatório de consultoria</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-[#C9A84C]">{premiumPresentation.analysis.eyebrow}</p>
                 <p className="mx-auto mt-2 max-w-xl text-[13px] leading-relaxed text-white/50">
-                  Abaixo está a leitura estruturada que conecta direção, visual, cor e curadoria sem assumir nada que o usuário não tenha declarado.
+                  {premiumPresentation.analysis.subtitle}
                 </p>
               </div>
 
@@ -1056,7 +1162,7 @@ function ResultDashboardContent() {
             </section>
           ) : null}
 
-          {canShowDiagnosis && stylistAudit && (
+          {canShowDiagnosis && canShowPremiumAnalysis && stylistAudit && (
             <div className="mt-10 space-y-4">
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-[24px] border border-white/5 bg-black/20 p-4">
@@ -1109,12 +1215,14 @@ function ResultDashboardContent() {
                 </div>
               </div>
 
+              {canShowTryOn && (
               <div className={`${revealStage >= 2 ? "" : "hidden"} rounded-[28px] border border-white/5 bg-white/[0.03] p-5`}>
                 <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-[#C9A84C]">{stylistAudit.tryOn.eyebrow}</p>
                 <h2 className="mt-2 font-serif text-2xl text-white">{stylistAudit.tryOn.title}</h2>
                 <p className="mt-2 text-[14px] leading-relaxed text-white/65">{stylistAudit.tryOn.subtitle}</p>
                 <p className="mt-3 text-[12px] leading-relaxed text-white/45">{stylistAudit.tryOn.helper}</p>
               </div>
+              )}
 
               {revealStage < 3 && tryOnQuality.state !== "retry_required" && (
                 <button
@@ -1130,9 +1238,9 @@ function ResultDashboardContent() {
 
           {canShowCommerce && looks.length === 0 && (
             <div className="mt-10 rounded-[28px] border border-[#C9A84C]/15 bg-[#C9A84C]/8 p-5 text-left">
-              <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-[#C9A84C]">Curadoria em refinamento</p>
-              <h2 className="mt-2 font-serif text-2xl text-white">Ainda não há look completo forte o suficiente.</h2>
-              <p className="mt-3 text-[13px] leading-relaxed text-white/65">{curationFallbackMessage}</p>
+              <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-[#C9A84C]">{premiumPresentation.curation.eyebrow}</p>
+              <h2 className="mt-2 font-serif text-2xl text-white">{premiumPresentation.curation.fallbackTitle}</h2>
+              <p className="mt-3 text-[13px] leading-relaxed text-white/65">{premiumPresentation.curation.fallbackBody}</p>
             </div>
           )}
 
@@ -1141,11 +1249,7 @@ function ResultDashboardContent() {
               <ConversationalCatalogBlock
                 copy={catalogCopy}
                 products={assistedCatalogProducts}
-                reinforcement={[
-                  "Baseado no seu corpo",
-                  "Cores ideais para você",
-                  "Look recomendado para você",
-                ]}
+                reinforcement={premiumPresentation.curation.reinforcement}
                 catalogAction={
                   catalogLink || "/catalog"
                     ? {
@@ -1242,7 +1346,7 @@ function ResultDashboardContent() {
           )}
 
           {/* Look Composition Gallery - Looks completos do catálogo */}
-          {canShowCommerce && looks.length > 0 && tryOnQuality.state !== "retry_required" && resolvedOrgId && (
+          {canShowCommerce && looks.length > 0 && resolvedOrgId && (
             <div id="look-composition-gallery" className="mt-10">
               <LookCompositionGallery
                 orgId={resolvedOrgId}
@@ -1267,8 +1371,13 @@ function ResultDashboardContent() {
             </div>
           )}
 
-          {looks[0] && tryOnQuality.state !== "retry_required" && (
+          {canShowShareCard && looks[0] && (
             <div className="mt-10">
+              <div className="mb-4 text-center">
+                <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-[#C9A84C]">{premiumPresentation.share.eyebrow}</p>
+                <h2 className="mt-2 font-serif text-2xl text-white">{premiumPresentation.share.title}</h2>
+                <p className="mx-auto mt-2 max-w-sm text-[13px] leading-relaxed text-white/50">{premiumPresentation.share.subtitle}</p>
+              </div>
               <ShareableLookCard
                 look={looks[0]}
                 looks={looks}
@@ -1287,7 +1396,7 @@ function ResultDashboardContent() {
             </div>
           )}
 
-          {canShowCommerce && tryOnQuality.state !== "retry_required" && (
+          {canShowCommerce && canShowShareCard && (
             <div className="mt-8 rounded-[28px] border border-white/5 bg-white/[0.03] p-5">
               <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-[#C9A84C]">{stylistAudit?.social.eyebrow || "Prova social e memória"}</p>
               <h2 className="mt-2 font-serif text-2xl text-white">{stylistAudit?.social.title || "Registrar a postagem ou o link da leitura"}</h2>
@@ -1327,13 +1436,13 @@ function ResultDashboardContent() {
         </div>
       </section>
 
-      {canShowCommerce && (
+      {canShowWhatsAppCta && (
       <section className="mt-16 border-y border-white/5 bg-white/[0.02] py-12 px-5">
         <div className="mx-auto max-w-lg space-y-10">
           <div className="rounded-[28px] border border-[#C9A84C]/15 bg-[#C9A84C]/8 p-5 text-left">
-            <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-[#C9A84C]">{stylistAudit?.whatsapp.eyebrow || "Continuação natural"}</p>
-            <h2 className="mt-2 font-serif text-2xl text-white">{stylistAudit?.whatsapp.title || `Continuar com ${VENUS_STYLIST_NAME}`}</h2>
-            <p className="mt-2 max-w-lg text-[13px] leading-relaxed text-white/65">{stylistAudit?.whatsapp.subtitle || "A conversa segue com a mesma leitura, sem começar do zero."}</p>
+            <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-[#C9A84C]">{premiumPresentation.whatsapp.eyebrow}</p>
+            <h2 className="mt-2 font-serif text-2xl text-white">{premiumPresentation.whatsapp.title}</h2>
+            <p className="mt-2 max-w-lg text-[13px] leading-relaxed text-white/65">{premiumPresentation.whatsapp.subtitle}</p>
             <div className="mt-5 flex flex-col gap-3">
               <Link
                 href={whatsappUrl}
@@ -1345,7 +1454,7 @@ function ResultDashboardContent() {
                 }}
                 className="flex h-14 items-center justify-center rounded-2xl bg-[#C9A84C] px-6 text-[13px] font-black uppercase tracking-widest text-black transition-transform active:scale-95 group"
               >
-                {stylistAudit?.whatsapp.cta || mainCtaLabel}
+                {premiumPresentation.whatsapp.cta}
                 <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
               </Link>
               <button
@@ -1416,23 +1525,23 @@ function ResultDashboardContent() {
         </div>
       </section>
 
-      {canShowCommerce && (
+      {canShowWhatsAppCta && (
       <div className="fixed bottom-0 left-0 right-0 z-[150] flex h-14 items-center justify-between bg-[#C9A84C] px-4 shadow-[0_-10px_40px_rgba(0,0,0,0.3)]">
         <span className="text-[10px] font-bold uppercase tracking-wider text-black flex items-center gap-2">
           <div className="h-2 w-2 rounded-full bg-black animate-pulse" />
-          {VENUS_STYLIST_NAME} esta online - {org.name}
+          Atendimento consultivo - {org.name}
         </span>
         <Link
-          href={`https://wa.me/${org.whatsapp_phone}`}
+          href={whatsappUrl}
           target="_blank"
           rel="noopener noreferrer"
           onClick={(event) => {
             event.preventDefault();
-            void openWhatsApp(`https://wa.me/${org.whatsapp_phone}`);
+            void openWhatsApp(whatsappUrl);
           }}
           className="rounded-lg bg-black px-4 py-2 text-[10px] font-black uppercase tracking-widest text-[#C9A84C] transition-transform active:scale-95"
         >
-          Continuar no WhatsApp
+          Levar curadoria
         </Link>
       </div>
       )}
