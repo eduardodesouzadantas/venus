@@ -30,6 +30,7 @@ export interface WhatsAppHandoffInput {
   };
   audit?: VenusStylistAudit | null;
   commerce?: WhatsAppStylistCommercePlan | null;
+  premiumLookMessage?: string | null;
 }
 
 const normalizePhone = (value?: string | null) => (value || "").replace(/\D/g, "");
@@ -82,6 +83,7 @@ export function buildWhatsAppHandoffMessage(input: WhatsAppHandoffInput) {
   const isAggressive = input.decision?.action === "SEND_WHATSAPP_MESSAGE";
 
   const lines = [
+    input.premiumLookMessage || null,
     leadIntro,
     audit ? audit.whatsapp.leadIn : null,
     audit ? audit.opening.title : null,
