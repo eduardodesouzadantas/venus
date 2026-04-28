@@ -2,6 +2,16 @@ import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { UserMemory, OrgMemory, ConversationState } from "./conversation-engine-types";
+import { getStyleDirectionDisplayLabel, normalizeStyleDirectionPreference } from "@/lib/style-direction";
+import {
+  buildConsultationProfileSummary,
+  normalizeConsultationProfile,
+} from "@/lib/consultation-profile";
+
+const asRecord = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+};
 
 export async function getUserMemory(userId: string, orgId: string): Promise<UserMemory | null> {
   const admin = createAdminClient();
@@ -46,6 +56,14 @@ export async function getUserMemory(userId: string, orgId: string): Promise<User
     userId: profile.user_id,
     orgId: profile.org_id,
     styleIdentity: profile.style_identity || undefined,
+    styleDirection: normalizeStyleDirectionPreference(asRecord(profile.style_profile)?.styleDirection || asRecord(profile.style_profile)?.style_direction || profile.style_identity || undefined),
+    consultationProfile: normalizeConsultationProfile(
+      (asRecord(profile.style_profile)?.consultationProfile ||
+        asRecord(profile.style_profile)?.consultation_profile ||
+        asRecord(profile.preferences)?.consultationProfile ||
+        asRecord(profile.preferences)?.consultation_profile ||
+        asRecord(profile)?.consultation_profile) as any,
+    ),
     imageGoal: profile.image_goal || undefined,
     paletteFamily: profile.palette_family || undefined,
     fit: profile.fit_preference || undefined,
@@ -216,6 +234,14 @@ export function buildMemoryContext(memory: UserMemory | null): string[] {
 
   if (memory.styleIdentity) {
     contextHints.push(`Perfil de estilo: ${memory.styleIdentity}`);
+  }
+
+  if (memory.styleDirection) {
+    contextHints.push(`Direção de estilo: ${getStyleDirectionDisplayLabel(memory.styleDirection)}`);
+  }
+
+  if (memory.consultationProfile) {
+    contextHints.push(`Perfil de consultoria: ${buildConsultationProfileSummary(memory.consultationProfile)}`);
   }
 
   if (memory.imageGoal) {
