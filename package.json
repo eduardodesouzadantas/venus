@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "migrate": "npx tsx --tsconfig tsconfig.scripts.json scripts/run-migrations.ts",
+    "import:maison:showroom:dry": "npx tsx --tsconfig tsconfig.scripts.json scripts/import-maison-showroom.ts --dry-run",
+    "import:maison:showroom:confirm": "npx tsx --tsconfig tsconfig.scripts.json scripts/import-maison-showroom.ts --confirm",
     "test": "node --require ./test/register-ts.cjs ./test/run.cjs"
   },
   "dependencies": {

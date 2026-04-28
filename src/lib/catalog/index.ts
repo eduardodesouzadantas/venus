@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { StockStatus } from "@/lib/catalog/stock";
+import type { StyleDirectionPreference } from "@/lib/style-direction";
 
 export interface Product {
   id: string;
@@ -22,7 +23,7 @@ export interface Product {
   tags?: string[] | null;
   size_type?: string | null;
   created_at: string;
-  style_direction?: "Masculina" | "Feminina" | "Neutra" | null;
+  style_direction?: StyleDirectionPreference | null;
   style_tags?: string[] | null;
   category_tags?: string[] | null;
   fit_tags?: string[] | null;

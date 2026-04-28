@@ -1,10 +1,16 @@
 import type { Product } from "@/lib/catalog";
+import {
+  getStyleDirectionCatalogSignals,
+  getStyleDirectionDisplayLabel,
+  normalizeStyleDirectionPreference,
+  type StyleDirectionPreference,
+} from "@/lib/style-direction";
 
 export type CatalogStylistRole = "base" | "support" | "anchor" | "statement" | "accessory";
 
 export type CatalogStylistProfile = {
   role: CatalogStylistRole;
-  direction: "Masculina" | "Feminina" | "Neutra";
+  direction: StyleDirectionPreference;
   title: string;
   summary: string;
   keySignals: string[];
@@ -22,17 +28,18 @@ export type CatalogStylistProfile = {
   seasonTags: string[];
   authorityRationale: string;
   conversionCopy: string;
-}
+};
 
 function normalizeText(value: unknown): string {
   return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
 }
 
+function stripDiacritics(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
 function matchText(value: string): string {
-  return normalizeText(value)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
+  return stripDiacritics(normalizeText(value)).toLowerCase();
 }
 
 function uniq(values: string[]): string[] {
@@ -61,8 +68,10 @@ function inferRole(product: Product): CatalogStylistRole {
   return "support";
 }
 
-function inferDirection(product: Product): "Masculina" | "Feminina" | "Neutra" {
-  if (product.style_direction) return product.style_direction;
+function inferDirection(product: Product): StyleDirectionPreference {
+  if (product.style_direction) {
+    return normalizeStyleDirectionPreference(product.style_direction);
+  }
 
   const source = [
     matchText(product.name),
@@ -72,9 +81,10 @@ function inferDirection(product: Product): "Masculina" | "Feminina" | "Neutra" {
     ...(product.style_tags || []).map((tag) => matchText(tag)),
   ].join(" ");
 
-  if (source.includes("mascul") || source.includes("tailored") || source.includes("brogue")) return "Masculina";
-  if (source.includes("femin") || source.includes("romant") || source.includes("cat eye") || source.includes("fitted")) return "Feminina";
-  return "Neutra";
+  if (source.includes("mascul") || source.includes("tailored") || source.includes("brogue")) return "masculine";
+  if (source.includes("femin") || source.includes("romant") || source.includes("cat eye") || source.includes("fitted")) return "feminine";
+  if (source.includes("unisex") || source.includes("unissex") || source.includes("genderless") || source.includes("minimal")) return "neutral";
+  return "neutral";
 }
 
 function inferVisualWeight(role: CatalogStylistRole, product: Product): string {
@@ -120,8 +130,9 @@ function inferFaceEffect(role: CatalogStylistRole, product: Product): string {
   return "Mantém a leitura limpa";
 }
 
-function buildTags(product: Product, role: CatalogStylistRole, direction: "Masculina" | "Feminina" | "Neutra") {
+function buildTags(product: Product, role: CatalogStylistRole, direction: StyleDirectionPreference) {
   const catalogNotes = matchText(product.catalog_notes || "");
+  const directionSignals = getStyleDirectionCatalogSignals(direction);
 
   const styleTags = uniq([
     ...(product.style_tags || []),
@@ -129,12 +140,13 @@ function buildTags(product: Product, role: CatalogStylistRole, direction: "Mascu
     role === "statement" ? "Ponto de impacto" : null,
     role === "accessory" ? "Complemento" : null,
     role === "support" ? "Uso diário" : null,
-    direction,
+    getStyleDirectionDisplayLabel(direction),
     product.style || null,
     catalogNotes.includes("alfaiat") ? "Alfaiataria" : null,
     catalogNotes.includes("minimal") ? "Minimalismo" : null,
     catalogNotes.includes("textur") ? "Textura" : null,
     catalogNotes.includes("estrutura") ? "Estrutura" : null,
+    ...directionSignals,
   ].filter((value): value is string => Boolean(value)));
 
   const categoryTags = uniq([
@@ -161,6 +173,7 @@ function buildTags(product: Product, role: CatalogStylistRole, direction: "Mascu
     role === "statement" ? "Quer destaque" : null,
     role === "accessory" ? "Precisa de acabamento" : null,
     role === "support" ? "Quer uso fácil" : null,
+    direction === "neutral" || direction === "no_preference" ? "Busca curadoria neutra" : null,
   ].filter((value): value is string => Boolean(value)));
 
   const useCases = uniq([
@@ -171,25 +184,26 @@ function buildTags(product: Product, role: CatalogStylistRole, direction: "Mascu
     catalogNotes.includes("evento") ? "Evento" : null,
     catalogNotes.includes("trabalho") ? "Trabalho" : null,
     catalogNotes.includes("noite") ? "Noite" : null,
+    direction === "neutral" || direction === "no_preference" ? "Neutro seguro" : null,
   ].filter((value): value is string => Boolean(value)));
 
   return { styleTags, categoryTags, fitTags, colorTags, targetProfile, useCases };
 }
 
-function buildSummary(product: Product, role: CatalogStylistRole, direction: "Masculina" | "Feminina" | "Neutra"): string {
+function buildSummary(product: Product, role: CatalogStylistRole, direction: StyleDirectionPreference): string {
   const name = normalizeText(product.name) || "Peça do catálogo";
   const category = normalizeText(product.category) || "categoria";
   const style = normalizeText(product.style) || "estilo limpo";
-  return `${name} entra como ${role}, conversa com ${category}, sustenta ${style} e respeita a linha ${direction.toLowerCase()}.`;
+  return `${name} entra como ${role}, conversa com ${category}, sustenta ${style} e respeita a linha ${getStyleDirectionDisplayLabel(direction).toLowerCase()}.`;
 }
 
-function buildAuthorityRationale(product: Product, role: CatalogStylistRole, direction: "Masculina" | "Feminina" | "Neutra", summary: string): string {
+function buildAuthorityRationale(product: Product, role: CatalogStylistRole, direction: StyleDirectionPreference, summary: string): string {
   const notes = normalizeText(product.catalog_notes);
   if (notes) return notes;
 
   const style = normalizeText(product.style) || "um estilo coerente";
   const category = normalizeText(product.category) || "a categoria";
-  return `${summary} O papel dessa peça no look é ${role === "anchor" ? "sustentar a base" : role === "statement" ? "criar ponto de impacto" : role === "accessory" ? "fechar a leitura" : "equilibrar a composição"}, respeitando a linha ${direction.toLowerCase()} e ${style} em ${category}.`;
+  return `${summary} O papel dessa peça no look é ${role === "anchor" ? "sustentar a base" : role === "statement" ? "criar ponto de impacto" : role === "accessory" ? "fechar a leitura" : "equilibrar a composição"}, respeitando a linha ${getStyleDirectionDisplayLabel(direction).toLowerCase()} e ${style} em ${category}.`;
 }
 
 function buildConversionCopy(title: string, role: CatalogStylistRole, visualWeight: string, formality: string): string {
