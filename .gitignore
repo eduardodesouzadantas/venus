@@ -46,3 +46,8 @@ next-env.d.ts
 
 # datasets — large binary/CSV archives, never commit
 data/archive/
+
+.vercel
+
+# local vercel run logs
+vercel_*.txt
