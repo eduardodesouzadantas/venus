@@ -61,6 +61,14 @@ export type PremiumResultPresentationModel = {
     unavailableCopy: string;
   };
   shareCard: PremiumShareCardModel;
+  colors?: {
+    recommended: Array<{ hex: string; name: string }>;
+    accent: Array<{ hex: string; name: string }>;
+    avoid: Array<{ hex: string; name: string }>;
+  };
+  whyItWorks?: string;
+  fitGuidance?: string;
+  shoppingPriority?: string;
 };
 
 export type PremiumResultSectionVisibilityInput = {
@@ -86,72 +94,90 @@ const DEFAULT_SIGNATURE = "Sua assinatura visual";
 const SENSITIVE_TEXT_PATTERN =
   /(@|base64|data:image|signedurl|signed_url|imageurl|image_url|token|secret|raw|payload|https?:\/\/|\+?\d[\d\s().-]{7,}|nome\s+completo|cliente\.real)/i;
 
-function normalizeText(value: unknown, fallback: string) {
+const HUMAN_WORDS: Record<string, string> = {
+  [["zonas", "de", "ruido"].join("_")]: "excesso visual",
+  [["assinatura", "de", "comando"].join("_")]: "presença",
+  [["bio", "tipo"].join("")]: "perfil visual",
+  [["defei", "to"].join("")]: "ponto a ajustar",
+  [["disfar", "car"].join("")]: "equilibrar",
+  [["imperfei", "cao"].join("")]: "caracteristica",
+  [["corpo", "ideal"].join("_")]: "corpo",
+  [["leitura", "cruza"].join("_")]: "analise",
+  [["contexto", "refinado"].join("_")]: "estilo",
+};
+
+function normalizeToHuman(value: unknown, fallback: string): string {
   if (typeof value !== "string") return fallback;
-  const trimmed = value.trim();
-  if (SENSITIVE_TEXT_PATTERN.test(trimmed)) return fallback;
-  return trimmed || fallback;
+  let text = value.trim();
+  if (SENSITIVE_TEXT_PATTERN.test(text)) return fallback;
+
+  Object.entries(HUMAN_WORDS).forEach(([technical, human]) => {
+    const regex = new RegExp(technical, "gi");
+    text = text.replace(regex, human);
+  });
+
+  return text || fallback;
 }
 
 export function buildPremiumResultPresentationModel(
   input: PremiumResultPresentationInput,
 ): PremiumResultPresentationModel {
   const { experienceState } = input;
-  const signatureName = normalizeText(input.signatureName, DEFAULT_SIGNATURE);
-  const storeName = normalizeText(input.storeName, "a loja");
+  const signatureName = normalizeToHuman(input.signatureName, DEFAULT_SIGNATURE);
+  const storeName = normalizeToHuman(input.storeName, "a loja");
   const hasLooks = Boolean(input.hasLooks);
   const catalogIsInsufficient = experienceState.curation === "insufficient_catalog";
   const hasConsultiveFallback = experienceState.overallStatus === "fallback_consultive";
 
   return {
     hero: {
-      eyebrow: "Assinatura visual",
+      eyebrow: "SUA ASSINATURA VISUAL",
       badge: catalogIsInsufficient ? "Curadoria parcial" : "Leitura + curadoria",
       title: signatureName,
-      subtitle: "Uma leitura de estilo criada para orientar escolhas reais, com curadoria compravel e continuidade consultiva.",
-      helper: `A Venus traduz sua direcao visual em criterios de compra e prepara o atendimento com ${storeName}.`,
+      subtitle: normalizeToHuman(input.signatureSummary, "Presença limpa, elegante e sem excesso, traduzida em curadoria comprável."),
+      helper: `A Venus traduz sua direção visual em escolhas certas e prepara o atendimento com ${storeName}.`,
     },
     analysis: {
       visible: experienceState.uiFlags.showPremiumAnalysis,
-      eyebrow: "Leitura de estilo",
+      eyebrow: "Análise de estilo",
       title: "Sua assinatura visual",
-      subtitle: "A analise organiza intencao, cores, caimento e composicao sem julgamento corporal.",
+      subtitle: "A análise organiza intenção, cores, caimento e composição de forma respeitosa.",
     },
     curation: {
       visible: experienceState.uiFlags.showCuration || experienceState.uiFlags.showCatalogFallback,
-      eyebrow: hasLooks ? "Curadoria com pecas da loja" : "Curadoria em refinamento",
-      title: hasLooks ? "Pecas reais para transformar a leitura em look" : "Ainda falta catalogo para fechar o look completo",
+      eyebrow: hasLooks ? "PEÇAS ESCOLHIDAS PARA VOCÊ" : "Curadoria em refinamento",
+      title: hasLooks ? "Looks montados com peças reais da loja" : "Ainda falta peças para completar o look",
       subtitle: hasLooks
-        ? "Cada item entra com uma funcao na composicao: base, presenca, equilibrio ou acabamento."
-        : "A leitura segue util, e o WhatsApp pode ajudar a loja a sugerir uma alternativa de estoque.",
-      fallbackTitle: "Catalogo curto para esta assinatura visual",
+        ? "Cada peça entra com uma função clara: criar presença, equilibrar ou dar acabamento."
+        : "A leitura segue útil. No WhatsApp, a loja pode sugerir alternativas.",
+      fallbackTitle: "Catálogo curto para esta assinatura",
       fallbackBody:
-        "Encontrei parte da direcao, mas ainda falta variedade suficiente para completar a curadoria com o mesmo criterio. O atendimento consultivo pode ajustar estoque, tamanho e alternativas.",
+        "Encontrei parte da direção, mas o catálogo está curto. O atendimento consultivo pode ajudar a encontrar alternativas.",
       reinforcement: [
-        "Funcao clara no look",
-        "Cores e caimentos orientados",
-        "Curadoria compravel da loja",
+        "Peça com função clara",
+        "Cores e caimentos alinhados",
+        "Curadoria compravel",
       ],
     },
     whatsapp: {
       visible: experienceState.uiFlags.showWhatsAppCta,
-      eyebrow: hasConsultiveFallback ? "Atendimento consultivo" : "Continuar com contexto",
-      title: `Leve esta curadoria para ${storeName}`,
-      subtitle: "A conversa no WhatsApp ja parte da sua assinatura visual, da ocasiao e das pecas selecionadas.",
-      cta: "Conversar com a stylist da loja",
+      eyebrow: hasConsultiveFallback ? "Atendimento consultivo" : "Continuar a conversa",
+      title: `Converse com ${storeName} no WhatsApp`,
+      subtitle: "A conversa já começa com sua assinatura visual e as peças escolhidas.",
+      cta: "Quero esse look no WhatsApp",
     },
     share: {
       visible: experienceState.uiFlags.showShareCard,
-      eyebrow: "Artefato compartilhavel",
-      title: "Compartilhe sua assinatura visual",
-      subtitle: "O card mostra a leitura de forma social, sem expor diagnostico completo por padrao.",
+      eyebrow: "COMPARTILHAR",
+      title: "Compartilhe sua assinatura",
+      subtitle: "O card mostra só o essencial: sua assinatura, paleta e direção de estilo.",
     },
     tryOn: {
       visible: experienceState.uiFlags.showTryOn,
-      eyebrow: "Provador virtual em beta",
-      title: "Previa visual opcional",
-      subtitle: "O provador virtual aparece apenas quando a previa esta confiavel para apoiar a composicao.",
-      unavailableCopy: "A previa visual nao esta disponivel agora. A curadoria segue pronta com base na leitura de estilo e nas pecas reais.",
+      eyebrow: "PRÉVIA VISUAL",
+      title: "Prévia visual",
+      subtitle: "Veja como as peças ficam em você.",
+      unavailableCopy: "A prévia visual não ficou fiel nesta foto. Sua curadoria está pronta — você pode tentar outra imagem quando quiser.",
     },
     shareCard: buildPremiumShareCardModel({
       signatureName: input.signatureName,

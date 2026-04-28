@@ -33,12 +33,15 @@ import {
   buildExperienceStateTelemetry,
 } from "@/lib/result/experience-state-adapter";
 import { buildPremiumResultPresentationModel, formatConfidenceLabel } from "@/lib/result/premium-result-copy";
+import { buildPremiumResultViewModel } from "@/lib/result/premium-result-view-model";
 import { buildVenusResultNarrative, VENUS_STYLIST_NAME } from "@/lib/venus/brand";
 import { buildVenusStylistAudit, type VenusStylistAudit } from "@/lib/venus/audit/engine";
 import { TRYON_PREMIUM_FALLBACK_MESSAGE, TRYON_PREMIUM_REFINED_MESSAGE } from "@/lib/tryon/fallback-copy";
-import { getStyleDirectionDisplayLabel, normalizeStyleDirectionPreference } from "@/lib/style-direction";
+import { getStyleDirectionDisplayLabel } from "@/lib/style-direction";
 import { VenusLoadingScreen } from "@/components/ui/VenusLoadingScreen";
 import { resolveOnboardingPhotoSignedUrl } from "@/lib/onboarding/photo-access";
+import { ShareGrid } from "@/components/result/SocialShareCards";
+import { LookCompositionCard, type CurationPiece } from "@/components/result/CurationPiecesCard";
 
 // Categorization logic for the try-on engine
 function inferTryOnCategory(product: any): "tops" | "bottoms" | "one-pieces" {
@@ -49,10 +52,10 @@ function inferTryOnCategory(product: any): "tops" | "bottoms" | "one-pieces" {
 }
 
 function ResultDashboardContent() {
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ---------------------------------------------------------------------------
   // ALL HOOKS MUST BE CALLED UNCONDITIONALLY AT THE TOP
   // React Error #310 happens when hooks are called after early returns.
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ---------------------------------------------------------------------------
   const searchParams = useSearchParams();
   const router = useRouter();
   const id = searchParams.get("id");
@@ -94,7 +97,7 @@ function ResultDashboardContent() {
   const [decision, setDecision] = React.useState<DecisionResult | null>(null);
   const wowShownTrackedRef = React.useRef(false);
 
-  // â”€â”€ Derived values (safe even when surface is null) â”€â”€
+  // Derived values (safe even when surface is null)
   const looks = useMemo(() => (surface?.looks && Array.isArray(surface.looks) ? surface.looks : []), [surface]);
   const curationFallbackMessage =
     surface?.curationFallback?.message ||
@@ -185,6 +188,57 @@ function ResultDashboardContent() {
       }),
     [tryOnQuality.state, tryOnQuality.reason, hasTryOnArtifact, hasLegacyTryOnLooks, onboardingData?.intent?.styleDirection]
   );
+  const premiumViewModel = useMemo(
+    () =>
+      buildPremiumResultViewModel({
+        surface,
+        storeName: tenantContext?.branchName || tenantContext?.orgSlug || org.name,
+        tryOn: {
+          status: tryOnStatus,
+          imageUrl: displayImageUrl || null,
+          qualityState: tryOnQuality.state,
+          isLoading: isGenerating,
+          hasError: Boolean(tryOnError),
+        },
+      }),
+    [
+      displayImageUrl,
+      isGenerating,
+      org.name,
+      surface,
+      tenantContext?.branchName,
+      tenantContext?.orgSlug,
+      tryOnError,
+      tryOnQuality.state,
+      tryOnStatus,
+    ],
+  );
+  const primaryLookPieces = useMemo<CurationPiece[]>(() => {
+    const primaryItems = looks[0]?.items;
+    if (!Array.isArray(primaryItems)) return [];
+
+    return primaryItems.slice(0, 4).reduce<CurationPiece[]>((pieces, p) => {
+      const productId = p.product_id || p.id;
+      const name = typeof p.name === "string" ? p.name.trim() : "";
+      if (!productId || !name) return pieces;
+
+      const parsedPrice =
+        typeof p.price === "number"
+          ? p.price
+          : Number(String(p.price || "").replace(/[^\d,.-]/g, "").replace(",", ".")) || undefined;
+
+      pieces.push({
+        id: productId,
+        productId,
+        name,
+        photoUrl: p.photoUrl,
+        role: p.role as CurationPiece["role"],
+        reason: p.functionalBenefit || p.impactLine,
+        price: parsedPrice,
+      });
+      return pieces;
+    }, []);
+  }, [looks]);
   const stylistAudit = useMemo<VenusStylistAudit | null>(() => {
     if (!surface) return null;
 
@@ -445,7 +499,7 @@ function ResultDashboardContent() {
     });
   }, [surface, id, resolvedOrgId, onboardingData?.tenant?.orgId, tryOnQuality]);
 
-  // â”€â”€ WhatsApp URL (memo, always called) â”€â”€
+  // WhatsApp URL (memo, always called)
   React.useEffect(() => {
     if (loading || !surface || wowShownTrackedRef.current || !resolvedOrgId || !id) {
       return;
@@ -484,15 +538,18 @@ function ResultDashboardContent() {
     const message = buildWhatsAppHandoffMessage({
       contactName: onboardingData?.contact?.name,
       resultState: tryOnQuality.state,
-      styleIdentity: essenceLabel,
+      styleIdentity: premiumViewModel.signatureName,
       imageGoal: onboardingData?.intent?.imageGoal,
       lookSummary: looks as any,
-      lastTryOn: tryOnImageUrl ? { image_url: tryOnImageUrl, status: "completed" } : persistedTryOn,
+      lastTryOn: premiumViewModel.tryOn.status === "approved"
+        ? { image_url: premiumViewModel.tryOn.imageUrl, status: "approved" }
+        : { status: premiumViewModel.tryOn.status },
       decision: decision ? { action: decision.chosenAction, reason: decision.reason } : undefined,
       audit: stylistAudit,
+      premiumLookMessage: premiumViewModel.recommendedLooks[0]?.whatsappMessage,
     });
     return buildWhatsAppHandoffUrl(message, tenantContext?.whatsappNumber || "5511967011133") || "";
-  }, [surface, onboardingData, tryOnQuality.state, essenceLabel, looks, tryOnImageUrl, persistedTryOn, decision, tenantContext, stylistAudit]);
+  }, [surface, onboardingData, tryOnQuality.state, premiumViewModel, looks, decision, tenantContext, stylistAudit]);
 
   const experienceStateInput = useMemo(
     () =>
@@ -560,7 +617,7 @@ function ResultDashboardContent() {
   const canShowCommerce = commerceRevealReady && premiumPresentation.curation.visible;
   const canShowPremiumAnalysis = premiumPresentation.analysis.visible;
   const canShowShareCard = premiumPresentation.share.visible;
-  const canShowTryOn = premiumPresentation.tryOn.visible;
+  const canShowTryOn = premiumPresentation.tryOn.visible && premiumViewModel.tryOn.status === "approved";
   const canShowWhatsAppCta = premiumPresentation.whatsapp.visible && Boolean(whatsappUrl);
 
   React.useEffect(() => {
@@ -573,7 +630,7 @@ function ResultDashboardContent() {
     });
   }, [experienceStateTelemetry, id, loading, onboardingData?.tenant?.orgId, resolvedOrgId, surface]);
 
-  // â”€â”€ Global error instrumentation (always called) â”€â”€
+  // Global error instrumentation (always called)
   React.useEffect(() => {
     const handleError = (event: ErrorEvent) => {
       console.error("[CLIENT_FATAL]", {
@@ -598,7 +655,7 @@ function ResultDashboardContent() {
     };
   }, []);
 
-  // â”€â”€ Data loading effect (always called) â”€â”€
+  // Data loading effect (always called)
   React.useEffect(() => {
     if (redirecting) {
       return;
@@ -694,7 +751,7 @@ function ResultDashboardContent() {
     load();
   }, [hasValidResultId, id, onboardingData, previewMode, redirecting, router, tenantContext, tryOnImageUrl]);
 
-  // â”€â”€ Try-on sync effect (always called) â”€â”€
+  // Try-on sync effect (always called)
   React.useEffect(() => {
     if (tryOnStatus !== "completed" || !tryOnImageUrl || !resolvedOrgId || !id || !pendingTryOnProduct) {
       return;
@@ -723,7 +780,7 @@ function ResultDashboardContent() {
     setPendingTryOnProduct(null);
   }, [tryOnStatus, tryOnImageUrl, resolvedOrgId, id, pendingTryOnProduct, tryOnPersonImage, looks]);
 
-  // â”€â”€ Decision engine effect (always called) â”€â”€
+  // Decision engine effect (always called)
   React.useEffect(() => {
     if (loading || !surface) return;
 
@@ -744,7 +801,7 @@ function ResultDashboardContent() {
     console.log("[Decision Engine] Next Action:", nextAction);
   }, [tryOnImageUrl, persistedTryOn, surface, loading, onboardingData?.intent?.satisfaction, looks]);
 
-  // â”€â”€ Handlers â”€â”€
+  // Handlers
   const handleGenerateTryOn = React.useCallback(
     (productId: string) => {
       if (!tryOnPersonImage || !resolvedOrgId || !id) return;
@@ -848,9 +905,9 @@ function ResultDashboardContent() {
     }
   }, [resolvedOrgId, id, socialFeedbackUrl, socialFeedbackNote, tryOnQuality.state, looks]);
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ---------------------------------------------------------------------------
   // EARLY RETURNS (after ALL hooks have been called)
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ---------------------------------------------------------------------------
 
   if (redirecting) {
     return (
@@ -898,15 +955,15 @@ function ResultDashboardContent() {
     );
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ---------------------------------------------------------------------------
   // MAIN RENDER (surface is guaranteed non-null here)
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ---------------------------------------------------------------------------
 
   return (
     <main className="min-h-screen bg-[#0a0a0a] pb-24 text-[#f0ece4] selection:bg-[#C9A84C]/30">
       <section className="px-5 pt-8">
           <div className="relative mx-auto max-w-lg">
-            <div className="mb-6 flex items-center justify-between gap-4 rounded-full border border-white/8 bg-white/[0.03] px-4 py-3 backdrop-blur-md">
+            <div className="hidden">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[#C9A84C]/25 bg-[#C9A84C]/10 text-[#C9A84C]">
                   <span className="text-[10px] font-black uppercase tracking-[0.2em]">V</span>
@@ -920,7 +977,7 @@ function ResultDashboardContent() {
                 {premiumPresentation.hero.badge}
               </div>
             </div>
-            <div className="relative aspect-[3/4] overflow-hidden rounded-[32px] border border-white/10 bg-white/[0.02] shadow-[0_22px_70px_rgba(0,0,0,0.6)]">
+            <div className="hidden">
             {isGenerating ? (
               <div className="flex h-full w-full flex-col items-center justify-center bg-black/60 p-8 text-center backdrop-blur-sm">
                 <div className="relative h-16 w-16">
@@ -941,10 +998,10 @@ function ResultDashboardContent() {
                   />
                 </div>
               </div>
-            ) : displayImageUrl && canShowTryOn ? (
+            ) : premiumViewModel.tryOn.imageUrl && canShowTryOn ? (
               <div className="relative h-full w-full">
                 <img
-                  src={displayImageUrl}
+                  src={premiumViewModel.tryOn.imageUrl}
                   alt="Seu look Venus"
                   className="h-full w-full object-cover"
                 />
@@ -978,7 +1035,7 @@ function ResultDashboardContent() {
                   </div>
                   <h3 className="mt-3 font-serif text-2xl text-white">Já consegui identificar sua direção.</h3>
                   <p className="mt-3 text-[13px] leading-relaxed text-white/70">
-                    Vou te mostrar a melhor direcao de estilo enquanto refino a visualizacao.
+                    Vou te mostrar a melhor direção de estilo enquanto refino a visualização.
                   </p>
                   {lateSuccessNotice && (
                     <p className="mt-3 rounded-full border border-[#C9A84C]/18 bg-[#C9A84C]/10 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.22em] text-[#C9A84C]">
@@ -1024,7 +1081,7 @@ function ResultDashboardContent() {
                 </p>
                 <h2 className="mt-3 font-serif text-3xl text-white">{premiumPresentation.hero.title}</h2>
                 <p className="mt-4 max-w-sm text-[14px] leading-relaxed text-white/65">
-                  {premiumPresentation.tryOn.unavailableCopy}
+                  {premiumViewModel.tryOn.fallbackMessage || premiumPresentation.tryOn.unavailableCopy}
                 </p>
                 {canShowWhatsAppCta && (
                   <VenusButton
@@ -1065,7 +1122,7 @@ function ResultDashboardContent() {
                   disabled={!tryOnAvailable}
                   className="mt-8"
                 >
-                  {tryOnAvailable ? tryOnPrimaryActionLabel : "Previa indisponivel"}
+                  {tryOnAvailable ? tryOnPrimaryActionLabel : "Prévia indisponível"}
                 </VenusButton>
                 {!tryOnAvailable && (
                   <p className="mt-3 text-[11px] leading-relaxed text-white/40">
@@ -1077,7 +1134,7 @@ function ResultDashboardContent() {
 
             <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-black/80 via-transparent to-transparent" />
 
-            {canShowTryOn && displayImageUrl && !isGenerating && (
+            {canShowTryOn && premiumViewModel.tryOn.imageUrl && !isGenerating && (
               <div className="absolute top-6 left-6 flex flex-col gap-2">
                 {isPreviousLook && (
                   <div className="flex items-center gap-2 rounded-full border border-[#C9A84C]/20 bg-black/60 px-4 py-2 backdrop-blur-md">
@@ -1093,51 +1150,211 @@ function ResultDashboardContent() {
             )}
           </div>
 
-          {canShowTryOn && tryOnQuality.showBeforeAfter && displayImageUrl && (
-            <div className="mt-4 grid grid-cols-2 gap-3">
+          {canShowTryOn && tryOnQuality.showBeforeAfter && premiumViewModel.tryOn.imageUrl && (
+            <div className="hidden">
               <div className="rounded-[24px] border border-white/5 bg-white/[0.03] p-3">
                 <p className="mb-2 text-[9px] font-bold uppercase tracking-[0.25em] text-white/35">Antes</p>
                 <div className="aspect-[3/4] overflow-hidden rounded-[18px]">
-                  <img src={tryOnPersonImage || displayImageUrl} alt="Foto de entrada" className="h-full w-full object-cover" />
+                  <img src={tryOnPersonImage || premiumViewModel.tryOn.imageUrl} alt="Foto de entrada" className="h-full w-full object-cover" />
                 </div>
               </div>
               <div className="rounded-[24px] border border-[#C9A84C]/20 bg-[#C9A84C]/6 p-3">
                 <p className="mb-2 text-[9px] font-bold uppercase tracking-[0.25em] text-[#C9A84C]">Depois</p>
                 <div className="aspect-[3/4] overflow-hidden rounded-[18px]">
-                  <img src={displayImageUrl} alt="Previa visual gerada" className="h-full w-full object-cover" />
+                  <img src={premiumViewModel.tryOn.imageUrl} alt="Prévia visual gerada" className="h-full w-full object-cover" />
                 </div>
               </div>
             </div>
           )}
 
-          <div className="mt-10 space-y-6 text-center">
+          <div className="space-y-8 text-center">
+            {/* SECAO 1: Hero de Assinatura */}
             <div className="space-y-3">
-              <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#C9A84C]">{premiumPresentation.hero.eyebrow}</p>
-              <h1 className="font-serif text-3xl font-bold tracking-tight text-white">
-                {premiumPresentation.hero.title}
+              <p className="font-mono text-[10px] uppercase tracking-[0.4em] text-[#C9A84C]">SUA ASSINATURA VISUAL</p>
+              <h1 className="font-serif text-4xl font-bold tracking-tight text-white">
+                {premiumViewModel.signatureName}
               </h1>
-              <p className="mx-auto max-w-sm text-[16px] leading-relaxed text-white/60">
-                {premiumPresentation.hero.subtitle}
+              <p className="mx-auto max-w-sm text-[18px] leading-relaxed text-white/75">
+                {premiumViewModel.impactPhrase}
               </p>
-              <p className="mx-auto max-w-sm text-[12px] leading-relaxed text-white/40">
-                {premiumPresentation.hero.helper}
+              <p className="mx-auto max-h-12 max-w-sm overflow-hidden text-[13px] leading-6 text-white/48">
+                {premiumViewModel.shortDescription}
               </p>
-              {revealStage < 1 && (
-                <button
-                  type="button"
-                  onClick={advanceReveal}
-                  className="mt-2 inline-flex h-11 items-center justify-center rounded-full border border-[#C9A84C]/20 bg-[#C9A84C]/10 px-5 text-[9px] font-black uppercase tracking-[0.24em] text-[#C9A84C] transition-colors hover:bg-[#C9A84C]/16"
+
+              {/* Botoes hero */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:justify-center mt-6">
+                {canShowWhatsAppCta ? (
+                  <VenusButton
+                    onClick={() => openWhatsApp(whatsappUrl)}
+                    className="h-14 w-full px-6 text-[10px] tracking-[0.3em] shadow-[0_18px_50px_rgba(201,168,76,0.18)] sm:w-auto"
+                  >
+                    Quero esse look no WhatsApp
+                  </VenusButton>
+                ) : (
+                  <VenusButton
+                    onClick={() => document.getElementById("curation-section")?.scrollIntoView({ behavior: "smooth" })}
+                    className="h-14 w-full px-6 text-[10px] tracking-[0.3em] shadow-[0_18px_50px_rgba(201,168,76,0.14)] sm:w-auto"
+                  >
+                    Ver peças escolhidas
+                  </VenusButton>
+                )}
+                <VenusButton
+                  onClick={() => document.getElementById("share-section")?.scrollIntoView({ behavior: "smooth" })}
+                  variant="outline"
+                  className="h-10 w-full px-5 text-[9px] tracking-[0.24em] sm:w-auto"
                 >
-                  Continuar leitura
-                </button>
-              )}
+                  Compartilhar minha assinatura
+                </VenusButton>
+              </div>
             </div>
+
+            {/* SECAO 2: Paleta Venus */}
+            {premiumViewModel.palette.bestColors.length > 0 && (
+              <section id="palette-section" className="mt-12 rounded-[32px] border border-white/8 bg-white/[0.02] p-6">
+                <div className="text-center mb-6">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-[#C9A84C]">Sua paleta</p>
+                  <h2 className="mt-2 font-serif text-2xl text-white">Cores que deixam sua imagem mais clara</h2>
+                  <p className="mx-auto mt-2 max-w-md text-[13px] leading-relaxed text-white/60">{premiumViewModel.palette.explanation}</p>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+                  {premiumViewModel.palette.bestColors.slice(0, 4).map((color, index) => (
+                    <div key={index} className="flex flex-col items-center gap-2">
+                      <div
+                        className="h-14 w-14 rounded-full border border-white/10 shadow-lg"
+                        style={{ backgroundColor: paletteEvidence?.basePalette?.[index]?.hex || "#C9A84C" }}
+                      />
+                      <span className="text-[9px] uppercase tracking-wide text-white/60">{color}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {paletteEvidence.accentPalette && paletteEvidence.accentPalette.length > 0 && (
+                  <div className="border-t border-white/5 pt-4 mb-4">
+                    <p className="text-center text-[9px] font-bold uppercase tracking-[0.28em] text-[#C9A84C] mb-3">ACENTOS</p>
+                    <div className="flex flex-wrap justify-center gap-3">
+                      {paletteEvidence.accentPalette.slice(0, 3).map((color, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                          <div
+                            className="h-8 w-8 rounded-full border border-white/10"
+                            style={{ backgroundColor: color.hex }}
+                          />
+                          <span className="text-[9px] text-white/60">{color.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {paletteEvidence.avoidOrUseCarefully && paletteEvidence.avoidOrUseCarefully.length > 0 && (
+                  <div className="border-t border-white/5 pt-4">
+                    <p className="text-center text-[9px] font-bold uppercase tracking-[0.28em] text-white/50 mb-3">USAR COM CAUTELA</p>
+                    <div className="flex flex-wrap justify-center gap-3">
+                      {premiumViewModel.palette.avoidColors.slice(0, 2).map((color, index) => (
+                        <div key={index} className="flex items-center gap-2 opacity-50">
+                          <div
+                            className="h-8 w-8 rounded-full border border-white/10"
+                            style={{ backgroundColor: paletteEvidence?.avoidOrUseCarefully?.[index]?.hex || "#888" }}
+                          />
+                          <span className="text-[9px] text-white/40">{color}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* SECAO 3: Pecas Escolhidas */}
+            {canShowCommerce && primaryLookPieces.length > 0 && (
+              <section id="curation-section" className="mt-12">
+                <div className="text-center mb-6">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-[#C9A84C]">Peças escolhidas</p>
+                </div>
+
+                <LookCompositionCard
+                  lookName={looks[0]?.name || premiumViewModel.recommendedLooks[0]?.title || "Look principal"}
+                  pieces={primaryLookPieces}
+                  explanation={
+                    premiumViewModel.recommendedLooks[0]?.reason ||
+                    "Peças selecionadas para complementar sua assinatura visual."
+                  }
+                  onBuyLook={canShowWhatsAppCta ? () => openWhatsApp(whatsappUrl) : undefined}
+                />
+              </section>
+            )}
+
+            {/* SECAO 4: Compartilhar */}
+            {canShowShareCard && (
+              <section id="share-section" className="mt-12">
+                <div className="text-center mb-6">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-[#C9A84C]">Compartilhar</p>
+                </div>
+
+                <ShareGrid
+                  data={{
+                    signatureName: premiumPresentation.hero.title,
+                    signatureSummary: premiumViewModel.impactPhrase,
+                    colors: [
+                      ...(paletteEvidence?.basePalette || []),
+                      ...(paletteEvidence?.accentPalette || []),
+                    ].slice(0, 4),
+                    storeName: tenantContext?.branchName || tenantContext?.orgSlug || undefined,
+                    lookName: looks[0]?.name,
+                  }}
+                />
+
+                <div className="mt-6">
+                  <VenusButton
+                    onClick={() => {
+                      if (whatsappUrl) {
+                        openWhatsApp(whatsappUrl);
+                      }
+                    }}
+                    className="h-12 w-full text-[10px] tracking-[0.28em]"
+                  >
+                    Quero esse look no WhatsApp
+                  </VenusButton>
+                </div>
+              </section>
+            )}
+
+            {/* SECAO 5: Previa visual */}
+            <section id="tryon-section" className="mt-12">
+              {canShowTryOn && premiumViewModel.tryOn.imageUrl ? (
+                <div>
+                  <div className="mb-5 text-center">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-[#C9A84C]">Sua prévia</p>
+                    <h2 className="mt-2 font-serif text-2xl text-white">Visualização aprovada</h2>
+                  </div>
+                  <div className="mx-auto max-w-sm rounded-[28px] border border-[#C9A84C]/20 bg-[#C9A84C]/5 p-2">
+                    <div className="aspect-[3/4] overflow-hidden rounded-[22px]">
+                      <img src={premiumViewModel.tryOn.imageUrl} alt="Prévia visual" className="h-full w-full object-cover" />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-white/8 bg-white/[0.025] px-4 py-4 text-left">
+                  <p className="text-[13px] leading-relaxed text-white/58">
+                    A prévia visual fica para depois. Sua curadoria já está pronta com peças reais da loja.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => router.push("/scanner/face")}
+                    className="mt-3 rounded-full border border-white/10 px-4 py-2 text-[9px] font-bold uppercase tracking-[0.22em] text-[#C9A84C] transition-colors hover:bg-white/[0.04]"
+                  >
+                    Tentar nova foto
+                  </button>
+                </div>
+              )}
+            </section>
+
           </div>
 
           {canShowPremiumAnalysis && stylistAudit?.report?.sections?.length ? (
             <section className="mt-10 space-y-4">
               <div className="text-center">
-                <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-[#C9A84C]">{premiumPresentation.analysis.eyebrow}</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-[#C9A84C]">Sua assinatura</p>
                 <p className="mx-auto mt-2 max-w-xl text-[13px] leading-relaxed text-white/50">
                   {premiumPresentation.analysis.subtitle}
                 </p>
@@ -1362,7 +1579,7 @@ function ResultDashboardContent() {
                 customerName={onboardingData?.contact?.name}
                 resultUrl={typeof window !== "undefined" && hasValidResultId ? `${window.location.origin}/result?id=${id}` : undefined}
                 onTryOnStart={(composition: LookComposition) => {
-                  // Iniciar try-on com a peça âncora do look
+                  // Iniciar try-on com a peça ancora do look
                   if (composition.anchorPiece.id) {
                     handleGenerateTryOn(composition.anchorPiece.id);
                   }
@@ -1390,8 +1607,8 @@ function ResultDashboardContent() {
                 orgName={tenantContext?.orgSlug || tenantContext?.branchName || null}
                 storeHandle={tenantContext?.orgSlug || null}
                 customerName={onboardingData?.contact?.name || null}
-                userImageUrl={tryOnPersonImage || null}
-                tryOnImageUrl={displayImageUrl || persistedTryOn?.image_url || null}
+                userImageUrl={null}
+                tryOnImageUrl={premiumViewModel.tryOn.status === "approved" ? premiumViewModel.tryOn.imageUrl || null : null}
               />
             </div>
           )}
@@ -1541,7 +1758,7 @@ function ResultDashboardContent() {
           }}
           className="rounded-lg bg-black px-4 py-2 text-[10px] font-black uppercase tracking-widest text-[#C9A84C] transition-transform active:scale-95"
         >
-          Levar curadoria
+          Quero esse look
         </Link>
       </div>
       )}
@@ -1560,5 +1777,3 @@ export default function ResultDashboardPage() {
     </Suspense>
   );
 }
-
-

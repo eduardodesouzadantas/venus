@@ -275,7 +275,7 @@ export function ShareableLookCard({
         <div className="relative overflow-hidden rounded-[30px] border border-white/8 bg-black/30">
           <div className="relative aspect-[3/4] min-h-[420px]">
             <img
-              src={tryOnImageUrl || userImageUrl || look.tryOnUrl || look.items?.[0]?.photoUrl || "/hero-final.jpg"}
+              src={tryOnImageUrl || look.items?.[0]?.photoUrl || look.tryOnUrl || "/hero-final.jpg"}
               alt={`${shareTexts.model.styleName} com ${look.name}`}
               className="h-full w-full object-cover"
             />
@@ -309,7 +309,7 @@ export function ShareableLookCard({
             <div key={`${variation.label}-${variation.title}`} className="overflow-hidden rounded-[24px] border border-white/5 bg-black/20">
               <div className="aspect-[4/5] overflow-hidden bg-black/40">
                 <img
-                  src={variation.imageUrl || tryOnImageUrl || userImageUrl || look.items?.[0]?.photoUrl || "/hero-final.jpg"}
+                  src={variation.imageUrl || tryOnImageUrl || look.items?.[0]?.photoUrl || "/hero-final.jpg"}
                   alt={variation.title}
                   className="h-full w-full object-cover"
                 />
@@ -328,8 +328,8 @@ export function ShareableLookCard({
             <div key={item} className="rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3">
               <p className="text-[8px] font-bold uppercase tracking-[0.28em] text-[#D4AF37]">{item}</p>
               <p className="mt-1 text-[12px] leading-relaxed text-white/58">
-                {item === "Baseado no seu corpo"
-                  ? "A leitura respeita proporcao e caimento."
+                {item === "Baseado na sua intenção"
+                  ? "A leitura respeita sua direção visual e o caimento das peças."
                   : item === "Cores ideais para voce"
                     ? "A paleta reforca contraste e harmonia."
                     : "A proposta foi montada para funcionar no mundo real."}

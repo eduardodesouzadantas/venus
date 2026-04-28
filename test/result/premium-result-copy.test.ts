@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import type { VenusPremiumExperienceState } from "../../src/lib/result/experience-state.ts";
+import type { VenusPremiumExperienceState } from "../../src/lib/result/experience-state";
 import {
   buildPremiumResultPresentationModel,
   buildPremiumResultSectionVisibility,
@@ -9,7 +9,7 @@ import {
   formatConfidenceLabel,
   formatStylePreferenceLabel,
   formatExperienceStatusLabel,
-} from "../../src/lib/result/premium-result-copy.ts";
+} from "../../src/lib/result/premium-result-copy";
 
 function run(name: string, fn: () => void) {
   try {
@@ -92,7 +92,7 @@ run("premium result headline positions signature visual instead of try-on", () =
     hasLooks: true,
   });
 
-  assert.equal(model.hero.eyebrow, "Assinatura visual");
+  assert.match(model.hero.eyebrow, /assinatura visual/i);
   assert.equal(model.hero.title, "Autoridade Silenciosa");
   assert.doesNotMatch(model.hero.title, /try-on|provador/i);
   assert.doesNotMatch(model.hero.subtitle, /try-on obrigat/i);
@@ -119,8 +119,8 @@ run("curation section follows showCuration flag and uses compravel copy", () => 
   });
 
   assert.equal(model.curation.visible, true);
-  assert.match(model.curation.eyebrow, /pecas da loja/i);
-  assert.ok(model.curation.reinforcement.includes("Curadoria compravel da loja"));
+  assert.match(model.curation.eyebrow, /peças escolhidas|pecas escolhidas/i);
+  assert.ok(model.curation.reinforcement.includes("Curadoria compravel"));
 });
 
 run("WhatsApp section is consultive when showWhatsAppCta is true", () => {
@@ -130,7 +130,7 @@ run("WhatsApp section is consultive when showWhatsAppCta is true", () => {
   });
 
   assert.equal(model.whatsapp.visible, true);
-  assert.match(model.whatsapp.cta, /stylist da loja/i);
+  assert.match(model.whatsapp.cta, /Quero esse look no WhatsApp/i);
   assert.match(model.whatsapp.subtitle, /assinatura visual/i);
 });
 
@@ -138,14 +138,14 @@ run("share section follows showShareCard flag", () => {
   const model = buildPremiumResultPresentationModel({ experienceState: readyState });
 
   assert.equal(model.share.visible, true);
-  assert.match(model.share.title, /Compartilhe sua assinatura visual/i);
+  assert.match(model.share.title, /Compartilhe sua assinatura/i);
 });
 
 run("try-on is hidden when showTryOn is false", () => {
   const model = buildPremiumResultPresentationModel({ experienceState: readyState });
 
   assert.equal(model.tryOn.visible, false);
-  assert.match(model.tryOn.unavailableCopy, /curadoria segue pronta/i);
+  assert.match(model.tryOn.unavailableCopy, /curadoria está pronta|curadoria esta pronta/i);
 });
 
 run("catalog insufficient receives an elegant fallback", () => {
@@ -164,7 +164,7 @@ run("catalog insufficient receives an elegant fallback", () => {
   });
 
   assert.equal(model.curation.visible, true);
-  assert.match(model.curation.fallbackTitle, /Catalogo curto/i);
+  assert.match(model.curation.fallbackTitle, /Cat[aá]logo curto/i);
   assert.match(model.curation.fallbackBody, /atendimento consultivo/i);
 });
 

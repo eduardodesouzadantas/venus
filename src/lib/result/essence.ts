@@ -186,23 +186,23 @@ function scoreArchetype(
     if (metalText.includes("prate")) score += 1;
   }
 
-  if (directionText.includes("mascul")) {
+  if (directionText === "masculine") {
     if (key === "authority" || key === "discretion") score += 1;
   }
 
-  if (directionText.includes("femin")) {
+  if (directionText === "feminine") {
     if (key === "elegance" || key === "presence") score += 1;
   }
 
-  if (directionText.includes("street")) {
+  if (directionText === "streetwear") {
     if (key === "presence" || key === "creative") score += 1;
   }
 
-  if (directionText.includes("casual")) {
+  if (directionText === "casual") {
     if (key === "elegance" || key === "discretion") score += 1;
   }
 
-  if (directionText.includes("social")) {
+  if (directionText === "social") {
     if (key === "elegance" || key === "presence") score += 1;
   }
 
@@ -270,7 +270,7 @@ function buildSummary(
   const metalText = normalizeText(metal).toLowerCase() || "metais neutros";
   const directionText = getStyleDirectionNarrativeLabel(styleDirection);
 
-  const envLine = env.length > 0 ? `Seu contexto puxa para ${env.join(" e ")}.` : "Seu contexto ainda está sendo refinado.";
+  const envLine = env.length > 0 ? `Seu contexto puxa para ${env.join(" e ")}.` : "A Venus ajustou sua curadoria com base nas suas respostas.";
   const behaviorLine = dna || behavior ? `O ritmo de compra tende a ser ${dna || behavior}.` : "";
   const directionLine =
     directionText === "linha neutra"

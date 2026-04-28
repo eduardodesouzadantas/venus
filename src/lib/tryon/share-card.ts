@@ -120,7 +120,7 @@ export function buildShareableLookCardModel(input: ShareableLookCardInput): Shar
     trimSentence(input.surface.diagnostic.gapSolution) ||
     trimSentence(input.surface.diagnostic.desiredGoal) ||
     "Esse look valoriza seu tom e estrutura.";
-  const bodyLine = "Baseado no seu corpo";
+  const bodyLine = "Baseado na sua intenção";
   const colorLine = "Cores ideais para voce";
   const recommendationLine = "Look recomendado para voce";
   const reinforcement = [bodyLine, colorLine, recommendationLine];
