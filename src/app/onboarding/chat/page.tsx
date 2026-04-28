@@ -131,8 +131,8 @@ function buildVisionCue(data: OnboardingData) {
   const cues: string[] = [];
   if (safeData.colorimetry?.colorSeason) cues.push(safeData.colorimetry.colorSeason.toLowerCase());
   if (safeData.colorimetry?.contrast) cues.push(`contraste ${safeData.colorimetry.contrast.toLowerCase()}`);
-  if (safeData.colorimetry?.faceShape) cues.push(`rosto ${safeData.colorimetry.faceShape}`);
-  if (safeData.body?.faceLines) cues.push(`traÃ§os ${safeData.body.faceLines.toLowerCase()}`);
+  if (safeData.colorimetry?.faceShape) cues.push(`harmonia ${safeData.colorimetry.faceShape}`);
+  if (safeData.body?.faceLines) cues.push(`composicao ${safeData.body.faceLines.toLowerCase()}`);
   if (safeData.body?.fit) cues.push(`caimento ${safeData.body.fit.toLowerCase()}`);
   return cues.length > 0 ? cues.slice(0, 3).join(" â€¢ ") : "a sua presenÃ§a";
 }

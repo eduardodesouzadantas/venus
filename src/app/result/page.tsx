@@ -32,7 +32,7 @@ import {
   buildExperienceStateInputFromResultData,
   buildExperienceStateTelemetry,
 } from "@/lib/result/experience-state-adapter";
-import { buildPremiumResultPresentationModel } from "@/lib/result/premium-result-copy";
+import { buildPremiumResultPresentationModel, formatConfidenceLabel } from "@/lib/result/premium-result-copy";
 import { buildVenusResultNarrative, VENUS_STYLIST_NAME } from "@/lib/venus/brand";
 import { buildVenusStylistAudit, type VenusStylistAudit } from "@/lib/venus/audit/engine";
 import { TRYON_PREMIUM_FALLBACK_MESSAGE, TRYON_PREMIUM_REFINED_MESSAGE } from "@/lib/tryon/fallback-copy";
@@ -1469,7 +1469,7 @@ function ResultDashboardContent() {
             <p className="mb-3 font-mono text-[9px] uppercase tracking-[0.3em] text-[#C9A84C]">Leitura de cor - {paletteFamily}</p>
             <div className="mb-4 flex flex-wrap items-center gap-2">
               <span className="rounded-full border border-[#C9A84C]/20 bg-[#C9A84C]/10 px-3 py-1 text-[9px] font-bold uppercase tracking-[0.2em] text-[#C9A84C]">
-                Confianca da leitura: {paletteEvidence.confidence}
+                Confiança da leitura: {formatConfidenceLabel(paletteEvidence.confidence)}
               </span>
               <span className="text-[11px] text-white/50">
                 Leitura {paletteEvidence.confidence === "high" ? "confirmada" : "preliminar"} baseada na foto e no contexto real.

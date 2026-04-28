@@ -84,6 +84,50 @@ const ROLE_ORDER: PremiumCurationPieceRole[] = [
 ];
 
 const REQUIRED_READY_ROLES: PremiumCurationPieceRole[] = ["hero", "base", "acabamento"];
+
+const CASUAL_FOOTWEAR_SIGNALS = [
+  "chinelo",
+  "flip_flop",
+  "flipflop",
+  "havaianas",
+  "chinela",
+  "tamanco",
+  "crocs",
+  "sandalia casual",
+  "flat casual",
+  "slides",
+];
+
+const FORMAL_CONTEXT_SIGNALS = [
+  "elegancia",
+  "elegante",
+  "formal",
+  "alfaiataria",
+  "slim",
+  "estruturado",
+  "escritorio",
+  "classico",
+  "clean",
+  "autoridade",
+  "sofisticad",
+  "refinad",
+  "social",
+];
+
+function isIncoherentCasualFootwear(piece: PremiumCurationSourcePiece, lookContext: string): boolean {
+  const pieceSource = normalizeSearchText([
+    piece.name,
+    piece.title,
+    piece.category,
+    piece.type,
+    piece.description,
+    ...normalizeList(piece.styleTags),
+    ...normalizeList(piece.categoryTags),
+  ].join(" "));
+  const hasCasualFootwear = CASUAL_FOOTWEAR_SIGNALS.some((signal) => pieceSource.includes(signal));
+  if (!hasCasualFootwear) return false;
+  return FORMAL_CONTEXT_SIGNALS.some((signal) => lookContext.includes(signal));
+}
 const SENSITIVE_TEXT_PATTERN =
   /(@|base64|data:image|signedurl|signed_url|imageurl|image_url|token|secret|raw|payload|https?:\/\/|\+?\d[\d\s().-]{7,}|nome\s+completo|cliente\.real)/i;
 
@@ -139,7 +183,7 @@ function inferSlot(piece: PremiumCurationSourcePiece): string {
   if (includesAny(source, ["layer", "blazer", "casaco", "jaqueta", "terceira peca"])) return "layer";
   if (includesAny(source, ["bottom", "calca", "trouser", "jeans", "saia", "short", "bermuda"])) return "bottom";
   if (includesAny(source, ["top", "camisa", "blusa", "camiseta", "regata", "tricot"])) return "top";
-  if (includesAny(source, ["shoes", "sapato", "tenis", "sapatilha", "sandalia", "bota", "loafer"])) return "shoes";
+  if (includesAny(source, ["shoes", "sapato", "tenis", "sapatilha", "sandalia", "bota", "loafer", "chinelo", "chinela", "tamanco"])) return "shoes";
   if (includesAny(source, ["accessory", "acessorio", "acessorio", "bolsa", "cinto", "colar", "brinco", "relogio", "oculos"])) return "accessory";
   return "unknown";
 }
@@ -202,9 +246,13 @@ function normalizePiece(
   piece: PremiumCurationSourcePiece,
   sourceIndex: number,
   assignedRoles: Set<PremiumCurationPieceRole>,
+  lookContext = "",
 ): PremiumCurationPiece | null {
   const productId = normalizeProductId(piece, sourceIndex);
-  const role = inferRoleFromSlot(piece, sourceIndex, assignedRoles);
+  let role = inferRoleFromSlot(piece, sourceIndex, assignedRoles);
+  if (role !== "alternativa" && isIncoherentCasualFootwear(piece, lookContext)) {
+    role = "alternativa";
+  }
   const slot = inferSlot(piece);
   const name = publicText(piece.name || piece.title, "Peca do catalogo");
   const reason = publicText(
@@ -231,8 +279,15 @@ function buildLook(
 ): PremiumCurationLook | null {
   const items = Array.isArray(look.items) ? look.items : [];
   const assignedRoles = new Set<PremiumCurationPieceRole>();
+  const lookContext = normalizeSearchText([
+    look.title,
+    look.name,
+    look.rationale,
+    look.reason,
+    look.explanation,
+  ].join(" "));
   const pieces = items
-    .map((piece, pieceIndex) => normalizePiece(piece, pieceIndex, assignedRoles))
+    .map((piece, pieceIndex) => normalizePiece(piece, pieceIndex, assignedRoles, lookContext))
     .filter((piece): piece is PremiumCurationPiece => Boolean(piece));
 
   if (pieces.length === 0) return null;

@@ -62,11 +62,11 @@ export function resolveVenusTenantBrand(input?: VenusTenantBrandInput | null, fa
 }
 
 export function buildVenusStylistIntro() {
-  return "Perfeito. Me envie uma foto e eu começo sua leitura premium agora.";
+  return "Vamos definir sua direção de estilo. A câmera é opcional e entra para refinar a curadoria.";
 }
 
 export function buildVenusBodyScannerIntro() {
-  return "Perfeito. Agora eu refino sua leitura premium ✨";
+  return "A câmera é opcional. Ela refina sua assinatura visual depois das perguntas de intenção.";
 }
 
 function buildResultNarrativeTitle(state: VenusResultState, styleDirection?: string | null) {
@@ -77,7 +77,7 @@ function buildResultNarrativeTitle(state: VenusResultState, styleDirection?: str
   const toneProfile = getStyleDirectionToneProfile(normalizeStyleDirectionPreference(styleDirection || "Sem preferência"));
 
   if (state === "preview") {
-    return toneProfile.title === "Look de presença" ? "Presença em refinamento" : toneProfile.title;
+    return toneProfile.title === "Linha neutra" ? "Curadoria neutra" : toneProfile.title;
   }
 
   return toneProfile.title;

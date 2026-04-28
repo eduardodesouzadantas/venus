@@ -23,18 +23,25 @@ function normalize(text: string) {
   return text.toLowerCase();
 }
 
-run("buildOnboardingWowCopy stays premium and photo-first", () => {
+run("buildOnboardingWowCopy sets intent-first narrative without camera promise as first step", () => {
   const copy = buildOnboardingWowCopy("Loja Aurora");
 
-  assert.ok(copy.intro.includes("foto"));
-  assert.ok(copy.intro.includes("Loja Aurora"));
-  assert.ok(copy.followUp.includes("foto simples"));
-  assert.equal(copy.sending, "Perfeito... já estou analisando aqui ✨");
-  assert.ok(copy.analyzing.includes("wow"));
-  assert.ok(copy.wowSummary.includes("Depois do resultado"));
-  assert.ok(copy.consultiveNote.includes("visagismo"));
-  assert.equal(copy.sendPhotoLabel, "Enviar foto agora");
-  assert.equal(copy.continueLabel, "Continuar com a Venus");
+  assert.ok(copy.intro.includes("Loja Aurora"), "store name must appear in intro");
+  assert.ok(
+    copy.intro.includes("intenção") || copy.intro.includes("direção"),
+    "intro must set intent-first expectation"
+  );
+  assert.doesNotMatch(copy.intro, /me envie uma foto/i, "intro must not promise camera before intent");
+  assert.doesNotMatch(copy.analyzing, /rosto/i, "analyzing must not use 'rosto'");
+  assert.ok(copy.analyzing.includes("wow"), "analyzing must reference the wow moment");
+  assert.ok(
+    copy.followUp.includes("opcional") || copy.followUp.includes("câmera") || copy.followUp.includes("sem foto"),
+    "followUp must position camera as optional"
+  );
+  assert.ok(copy.wowSummary.includes("Depois do resultado"), "wowSummary must include 'Depois do resultado'");
+  assert.ok(copy.consultiveNote.includes("visagismo"), "consultiveNote must reference visagismo");
+  assert.equal(copy.sendPhotoLabel, "Enviar foto agora", "sendPhotoLabel must be unchanged");
+  assert.equal(copy.continueLabel, "Continuar com a Venus", "continueLabel must be unchanged");
 });
 
 run("brand helpers resolve premium public identity", () => {
@@ -54,14 +61,32 @@ run("brand helpers resolve premium public identity", () => {
   assert.equal(fallback.hasLogo, false);
 });
 
-run("brand and photo flow helpers stay photo-first", () => {
-  assert.equal(
-    buildVenusStylistIntro(),
-    "Perfeito. Me envie uma foto e eu começo sua leitura premium agora."
+run("brand and photo flow helpers set intent-first narrative without forbidden terms", () => {
+  const intro = buildVenusStylistIntro();
+  const scannerIntro = buildVenusBodyScannerIntro();
+  const anticipation = generateAnticipationMessage();
+  const followUp = buildFollowUpWithoutPhoto();
+
+  // Must not promise camera before intent
+  assert.doesNotMatch(intro, /me envie uma foto/i);
+  assert.doesNotMatch(intro, /perfeito\.\s*agora eu refino/i);
+  assert.doesNotMatch(scannerIntro, /perfeito\.\s*agora eu refino/i);
+  assert.doesNotMatch(anticipation, /perfeito\.\s*agora eu refino/i);
+
+  // Must not contain forbidden physical-judgment terms
+  const allText = [intro, scannerIntro, anticipation, followUp].join(" ");
+  assert.doesNotMatch(allText, /\brosto\b/i);
+  assert.doesNotMatch(allText, /\bcorpo\b/i);
+  assert.doesNotMatch(allText, /tra[cç]os/i);
+  assert.doesNotMatch(allText, /propor[cç][oõ]es/i);
+
+  // Direction must be mentioned or camera positioned as optional
+  assert.ok(
+    intro.includes("direção") || intro.includes("intenção") || intro.includes("câmera"),
+    "intro must reference style direction or position camera as optional"
   );
-  assert.equal(buildVenusBodyScannerIntro(), "Perfeito. Agora eu refino sua leitura premium ✨");
-  assert.equal(generateAnticipationMessage(), "Perfeito. Agora eu refino sua leitura premium ✨");
-  assert.equal(buildFollowUpWithoutPhoto(), "Pode ser uma foto simples mesmo — eu ajusto tudo pra você 😊");
+
+  assert.equal(followUp, "Pode ser uma foto simples mesmo — eu ajusto tudo pra você 😊");
 
   const consultive = generateConsultoryAfterWow(
     {
@@ -97,13 +122,24 @@ run("brand and photo flow helpers stay photo-first", () => {
   assert.ok(consultive.includes("leitura de cor"));
   assert.ok(consultive.includes("visagismo"));
   assert.ok(consultive.includes("outras opções nessa mesma linha"));
+
+  // generateConsultoryAfterWow must not use body-judgment language
+  assert.doesNotMatch(consultive, /\brosto\b/i);
+  assert.doesNotMatch(consultive, /\bcorpo\b/i);
+  assert.doesNotMatch(consultive, /\bombros\b/i);
+  assert.doesNotMatch(consultive, /tra[cç]os/i);
+  assert.doesNotMatch(consultive, /propor[cç][oõ]es/i);
 });
 
-run("photo-first helpers do not reintroduce abstract onboarding questions", () => {
+run("photo-first helpers do not reintroduce abstract onboarding questions or forbidden terms", () => {
   const forbidden = [
     "qual linha sustenta sua imagem",
     "que presença você quer que a roupa entregue",
     "quando você se olha no espelho",
+    "a venus lê seu rosto",
+    "baseado no seu corpo",
+    "perfeito. agora eu refino",
+    "me envie uma foto",
   ];
 
   const samples = [

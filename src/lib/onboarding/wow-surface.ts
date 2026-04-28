@@ -47,10 +47,10 @@ export function buildOnboardingWowCopy(orgLabel?: string | null): OnboardingWowC
   const targetLabel = buildTargetLabel(orgLabel);
 
   return {
-    intro: `Perfeito. Me envie uma foto sua e eu começo a leitura${targetLabel}.`,
-    followUp: "Pode ser uma foto simples mesmo — eu ajusto tudo pra você 😊",
-    sending: "Perfeito... já estou analisando aqui ✨",
-    analyzing: "Agora eu cruzo rosto, cor e presença para te devolver o primeiro wow.",
+    intro: `A Venus começa pela intenção${targetLabel}: ocasião, presença e preferência visual. Depois, se você quiser, a leitura visual refina a curadoria.`,
+    followUp: "A câmera é opcional e entra para refinar sua assinatura visual. Você pode seguir sem foto.",
+    sending: "Registrando sua direção de estilo...",
+    analyzing: "Cruzando intenção, cor e presença para o seu primeiro wow.",
     wowTitle: "Seu primeiro wow está pronto.",
     wowSummary: "Depois do resultado, eu te explico por que essa direção funciona e o que vale testar a seguir.",
     consultiveNote:

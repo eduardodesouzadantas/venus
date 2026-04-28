@@ -6,6 +6,9 @@ import {
   buildPremiumResultSectionVisibility,
   getPieceRoleLabel,
   PIECE_ROLE_LABELS,
+  formatConfidenceLabel,
+  formatStylePreferenceLabel,
+  formatExperienceStatusLabel,
 } from "../../src/lib/result/premium-result-copy.ts";
 
 function run(name: string, fn: () => void) {
@@ -509,6 +512,114 @@ run("PR8 — PIECE_ROLE_LABELS covers equilibrio, ponto_focal, acabamento and al
   assert.match(PIECE_ROLE_LABELS.ponto_focal, /destaque/i);
   assert.match(PIECE_ROLE_LABELS.acabamento, /acabamento/i);
   assert.match(PIECE_ROLE_LABELS.alternativa, /alternativa/i);
+});
+
+// ── Format helpers: enum label formatters ──────────────────────────────────────
+
+run("formatConfidenceLabel maps raw enum values to human labels", () => {
+  assert.equal(formatConfidenceLabel("high"), "confiança confirmada");
+  assert.equal(formatConfidenceLabel("medium"), "confiança intermediária");
+  assert.equal(formatConfidenceLabel("low"), "leitura preliminar");
+  assert.doesNotMatch(formatConfidenceLabel("medium"), /^medium$/);
+  assert.doesNotMatch(formatConfidenceLabel("high"), /^high$/);
+  assert.doesNotMatch(formatConfidenceLabel("low"), /^low$/);
+});
+
+run("formatStylePreferenceLabel maps no_preference to Direção aberta", () => {
+  assert.equal(formatStylePreferenceLabel("no_preference"), "Direção aberta");
+  assert.doesNotMatch(formatStylePreferenceLabel("no_preference"), /no_preference/);
+  assert.doesNotMatch(formatStylePreferenceLabel(null), /null/i);
+  assert.doesNotMatch(formatStylePreferenceLabel(undefined), /undefined/i);
+  assert.equal(formatStylePreferenceLabel("masculine"), "Masculino");
+  assert.equal(formatStylePreferenceLabel("feminine"), "Feminino");
+});
+
+run("formatExperienceStatusLabel maps all required enum codes", () => {
+  assert.match(formatExperienceStatusLabel("fallback_consultive"), /consultivo/i);
+  assert.match(formatExperienceStatusLabel("insufficient_catalog"), /ajuste/i);
+  assert.match(formatExperienceStatusLabel("not_requested"), /opcional/i);
+  assert.match(formatExperienceStatusLabel("quality_blocked"), /indispon/i);
+  assert.doesNotMatch(formatExperienceStatusLabel("insufficient_catalog"), /insufficient_catalog/);
+  assert.doesNotMatch(formatExperienceStatusLabel("fallback_consultive"), /fallback_consultive/);
+  assert.doesNotMatch(formatExperienceStatusLabel("not_requested"), /not_requested/);
+  assert.doesNotMatch(formatExperienceStatusLabel("quality_blocked"), /quality_blocked/);
+});
+
+// ── Enum leak guard ────────────────────────────────────────────────────────────
+
+run("presentation model text fields do not expose raw enum strings", () => {
+  const model = buildPremiumResultPresentationModel({
+    experienceState: {
+      ...readyState,
+      curation: "insufficient_catalog",
+      overallStatus: "fallback_consultive",
+      tryOn: "quality_blocked",
+      uiFlags: {
+        ...readyState.uiFlags,
+        showCuration: false,
+        showCatalogFallback: true,
+        showTryOn: false,
+        showPhotoRetry: true,
+      },
+    },
+  });
+
+  const textFields = [
+    model.hero.eyebrow, model.hero.badge, model.hero.title, model.hero.subtitle, model.hero.helper,
+    model.analysis.eyebrow, model.analysis.title, model.analysis.subtitle,
+    model.curation.eyebrow, model.curation.title, model.curation.subtitle,
+    model.curation.fallbackTitle, model.curation.fallbackBody,
+    model.whatsapp.eyebrow, model.whatsapp.title, model.whatsapp.subtitle, model.whatsapp.cta,
+    model.share.eyebrow, model.share.title, model.share.subtitle,
+    model.tryOn.eyebrow, model.tryOn.title, model.tryOn.subtitle, model.tryOn.unavailableCopy,
+  ].join(" ");
+
+  assert.doesNotMatch(textFields, /insufficient_catalog/);
+  assert.doesNotMatch(textFields, /fallback_consultive/);
+  assert.doesNotMatch(textFields, /not_requested/);
+  assert.doesNotMatch(textFields, /quality_blocked/);
+  assert.doesNotMatch(textFields, /no_preference/);
+  assert.doesNotMatch(textFields, /\bmedium\b/);
+});
+
+// ── Forbidden body term guard ──────────────────────────────────────────────────
+
+run("tryOn.unavailableCopy does not contain 'corpo' or 'rosto'", () => {
+  const model = buildPremiumResultPresentationModel({ experienceState: readyState });
+  assert.doesNotMatch(model.tryOn.unavailableCopy, /\bcorpo\b/i);
+  assert.doesNotMatch(model.tryOn.unavailableCopy, /\brosto\b/i);
+});
+
+run("all presentation model text fields avoid forbidden body-judgment terms", () => {
+  const FORBIDDEN_BODY = [
+    /\bcorpo\b/i, /\brosto\b/i, /\bombros\b/i, /tra[cç]os/i,
+    /propor[cç][oõ]es/i, /emagrec/i, /disfar[cç]/i, /imperfei[cç]/i, /\bdefeit/i,
+  ];
+  const model = buildPremiumResultPresentationModel({
+    experienceState: readyState,
+    signatureName: "Autoridade Silenciosa",
+    storeName: "Loja Aurora",
+    hasLooks: true,
+  });
+  const allText = JSON.stringify(model);
+  for (const pattern of FORBIDDEN_BODY) {
+    assert.doesNotMatch(allText, pattern);
+  }
+});
+
+// ── Onboarding camera narrative guard ─────────────────────────────────────────
+
+run("onboarding: hero copy does not promise camera as first step", () => {
+  const model = buildPremiumResultPresentationModel({
+    experienceState: readyState,
+    signatureName: "Presença Natural",
+    storeName: "Loja Aurora",
+    hasLooks: true,
+  });
+  assert.doesNotMatch(model.hero.subtitle, /me envie uma foto/i);
+  assert.doesNotMatch(model.hero.subtitle, /envie.*foto/i);
+  assert.doesNotMatch(model.hero.helper, /me envie uma foto/i);
+  assert.match(model.hero.subtitle, /curadoria/i);
 });
 
 process.stdout.write("\n--- Venus premium result copy tests passed ---\n");

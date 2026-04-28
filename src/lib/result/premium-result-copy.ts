@@ -151,7 +151,7 @@ export function buildPremiumResultPresentationModel(
       eyebrow: "Provador virtual em beta",
       title: "Previa visual opcional",
       subtitle: "O provador virtual aparece apenas quando a previa esta confiavel para apoiar a composicao.",
-      unavailableCopy: "A visualizacao no corpo nao esta disponivel agora. A curadoria segue pronta com base na leitura visual e nas pecas reais.",
+      unavailableCopy: "A previa visual nao esta disponivel agora. A curadoria segue pronta com base na leitura de estilo e nas pecas reais.",
     },
     shareCard: buildPremiumShareCardModel({
       signatureName: input.signatureName,
@@ -177,6 +177,44 @@ export const PIECE_ROLE_LABELS: Record<PremiumCurationPieceRole, string> = {
 
 export function getPieceRoleLabel(role: PremiumCurationPieceRole): string {
   return PIECE_ROLE_LABELS[role] ?? "Peca do look";
+}
+
+export function formatConfidenceLabel(value: string | null | undefined): string {
+  switch (value) {
+    case "high": return "confiança confirmada";
+    case "medium": return "confiança intermediária";
+    case "low": return "leitura preliminar";
+    default: return "confiança não determinada";
+  }
+}
+
+export function formatStylePreferenceLabel(value: string | null | undefined): string {
+  if (!value) return "Direção aberta";
+  switch (value) {
+    case "no_preference": return "Direção aberta";
+    case "masculine": return "Masculino";
+    case "feminine": return "Feminino";
+    case "neutral": return "Neutro / Unissex";
+    case "streetwear": return "Streetwear";
+    case "casual": return "Casual";
+    case "social": return "Social";
+    default: return value.replace(/_/g, " ");
+  }
+}
+
+export function formatExperienceStatusLabel(value: string | null | undefined): string {
+  if (!value) return "";
+  switch (value) {
+    case "insufficient_catalog": return "curadoria em ajuste";
+    case "fallback_consultive": return "atendimento consultivo recomendado";
+    case "not_requested": return "opcional";
+    case "quality_blocked": return "prévia visual indisponível agora";
+    case "premium_ready": return "leitura pronta";
+    case "premium_partial": return "leitura em andamento";
+    case "blocked": return "leitura bloqueada";
+    case "error": return "erro na leitura";
+    default: return value.replace(/_/g, " ");
+  }
 }
 
 export function buildPremiumResultSectionVisibility(

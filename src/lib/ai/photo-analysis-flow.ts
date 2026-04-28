@@ -31,7 +31,7 @@ export function detectPhotoUpload(message: string, context: ConversationContext)
 }
 
 export function generateAnticipationMessage(): string {
-  return "Perfeito. Agora eu refino sua leitura premium ✨";
+  return "A câmera é opcional. Sua leitura segue com base na direção de estilo que você definiu.";
 }
 
 export function generateConsultoryAfterWow(
@@ -45,7 +45,7 @@ export function generateConsultoryAfterWow(
   }
 
   if (analysis.faceShape) {
-    parts.push(`O visagismo conversa melhor com o rosto ${analysis.faceShape.toLowerCase()}.`);
+    parts.push(`O visagismo indica harmonia ${analysis.faceShape.toLowerCase()} para a composição visual.`);
   }
 
   if (analysis.bestColors && analysis.bestColors.length > 0) {
@@ -57,7 +57,7 @@ export function generateConsultoryAfterWow(
   }
 
   if (analysis.bodyType) {
-    parts.push(`No caimento, o corpo ganha mais harmonia com um desenho ${analysis.bodyType.toLowerCase()}.`);
+    parts.push(`No caimento, a composição visual ganha harmonia com um desenho ${analysis.bodyType.toLowerCase()}.`);
   }
 
   if (parts.length === 0) {

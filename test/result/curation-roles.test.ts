@@ -462,4 +462,68 @@ run("PR7 — unknown role at index 3+ now maps to alternativa (unified behavior)
   assert.equal(normalizeConsultivePieceRole("zzzunknown", 10), "alternativa");
 });
 
+// ── Incoherent piece demotion ─────────────────────────────────────────────────
+
+run("demotes casual footwear to alternativa in a formal/elegant look", () => {
+  const model = buildCurationByPieceRole({
+    looks: [
+      {
+        title: "Elegância Slim",
+        rationale: "Look elegante e sofisticado com alfaiataria estruturada",
+        items: [
+          { id: "b1", name: "Blazer preto alfaiataria", category: "blazer" },
+          { id: "c1", name: "Calca reta marinho", category: "calca" },
+          { id: "s1", name: "Chinelo casual relaxado", category: "chinelo" },
+        ],
+      },
+    ],
+  });
+
+  const shoes = model.looks[0].pieces.find((p) => p.slot === "shoes");
+  assert.ok(shoes, "shoes piece must be present");
+  assert.equal(shoes.role, "alternativa", "casual footwear must be demoted to alternativa in formal look");
+});
+
+run("does not demote shoes in a casual/streetwear look context", () => {
+  const model = buildCurationByPieceRole({
+    looks: [
+      {
+        title: "Look streetwear casual",
+        rationale: "Visual casual e descontraido para o dia a dia",
+        items: [
+          { id: "b1", name: "Camiseta basica", category: "camiseta" },
+          { id: "c1", name: "Calca jeans", category: "calca" },
+          { id: "s1", name: "Chinelo moderno slides", category: "sandalia" },
+        ],
+      },
+    ],
+  });
+
+  const shoes = model.looks[0].pieces.find((p) => p.slot === "shoes");
+  assert.ok(shoes, "shoes piece must be present");
+  assert.notEqual(shoes.role, "alternativa", "casual footwear must NOT be demoted in casual context");
+});
+
+run("non-footwear pieces are not affected by casual footwear demotion", () => {
+  const model = buildCurationByPieceRole({
+    looks: [
+      {
+        title: "Elegância Slim",
+        rationale: "Look elegante com estrutura formal",
+        items: [
+          { id: "b1", name: "Blazer preto alfaiataria", category: "blazer" },
+          { id: "c1", name: "Calca reta marinho", category: "calca" },
+          { id: "ac1", name: "Bolsa media couro", category: "bolsa" },
+        ],
+      },
+    ],
+  });
+
+  const blazer = model.looks[0].pieces.find((p) => p.slot === "layer");
+  const calca = model.looks[0].pieces.find((p) => p.slot === "bottom");
+  assert.ok(blazer && calca, "non-footwear pieces must be present");
+  assert.equal(blazer.role, "hero", "blazer must remain hero in formal look");
+  assert.equal(calca.role, "base", "calca must remain base in formal look");
+});
+
 process.stdout.write("\n--- Premium curation by piece role tests passed ---\n");
