@@ -45,6 +45,16 @@ const APP_DEFAULT = "Venus Stylist";
 
 const normalizeText = (value: unknown) => (typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "");
 
+function normalizeHandle(value: string | null | undefined): string | null {
+  if (!value || value === "undefined" || value === "null") return null;
+  const cleaned = value
+    .replace(/^@+/, "")
+    .replace(/[-\s]+/g, "")
+    .replace(/[^a-zA-Z0-9_.]/g, "")
+    .toLowerCase();
+  return cleaned || null;
+}
+
 const trimSentence = (value: string) => normalizeText(value).replace(/[.?!\s]+$/, "");
 
 const toLowerSentence = (value: string) => trimSentence(value).toLowerCase();
@@ -127,16 +137,16 @@ export function buildShareableLookCardModel(input: ShareableLookCardInput): Shar
   const question = "Qual voce escolheria?";
   const resultUrl = normalizeText(input.resultUrl);
   const headline = `${styleName}`;
-  const shareCaption = trimSentence(
-    [
-      "Gente, qual voces gostaram mais?",
-      `Testei ${styleName.toLowerCase()} e ficou ${toLowerSentence(emotionalCopy)}.`,
-      customerName ? `Esse teste foi feito para ${customerName}.` : null,
-      resultUrl ? resultUrl : null,
-    ]
-      .filter(Boolean)
-      .join(" ")
-  );
+  const storeRef = normalizeHandle(storeHandle) ? `@${normalizeHandle(storeHandle)}` : null;
+  const shareCaption = [
+    storeRef
+      ? `Descobri minha assinatura visual com ${storeRef} usando a Venus ✨`
+      : "Descobri minha assinatura visual com a Venus ✨",
+    `Meu resultado foi: ${styleName}.`,
+    resultUrl
+      ? `Quer descobrir a sua também? Teste aqui: ${resultUrl}`
+      : "Quer descobrir a sua também?",
+  ].join("\n");
   const opinionCaption = trimSentence(
     [
       "Olha isso que testei 😍",
@@ -168,7 +178,8 @@ export function buildShareableLookCardModel(input: ShareableLookCardInput): Shar
     }));
 
   const footerNote = resultUrl ? "Qual voce escolheria? Teste e compartilhe" : "Qual voce escolheria?";
-  const brandNote = `${brandName}${storeHandle ? ` • @${storeHandle.replace(/^@+/, "")}` : ""}`;
+  const safeHandle = normalizeHandle(storeHandle);
+  const brandNote = `${brandName}${safeHandle ? ` • @${safeHandle}` : ""}`;
   const poweredByLabel = `Powered by InovaCortex`;
 
   return {

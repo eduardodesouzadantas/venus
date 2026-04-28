@@ -1287,10 +1287,6 @@ function ResultDashboardContent() {
             {/* SECAO 4: Compartilhar */}
             {canShowShareCard && (
               <section id="share-section" className="mt-12">
-                <div className="text-center mb-6">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-[#C9A84C]">Compartilhar</p>
-                </div>
-
                 <ShareGrid
                   data={{
                     signatureName: premiumPresentation.hero.title,
@@ -1301,7 +1297,18 @@ function ResultDashboardContent() {
                     ].slice(0, 4),
                     storeName: tenantContext?.branchName || tenantContext?.orgSlug || undefined,
                     lookName: looks[0]?.name,
+                    storeHandle: tenantContext?.orgSlug || undefined,
+                    shareUrl: typeof window !== "undefined"
+                      ? hasValidResultId && id
+                        ? `${window.location.origin}/result?id=${id}`
+                        : tenantContext?.orgSlug
+                          ? `${window.location.origin}/onboarding/chat?org=${encodeURIComponent(tenantContext.orgSlug)}`
+                          : undefined
+                      : undefined,
                   }}
+                  orgId={resolvedOrgId || null}
+                  resultId={id || null}
+                  rewardLabel={resolvedOrgId ? "Vantagem da loja" : null}
                 />
 
                 <div className="mt-6">

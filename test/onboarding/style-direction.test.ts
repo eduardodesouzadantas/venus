@@ -767,7 +767,7 @@ run("share card uses premium neutral copy instead of soft power feminino for non
 
   assert.doesNotMatch(model.styleName, /soft power feminino/i);
   assert.match(model.styleName, /Presença urbana|Look de presença|Casual de impacto|Minimalismo marcante|Força visual limpa/);
-  assert.match(model.brandNote, /@maison-elite/);
+  assert.match(model.brandNote, /@maisonelite/);
   assert.match(model.poweredByLabel, /InovaCortex/);
 });
 
