@@ -279,15 +279,15 @@ function buildSummary(
 
   switch (key) {
     case "authority":
-      return `A leitura cruza ${goalText}, ${envLine.toLowerCase()} ${directionLine} Isso aponta para ${config.label.toLowerCase()} com estrutura, pouco ruído e decisão clara. O ponto sensível hoje é ${painText}; o encaixe ${fitText} e os traços ${faceText} pedem uma presença mais firme, sustentada por ${metalText}.`;
+      return `A Venus identificou ${goalText}, ${envLine.toLowerCase()} ${directionLine} Isso aponta para ${config.label.toLowerCase()} com estrutura, visual limpo e decisão clara. O ponto sensível hoje é ${painText}; o encaixe ${fitText} e os traços ${faceText} pedem uma presença mais firme, sustentada por ${metalText}.`;
     case "elegance":
-      return `A leitura cruza ${goalText}, ${envLine.toLowerCase()} ${directionLine} Isso aponta para ${config.label.toLowerCase()} com acabamento limpo e coerência visual. O ponto sensível hoje é ${painText}; o encaixe ${fitText} e o ritmo de compra ${behavior || dna || "mais pensado"} pedem sofisticação sem excesso, sustentada por ${metalText}.`;
+      return `A Venus identificou ${goalText}, ${envLine.toLowerCase()} ${directionLine} Isso aponta para ${config.label.toLowerCase()} com acabamento limpo e coerência visual. O ponto sensível hoje é ${painText}; o encaixe ${fitText} e o ritmo de compra ${behavior || dna || "mais pensado"} pedem sofisticação sem excesso, sustentada por ${metalText}.`;
     case "presence":
-      return `A leitura cruza ${goalText}, ${envLine.toLowerCase()} ${directionLine} Isso aponta para ${config.label.toLowerCase()} com mais intenção, contraste e presença. O ponto sensível hoje é ${painText}; o encaixe ${fitText} e os traços ${faceText} pedem uma assinatura que chama atenção sem perder controle, com ${metalText} ajudando a fechar a imagem.`;
+      return `A Venus identificou ${goalText}, ${envLine.toLowerCase()} ${directionLine} Isso aponta para ${config.label.toLowerCase()} com mais intenção, contraste e presença. O ponto sensível hoje é ${painText}; o encaixe ${fitText} e os traços ${faceText} pedem uma assinatura que chama atenção sem perder controle, com ${metalText} ajudando a fechar a imagem.`;
     case "creative":
-      return `A leitura cruza ${goalText}, ${envLine.toLowerCase()} ${directionLine} Isso aponta para ${config.label.toLowerCase()} com narrativa visual mais livre e autoral. O ponto sensível hoje é ${painText}; o encaixe ${fitText} e a forma de comprar ${behavior || dna || "mais exploratória"} pedem contraste com direção, não improviso, e ${metalText} como ponto de acabamento.`;
+      return `A Venus identificou ${goalText}, ${envLine.toLowerCase()} ${directionLine} Isso aponta para ${config.label.toLowerCase()} com narrativa visual mais livre e autoral. O ponto sensível hoje é ${painText}; o encaixe ${fitText} e a forma de comprar ${behavior || dna || "mais exploratória"} pedem contraste com direção, não improviso, e ${metalText} como ponto de acabamento.`;
     case "discretion":
-      return `A leitura cruza ${goalText}, ${envLine.toLowerCase()} ${directionLine} Isso aponta para ${config.label.toLowerCase()} com base silenciosa e sofisticação calma. O ponto sensível hoje é ${painText}; o encaixe ${fitText} e o ritmo de compra ${behavior || dna || "mais curado"} pedem baixo ruído, traço limpo e ${metalText} funcionando como detalhe.`;
+      return `A Venus identificou ${goalText}, ${envLine.toLowerCase()} ${directionLine} Isso aponta para ${config.label.toLowerCase()} com base silenciosa e sofisticação calma. O ponto sensível hoje é ${painText}; o encaixe ${fitText} e o ritmo de compra ${behavior || dna || "mais curado"} pedem visual limpo, traço preciso e ${metalText} funcionando como detalhe.`;
   }
 }
 

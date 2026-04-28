@@ -308,7 +308,7 @@ export function buildVenusStylistAudit({
           body: compactSentence(
             joinPieces([
               surface.essence.summary,
-              onboardingStyle ? `Direção explícita: ${onboardingStyle}.` : null,
+              onboardingStyle ? `Direção de estilo: ${onboardingStyle}.` : null,
               consultation.aestheticVibe ? `Vibe: ${consultation.aestheticVibe}.` : null,
             ]),
           ),
@@ -346,8 +346,8 @@ export function buildVenusStylistAudit({
         },
         {
           eyebrow: "O que valorizar",
-          title: "Sinais que merecem reforço",
-          body: "A leitura fica mais forte quando a curadoria valoriza coerência, presença e uso real.",
+          title: "Pontos que fortalecem sua assinatura",
+          body: "A presença fica mais forte quando a curadoria valoriza coerência, intenção e uso real.",
           bullets: uniqueStrings([
             surface.lookHierarchy[0]?.title,
             surface.lookHierarchy[1]?.title,
@@ -356,8 +356,8 @@ export function buildVenusStylistAudit({
         },
         {
           eyebrow: "O que evitar",
-          title: "Zonas de ruído",
-          body: "Evitar aqui não é censura visual. É cortar o que enfraquece a leitura e quebra a linha escolhida.",
+          title: "O que enfraquece sua imagem",
+          body: "Algumas escolhas quebram a linha escolhida e enfraquecem o que você quer transmitir. A Venus identificou as principais.",
           bullets: uniqueStrings([
             ...surface.toAvoid.slice(0, 3),
             ...consultation.restrictions.slice(0, 2),
@@ -366,7 +366,7 @@ export function buildVenusStylistAudit({
         },
         {
           eyebrow: "Curadoria da loja",
-          title: "Peças do catálogo real com melhor aderência",
+          title: "Peças escolhidas para você",
           body: compactSentence(
             joinPieces([
               surface.lookHierarchy[0]?.description,
