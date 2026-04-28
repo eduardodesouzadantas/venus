@@ -146,6 +146,7 @@ require("./assisted-recommendation.presentation.test.ts");
 require("./result/experience-state.test.ts");
 require("./result/experience-state-adapter.test.ts");
 require("./result/premium-result-copy.test.ts");
+require("./result/premium-result-view-model.test.ts");
 require("./result/curation-roles.test.ts");
 require("./result/premium-share-card.test.ts");
 require("./whatsapp/consultive-payload.test.ts");
