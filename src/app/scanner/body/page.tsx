@@ -9,7 +9,6 @@ import { RealCamera } from "@/components/ui/RealCamera";
 import { useUserImage } from "@/lib/onboarding/UserImageContext";
 import { useOnboarding } from "@/lib/onboarding/OnboardingContext";
 import { analyzeColorimetry } from "@/lib/analysis/colorimetry-client";
-import { buildVenusBodyScannerIntro } from "@/lib/venus/brand";
 import { uploadOnboardingPhoto } from "@/lib/onboarding/photo-upload";
 import { resolveOnboardingPhotoSignedUrl } from "@/lib/onboarding/photo-access";
 
@@ -100,12 +99,12 @@ export default function BodyScannerPage() {
     <div className="flex min-h-screen flex-col items-center bg-black px-4 pb-6 pt-12 sm:px-6 sm:pt-24">
       <div className="w-full max-w-[520px]">
         <div className="mb-4 space-y-2 text-center sm:mb-6">
-          <span className="text-[9px] font-bold uppercase tracking-[0.34em] text-[#C9A84C]">Leitura final</span>
+          <span className="text-[9px] font-bold uppercase tracking-[0.34em] text-[#C9A84C]">Leitura visual</span>
           <Heading as="h3" className="font-serif text-2xl text-white/90 sm:text-3xl">
-            {buildVenusBodyScannerIntro()}
+            A leitura visual é opcional.
           </Heading>
-          <Text className="mx-auto max-w-[26ch] text-sm text-white/55">
-            Posicione a silhueta com luz frontal para a Venus calibrar proporção, caimento e presença.
+          <Text className="mx-auto max-w-[28ch] text-sm text-white/55">
+            A foto pode refinar sua curadoria, mas sua assinatura já pode ser construída pelas respostas. Você escolhe como seguir.
           </Text>
         </div>
 
@@ -117,7 +116,7 @@ export default function BodyScannerPage() {
           />
         ) : (
           <RealCamera
-            instruction="Alinhe cabeça e pés nas guias pontilhadas."
+            instruction="Use luz frontal e enquadre a imagem inteira."
             overlayType="body"
             showTimerOptions={true}
             onCaptured={handleBodyCaptured}

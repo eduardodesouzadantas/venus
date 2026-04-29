@@ -85,17 +85,17 @@ export default function FaceScannerPage() {
     <div className="flex min-h-screen flex-col items-center bg-black px-4 pb-6 pt-12 sm:px-6 sm:pt-24">
       <div className="w-full max-w-[520px]">
         <div className="mb-4 space-y-2 text-center sm:mb-6">
-          <span className="text-[9px] font-bold uppercase tracking-[0.34em] text-[#C9A84C]">Leitura 03 de 04</span>
+          <span className="text-[9px] font-bold uppercase tracking-[0.34em] text-[#C9A84C]">Leitura visual</span>
           <Heading as="h3" className="font-serif text-2xl text-white/90 sm:text-3xl">
-            O rosto é o primeiro sinal da leitura
+            A leitura visual é opcional.
           </Heading>
-          <Text className="mx-auto max-w-[26ch] text-sm text-white/55">
-            Centralize o rosto para a Venus ler linhas, contraste e direção com mais precisão.
+          <Text className="mx-auto max-w-[28ch] text-sm text-white/55">
+            A foto pode refinar sua curadoria, mas sua assinatura já pode ser construída pelas respostas. Você escolhe como seguir.
           </Text>
         </div>
 
         {error ? <p className="mb-3 text-center text-sm text-[#ffb6a8]">{error}</p> : null}
-        <RealCamera instruction="Enquadre rosto e pescoço no centro da moldura." overlayType="face" onCaptured={handleFaceCaptured} />
+        <RealCamera instruction="Centralize a imagem com luz suave." overlayType="face" onCaptured={handleFaceCaptured} />
         {isUploading ? <p className="mt-3 text-center text-xs text-white/45">Salvando a foto em segurança...</p> : null}
       </div>
     </div>
