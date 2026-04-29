@@ -167,7 +167,7 @@ function buildPalette(goalKey: GoalKey, metal: string): ResultPayload["palette"]
           accentPalette: [],
           avoidOrUseCarefully: [],
           confidence: "medium",
-          evidence: "Leitura preliminar baseada no objetivo e no metal informado.",
+          evidence: "Leitura de cor baseada no objetivo e no metal informado.",
         },
       };
     case "Atração":
@@ -190,7 +190,7 @@ function buildPalette(goalKey: GoalKey, metal: string): ResultPayload["palette"]
           accentPalette: [],
           avoidOrUseCarefully: [],
           confidence: "medium",
-          evidence: "Leitura preliminar baseada no objetivo e no metal informado.",
+          evidence: "Leitura de cor baseada no objetivo e no metal informado.",
         },
       };
     case "Criatividade":
@@ -213,7 +213,7 @@ function buildPalette(goalKey: GoalKey, metal: string): ResultPayload["palette"]
           accentPalette: [],
           avoidOrUseCarefully: [],
           confidence: "medium",
-          evidence: "Leitura preliminar baseada no objetivo e no metal informado.",
+          evidence: "Leitura de cor baseada no objetivo e no metal informado.",
         },
       };
     case "Discrição sofisticada":
@@ -236,7 +236,7 @@ function buildPalette(goalKey: GoalKey, metal: string): ResultPayload["palette"]
           accentPalette: [],
           avoidOrUseCarefully: [],
           confidence: "medium",
-          evidence: "Leitura preliminar baseada no objetivo e no metal informado.",
+          evidence: "Leitura de cor baseada no objetivo e no metal informado.",
         },
       };
     default:
@@ -259,7 +259,7 @@ function buildPalette(goalKey: GoalKey, metal: string): ResultPayload["palette"]
           accentPalette: [],
           avoidOrUseCarefully: [],
           confidence: "medium",
-          evidence: "Leitura preliminar baseada no objetivo e no metal informado.",
+          evidence: "Leitura de cor baseada no objetivo e no metal informado.",
         },
       };
   }
@@ -291,7 +291,7 @@ function buildPaletteFromOnboarding(data: OnboardingData, essence: EssenceProfil
   const contrast = evidence.confidence === "high" ? "Alto" : evidence.confidence === "medium" ? "Médio Alto" : "Médio";
 
   return {
-    family: `${evidence.confidence === "high" ? "Leitura confirmada" : "Leitura preliminar"} • ${directionLabel}`,
+    family: `${evidence.confidence === "high" ? "Leitura de cor" : "Direção de cor"} • ${directionLabel}`,
     description: evidence.evidence,
     colors: flattenColorStyleEvidence(evidence),
     metal: normalizeText(data?.colors?.metal) || "Prateado",
@@ -333,15 +333,15 @@ function buildBodyVisagism(fit: string, faceLines: string): ResultPayload["bodyV
 
 function buildDiagnostic(goal: string, mainPain: string, fit: string, faceLines: string, essence: EssenceProfile): ResultPayload["diagnostic"] {
   const goalLabel = normalizeText(goal) || "elegância";
-  const painLabel = normalizeText(mainPain) || "ruído visual";
+  const painLabel = normalizeText(mainPain) || "excesso visual";
   const fitLabel = normalizeText(fit) || "Slim";
   const faceLabel = normalizeText(faceLines) || "Marcantes";
   const directionLabel = getStyleDirectionDisplayLabel(essence.styleDirection);
 
   return {
-    currentPerception: `Seu perfil pede menos ruído e mais estrutura. Hoje o ponto sensível é ${painLabel.toLowerCase()} e o caimento ${fitLabel.toLowerCase()}, mas a leitura já aponta para ${essence.label.toLowerCase()} na direção ${directionLabel.toLowerCase()}.`,
+    currentPerception: `Seu perfil pede menos excesso visual e mais estrutura. Hoje o ponto sensível é ${painLabel.toLowerCase()} e o caimento ${fitLabel.toLowerCase()}, mas a leitura já aponta para ${essence.label.toLowerCase()} na direção ${directionLabel.toLowerCase()}.`,
     desiredGoal: `Projetar ${goalLabel.toLowerCase()} de um jeito mais limpo, pessoal e consistente com colorimetria e visagismo alinhados.`,
-    gapSolution: `Usar o catálogo real como eixo e sustentar ${goalLabel.toLowerCase()} com peças coerentes para seu rosto ${faceLabel.toLowerCase()}, sem perder a essência ${essence.label.toLowerCase()} nem a direção ${directionLabel.toLowerCase()}.`,
+    gapSolution: `Usar o catálogo real como eixo e sustentar ${goalLabel.toLowerCase()} com peças coerentes para sua presença ${faceLabel.toLowerCase()}, sem perder a essência ${essence.label.toLowerCase()} nem a direção ${directionLabel.toLowerCase()}.`,
   };
 }
 
@@ -369,7 +369,7 @@ function buildHero(goalKey: GoalKey, goal: string, fit: string, essence: Essence
 
   return {
     dominantStyle: `${essence.label} • ${dominantStyle}`,
-    subtitle: `Sua leitura cruza ${normalizeText(goal).toLowerCase() || "elegância"} com fit ${normalizeText(fit).toLowerCase() || "slim"}, rotina real e um eixo de ${essence.label.toLowerCase()} na direção ${getStyleDirectionDisplayLabel(essence.styleDirection).toLowerCase()}.`,
+    subtitle: `A Venus identificou ${normalizeText(goal).toLowerCase() || "elegância"} com fit de caimento ${normalizeText(fit).toLowerCase() || "limpo"}, rotina real e um eixo de ${essence.label.toLowerCase()} na direção ${getStyleDirectionDisplayLabel(essence.styleDirection).toLowerCase()}.`,
     coverImageUrl: "",
   };
 }
@@ -571,7 +571,7 @@ export function buildResultSurface(
   const fit = normalizeText(data?.body?.fit) || "Slim";
   const faceLines = normalizeText(data?.body?.faceLines) || "Marcantes";
   const metal = normalizeText(data?.colors?.metal) || "Prateado";
-  const mainPain = normalizeText(data?.intent?.mainPain) || "ruído visual";
+  const mainPain = normalizeText(data?.intent?.mainPain) || "excesso visual";
   const onboardingPalette = buildPaletteFromOnboarding(data, essence);
 
   const resolvedEssence = visualAnalysis

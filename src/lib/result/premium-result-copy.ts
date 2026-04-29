@@ -146,7 +146,7 @@ export function buildPremiumResultPresentationModel(
     curation: {
       visible: experienceState.uiFlags.showCuration || experienceState.uiFlags.showCatalogFallback,
       eyebrow: hasLooks ? "PEÇAS ESCOLHIDAS PARA VOCÊ" : "Curadoria em refinamento",
-      title: hasLooks ? "Looks montados com peças reais da loja" : "Ainda falta peças para completar o look",
+      title: hasLooks ? "Looks montados com peças reais da loja" : "Ainda faltam peças para completar a curadoria",
       subtitle: hasLooks
         ? "Cada peça entra com uma função clara: criar presença, equilibrar ou dar acabamento."
         : "A leitura segue útil. No WhatsApp, a loja pode sugerir alternativas.",
@@ -164,7 +164,7 @@ export function buildPremiumResultPresentationModel(
       eyebrow: hasConsultiveFallback ? "Atendimento consultivo" : "Continuar a conversa",
       title: `Converse com ${storeName} no WhatsApp`,
       subtitle: "A conversa já começa com sua assinatura visual e as peças escolhidas.",
-      cta: "Quero esse look no WhatsApp",
+      cta: "Receber minha curadoria no WhatsApp",
     },
     share: {
       visible: experienceState.uiFlags.showShareCard,
@@ -209,7 +209,7 @@ export function formatConfidenceLabel(value: string | null | undefined): string 
   switch (value) {
     case "high": return "confiança confirmada";
     case "medium": return "confiança intermediária";
-    case "low": return "leitura preliminar";
+    case "low": return "leitura inicial";
     default: return "confiança não determinada";
   }
 }

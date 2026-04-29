@@ -130,7 +130,7 @@ run("WhatsApp section is consultive when showWhatsAppCta is true", () => {
   });
 
   assert.equal(model.whatsapp.visible, true);
-  assert.match(model.whatsapp.cta, /Quero esse look no WhatsApp/i);
+  assert.match(model.whatsapp.cta, /Receber minha curadoria no WhatsApp/i);
   assert.match(model.whatsapp.subtitle, /assinatura visual/i);
 });
 
@@ -519,7 +519,7 @@ run("PR8 — PIECE_ROLE_LABELS covers equilibrio, ponto_focal, acabamento and al
 run("formatConfidenceLabel maps raw enum values to human labels", () => {
   assert.equal(formatConfidenceLabel("high"), "confiança confirmada");
   assert.equal(formatConfidenceLabel("medium"), "confiança intermediária");
-  assert.equal(formatConfidenceLabel("low"), "leitura preliminar");
+  assert.equal(formatConfidenceLabel("low"), "leitura inicial");
   assert.doesNotMatch(formatConfidenceLabel("medium"), /^medium$/);
   assert.doesNotMatch(formatConfidenceLabel("high"), /^high$/);
   assert.doesNotMatch(formatConfidenceLabel("low"), /^low$/);

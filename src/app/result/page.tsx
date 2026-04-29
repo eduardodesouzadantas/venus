@@ -32,7 +32,7 @@ import {
   buildExperienceStateInputFromResultData,
   buildExperienceStateTelemetry,
 } from "@/lib/result/experience-state-adapter";
-import { buildPremiumResultPresentationModel, formatConfidenceLabel } from "@/lib/result/premium-result-copy";
+import { buildPremiumResultPresentationModel } from "@/lib/result/premium-result-copy";
 import { buildPremiumResultViewModel } from "@/lib/result/premium-result-view-model";
 import { buildVenusResultNarrative, VENUS_STYLIST_NAME } from "@/lib/venus/brand";
 import { buildVenusStylistAudit, type VenusStylistAudit } from "@/lib/venus/audit/engine";
@@ -104,7 +104,7 @@ function ResultDashboardContent() {
     "Ainda não tenho uma composição completa forte o suficiente. Posso refinar com uma nova foto ou levar essa leitura para o WhatsApp.";
   const essenceLabel = surface?.essence?.label ?? "Sua Presença";
   const palette = surface?.palette ?? {
-    family: "Leitura preliminar",
+    family: "Leitura de cor",
     colors: [] as any[],
     metal: "Prateado",
     contrast: "Médio Alto",
@@ -113,7 +113,7 @@ function ResultDashboardContent() {
       accentPalette: [],
       avoidOrUseCarefully: [],
       confidence: "medium" as const,
-      evidence: "Leitura preliminar baseada nesta foto. Uma luz frontal neutra melhora a precisão.",
+      evidence: "Leitura de cor baseada nesta foto. Uma luz frontal neutra melhora a precisão.",
     },
   };
   const paletteFamily = palette.family ?? "Personalizada";
@@ -1088,7 +1088,7 @@ function ResultDashboardContent() {
                     onClick={() => void openWhatsApp(whatsappUrl)}
                     className="mt-8"
                   >
-                    {premiumPresentation.whatsapp.cta}
+                    Falar com a stylist no WhatsApp
                   </VenusButton>
                 )}
               </div>
@@ -1188,7 +1188,7 @@ function ResultDashboardContent() {
                     onClick={() => openWhatsApp(whatsappUrl)}
                     className="h-14 w-full px-6 text-[10px] tracking-[0.3em] shadow-[0_18px_50px_rgba(201,168,76,0.18)] sm:w-auto"
                   >
-                    Quero esse look no WhatsApp
+                    Receber minha curadoria no WhatsApp
                   </VenusButton>
                 ) : (
                   <VenusButton
@@ -1320,7 +1320,7 @@ function ResultDashboardContent() {
                     }}
                     className="h-12 w-full text-[10px] tracking-[0.28em]"
                   >
-                    Quero esse look no WhatsApp
+                    Receber minhas peças no WhatsApp
                   </VenusButton>
                 </div>
               </section>
@@ -1359,31 +1359,35 @@ function ResultDashboardContent() {
           </div>
 
           {canShowPremiumAnalysis && stylistAudit?.report?.sections?.length ? (
-            <section className="mt-10 space-y-4">
-              <div className="text-center">
-                <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-[#C9A84C]">Sua assinatura</p>
-                <p className="mx-auto mt-2 max-w-xl text-[13px] leading-relaxed text-white/50">
-                  {premiumPresentation.analysis.subtitle}
-                </p>
-              </div>
+            <details className="mt-10 rounded-[28px] border border-white/5 bg-white/[0.02] p-5">
+              <summary className="cursor-pointer list-none text-center text-[10px] font-bold uppercase tracking-[0.35em] text-[#C9A84C]">
+                Ver detalhes da leitura
+              </summary>
+              <section className="mt-5 space-y-4">
+                <div className="text-center">
+                  <p className="mx-auto mt-2 max-w-xl text-[13px] leading-relaxed text-white/50">
+                    {premiumPresentation.analysis.subtitle}
+                  </p>
+                </div>
 
-              <div className="grid gap-3">
-                {stylistAudit.report.sections.map((section) => (
-                  <div key={section.eyebrow} className="rounded-[28px] border border-white/5 bg-white/[0.03] p-5">
-                    <p className="text-[9px] font-bold uppercase tracking-[0.28em] text-[#C9A84C]">{section.eyebrow}</p>
-                    <h2 className="mt-2 font-serif text-2xl text-white">{section.title}</h2>
-                    <p className="mt-2 text-[14px] leading-relaxed text-white/62">{section.body}</p>
-                    <div className="mt-4 space-y-2">
-                      {section.bullets.slice(0, 3).map((bullet) => (
-                        <div key={bullet} className="rounded-2xl border border-white/5 bg-black/25 px-4 py-3 text-[12px] leading-relaxed text-white/70">
-                          {bullet}
-                        </div>
-                      ))}
+                <div className="grid gap-3">
+                  {stylistAudit.report.sections.map((section) => (
+                    <div key={section.eyebrow} className="rounded-[28px] border border-white/5 bg-white/[0.03] p-5">
+                      <p className="text-[9px] font-bold uppercase tracking-[0.28em] text-[#C9A84C]">{section.eyebrow}</p>
+                      <h2 className="mt-2 font-serif text-2xl text-white">{section.title}</h2>
+                      <p className="mt-2 text-[14px] leading-relaxed text-white/62">{section.body}</p>
+                      <div className="mt-4 space-y-2">
+                        {section.bullets.slice(0, 3).map((bullet) => (
+                          <div key={bullet} className="rounded-2xl border border-white/5 bg-black/25 px-4 py-3 text-[12px] leading-relaxed text-white/70">
+                            {bullet}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </section>
+                  ))}
+                </div>
+              </section>
+            </details>
           ) : null}
 
           {canShowDiagnosis && canShowPremiumAnalysis && stylistAudit && (
@@ -1678,7 +1682,7 @@ function ResultDashboardContent() {
                 }}
                 className="flex h-14 items-center justify-center rounded-2xl bg-[#C9A84C] px-6 text-[13px] font-black uppercase tracking-widest text-black transition-transform active:scale-95 group"
               >
-                {premiumPresentation.whatsapp.cta}
+                Receber minhas peças no WhatsApp
                 <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
               </Link>
               <button
@@ -1691,14 +1695,6 @@ function ResultDashboardContent() {
           </div>
           <div>
             <p className="mb-3 font-mono text-[9px] uppercase tracking-[0.3em] text-[#C9A84C]">Leitura de cor - {paletteFamily}</p>
-            <div className="mb-4 flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-[#C9A84C]/20 bg-[#C9A84C]/10 px-3 py-1 text-[9px] font-bold uppercase tracking-[0.2em] text-[#C9A84C]">
-                Confiança da leitura: {formatConfidenceLabel(paletteEvidence.confidence)}
-              </span>
-              <span className="text-[11px] text-white/50">
-                Leitura {paletteEvidence.confidence === "high" ? "confirmada" : "preliminar"} baseada na foto e no contexto real.
-              </span>
-            </div>
             <p className="mb-6 text-[13px] leading-relaxed text-white/55">
               {paletteEvidence.evidence}
             </p>
@@ -1765,7 +1761,7 @@ function ResultDashboardContent() {
           }}
           className="rounded-lg bg-black px-4 py-2 text-[10px] font-black uppercase tracking-widest text-[#C9A84C] transition-transform active:scale-95"
         >
-          Quero esse look
+          Receber peças
         </Link>
       </div>
       )}
