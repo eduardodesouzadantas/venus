@@ -349,7 +349,7 @@ export function WowFirstChatContent() {
   const routeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasTrackedIntroRef = useRef(false);
   const nextHref = useMemo(() => (orgSlug ? `/onboarding/intent?org=${encodeURIComponent(orgSlug)}` : "/onboarding/intent"), [orgSlug]);
-  const skipHref = useMemo(() => (orgSlug ? `/processing?org=${encodeURIComponent(orgSlug)}` : "/processing"), [orgSlug]);
+  const skipHref = useMemo(() => (orgSlug ? `/onboarding/intent?org=${encodeURIComponent(orgSlug)}` : "/onboarding/intent"), [orgSlug]);
 
   useEffect(() => {
     if (!isJourneyLoaded || !journey) {
